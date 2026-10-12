@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entryName, mediaTypeOf, nameBlocks, PAGE_LENGTH, positionsOf, resolveHref } from "../src/epub";
+import { entryName, mediaTypeOf, nameBlocks, PAGE_LENGTH, positionsOf, resolveHref, startPosition } from "../src/epub";
 
 describe("paths in the book", () => {
   it("resolve like the app's hrefs, staying URL-encoded", () => {
@@ -47,5 +47,27 @@ describe("paragraph names", () => {
     const body = el("body", el("h1"), withId(el("p"), "keep"), el("p", el("span")), el("div", el("p")), withId(el("p"), "read-b3"));
     nameBlocks(body, new Set(["keep", "read-b3"]));
     expect(all(body).map(n => n.id)).toEqual(["", "read-b1", "keep", "read-b2", "", "read-b4", "read-b5", "read-b3"]);
+  });
+});
+
+describe("opening at a place from the phones", () => {
+  const positions = positionsOf(
+    [{ href: "OEBPS/Text/ch%201.xhtml", type: "application/xhtml+xml" }, { href: "OEBPS/Text/ch2.xhtml", type: "application/xhtml+xml" }],
+    href => (href.includes("ch%201") ? 4 * PAGE_LENGTH : 2 * PAGE_LENGTH),
+  ) as unknown as { href: string; locations: { progression: number; position: number } }[];
+
+  it("finds the page list's entry even when the place has no page number (a place saved by listening)", () => {
+    const place = { href: "OEBPS/Text/ch%201.xhtml", locations: { progression: 0.6 } };
+    expect(startPosition(positions, place)).toMatchObject({ href: "OEBPS/Text/ch%201.xhtml", locations: { progression: 0.5, position: 3 } });
+    expect(startPosition(positions, { href: "OEBPS/Text/ch2.xhtml", locations: {} })!.locations.position).toBe(5);
+    expect(startPosition(positions, { href: "OEBPS/Text/ch2.xhtml", locations: { progression: 1 } })!.locations.position).toBe(6);
+  });
+
+  it("matches a chapter written with or without URL encoding, and with a fragment", () => {
+    expect(startPosition(positions, { href: "OEBPS/Text/ch 1.xhtml#p3", locations: { progression: 0 } })!.locations.position).toBe(1);
+  });
+
+  it("is nothing for a chapter this book doesn't have", () => {
+    expect(startPosition(positions, { href: "OEBPS/Text/missing.xhtml", locations: { progression: 0.2 } })).toBeNull();
   });
 });

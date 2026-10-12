@@ -4,7 +4,7 @@
 import { EpubNavigator, TextAlignment, type EpubNavigatorListeners } from "@readium/navigator";
 import { Locator } from "@readium/shared";
 import { RevConflict, type Dropbox } from "./dropbox";
-import { openBook, type Book } from "./epub";
+import { openBook, startPosition, type Book } from "./epub";
 import { syncFilePath } from "./paths";
 import { openingPlan, placeLabel, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
 import { h } from "./ui";
@@ -163,11 +163,16 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     );
     prompt.hidden = false;
   };
+  const tell = (text: string) => {
+    prompt.replaceChildren(h("span", {}, text), h("button", { class: "link accent", onclick: () => { prompt.hidden = true; } }, "OK"));
+    prompt.hidden = false;
+  };
   const goThere = (other: Position) => {
     const locator = Locator.deserialize(other.locator);
-    if (!locator || !nav) return;
+    const entry = locator && book ? startPosition(book.positions, locator) : null;
+    if (!locator || !entry || !nav) return tell("Couldn't find that place in this book.");
     moved = true;
-    nav.go(locator, false, () => undefined);
+    nav.go(new Locator({ href: entry.href, type: locator.type, title: locator.title, locations: locator.locations, text: locator.text }), false, () => undefined);
   };
 
   const readSyncFile = async (): Promise<SyncFile | null> => {
@@ -202,7 +207,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (!file) throw new Error("This book is no longer in Dropbox.");
     book = await openBook(file.bytes);
     const plan = openingPlan(syncFile, null);
-    const start = plan.start ? Locator.deserialize(plan.start.locator) : undefined;
+    const saved = plan.start ? Locator.deserialize(plan.start.locator) : undefined;
+    // Readium opens at an entry of its page list (the chapter); the exact spot follows, as Go there finds it.
+    const entry = saved ? startPosition(book.positions, saved) : null;
     const fonts = await fontStylesheet();
 
     const listeners: Partial<EpubNavigatorListeners> = {
@@ -227,7 +234,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       return true;
     };
 
-    nav = new EpubNavigator(page, book.publication, listeners as EpubNavigatorListeners, book.positions, start ?? undefined, {
+    nav = new EpubNavigator(page, book.publication, listeners as EpubNavigatorListeners, book.positions, entry ?? undefined, {
       preferences: LOOK,
       defaults: {},
       injectables: {
@@ -236,6 +243,12 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       },
     });
     await nav.load();
+    if (saved && entry) {
+      const there = new Locator({ href: entry.href, type: saved.type, title: saved.title, locations: saved.locations, text: saved.text });
+      await new Promise<void>(done => nav!.go(there, false, () => done()));
+    } else if (saved) {
+      tell("Couldn't find your place in this book.");
+    }
     if (plan.ask) ask(plan.ask);
   } catch (e) {
     showStatus(e instanceof Error ? e.message : String(e));

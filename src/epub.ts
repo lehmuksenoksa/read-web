@@ -51,6 +51,29 @@ export function positionsOf(readingOrder: PositionItem[], entryLength: (href: st
   return positions;
 }
 
+/** A place in the book's page list (Readium's positions): its chapter and the progress within it. */
+export interface PositionLike {
+  href: string;
+  locations: { progression?: number };
+}
+
+function sameHref(a: string, b: string): boolean {
+  return a.split("#")[0] === b.split("#")[0] || entryName(a) === entryName(b);
+}
+
+/**
+ * The entry of Readium's page list to open [place] at: its chapter's last page starting at or
+ * before the place's progress. Places from the phones may carry no page number (a place saved by
+ * listening has none), and Readium opens only at an entry of its list. Null when the chapter
+ * isn't in this book.
+ */
+export function startPosition<T extends PositionLike>(positions: T[], place: PositionLike): T | null {
+  const chapter = positions.filter(p => sameHref(p.href, place.href));
+  if (!chapter.length) return null;
+  const progression = place.locations.progression ?? 0;
+  return [...chapter].reverse().find(p => (p.locations.progression ?? 0) <= progression + 1e-9) ?? chapter[0];
+}
+
 export interface Book {
   publication: Publication;
   positions: Locator[];
