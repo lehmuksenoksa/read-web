@@ -1,6 +1,6 @@
 // The reader: a book from Dropbox, shown by Readium in Web's look, opened at Web's place, its
 // place saved to the book's sync file a few seconds after the last page turn. Quiet for an office
-// (WEB.md): no title on the page or in the browser tab, only the percentage.
+// (WEB.md): no title on the page, only the percentage; the browser tab says "Read: <title>".
 
 import { EpubNavigator, EpubPreferences, type EpubNavigatorListeners } from "@readium/navigator";
 import { Locator, LocatorLocations } from "@readium/shared";
@@ -26,11 +26,14 @@ export interface ReaderProps {
   appearance: Appearance;
   id: string;
   path: string;
+  /** For the browser tab only ("Read: Mage Tank 5"); the page itself shows no title. */
+  title: string;
   onClose: () => void;
 }
 
 export async function showReader(root: HTMLElement, props: ReaderProps): Promise<() => Promise<void>> {
   const { dropbox, id, appearance } = props;
+  document.title = `Read: ${props.title}`;
   const status = h("div", { class: "foot" }, "Opening…");
   const prompt = h("div", { class: "msg", hidden: true });
   const page = h("div", { class: "page", id: "page" });
@@ -105,6 +108,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const close = async () => {
     if (closed) return;
     closed = true;
+    document.title = "Library";
     stopListening();
     window.removeEventListener("keydown", onKey);
     document.removeEventListener("visibilitychange", onVisible);

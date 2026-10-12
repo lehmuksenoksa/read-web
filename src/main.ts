@@ -13,7 +13,7 @@ let closeReader: (() => Promise<void>) | null = null;
 /** Web's setup and the fonts, read once per visit. */
 let appearance: Appearance | null = null;
 
-// Quiet in an office: the browser tab says "Library" whatever is open, never a book's title.
+// The browser tab says "Library"; a book's says "Read: <title>" (small enough to go unnoticed).
 document.title = "Library";
 
 /** Stops the Library following setup changes (set while the Library shows). */
@@ -212,7 +212,7 @@ async function openReader(api: Dropbox, book: LibraryBook) {
   closeLibrary?.();
   closeLibrary = null;
   closeReader = await showReader(root, {
-    dropbox: api, appearance: appearance ?? new Appearance(api), id: book.id, path: book.path,
+    dropbox: api, appearance: appearance ?? new Appearance(api), id: book.id, path: book.path, title: book.title,
     onClose: () => { closeReader = null; void showLibrary(); },
   });
 }
