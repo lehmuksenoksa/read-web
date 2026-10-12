@@ -38,7 +38,8 @@ button:disabled { opacity: .35; cursor: default; }
 /* Two columns on a laptop, more on a wide screen; the list runs down each column. */
 .list { columns: 520px; column-gap: 48px; padding: 8px 40px 40px; }
 .list > .note { column-span: all; padding-left: 0; }
-.row { display: grid; grid-template-columns: 1fr auto; padding: 9px 4px 10px; border-bottom: 1px solid var(--rule); width: 100%; break-inside: avoid; }
+/* No hairline between rows: each row's progress line separates it from the next. */
+.row { display: grid; grid-template-columns: 1fr auto; padding: 11px 4px 12px; width: 100%; break-inside: avoid; }
 .row:hover { background: var(--sel); }
 .row .t { font-size: 15px; }
 .row .a { grid-row: 2; grid-column: 1; color: var(--ink2); font-size: 13px; margin-top: 2px; }

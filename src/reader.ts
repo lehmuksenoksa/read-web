@@ -11,6 +11,7 @@ import {
   argb, cantRemove, edit, hex, isChanged, pageBackground, pageText, preferences, removeLook, restoreLook, saveAsNew,
   shown, step, stepOptional, STEPS, stepWeight, useLook, weightName, type Look, type Setup, type Steps,
 } from "./looks";
+import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
 import { openingPlan, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
 import { h } from "./ui";
@@ -52,6 +53,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   let book: Book | null = null;
   let nav: EpubNavigator | null = null;
   let current: Locator | null = null;
+  /** The words at the top of the page shown, read when it settles after a move. */
+  let currentTop: PageTop | null = null;
   let moved = false;
   let uploadTimer: number | undefined;
   let dismissedAt: number | null = null;
@@ -72,7 +75,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const upload = async () => {
     uploadTimer = undefined;
     if (!current) return;
-    const place = positionFromLocator(current.serialize() as Record<string, unknown>, Date.now());
+    const place = positionFromLocator(withPageTop(current.serialize() as Record<string, unknown>, currentTop), Date.now());
     if (!place) return;
     for (let attempt = 0; attempt < 3; attempt++) {
       const remote = await dropbox.readText(syncFilePath(id));
@@ -389,6 +392,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     },
     positionChanged: (locator: Locator) => {
       current = locator;
+      currentTop = readPageTop();
       showPlace();
       if (moved) scheduleUpload();
     },
@@ -396,6 +400,15 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     click: e => clickTurn(e.x),
     // Links to other sites aren't followed from a book.
     handleLocator: () => true,
+  };
+  /** The words at the top of the page in view (null if it can't be read: the place keeps its progress only). */
+  const readPageTop = (): PageTop | null => {
+    try {
+      const frame = nav?._cframes.find(f => f != null) as { window?: Window } | undefined;
+      return frame?.window ? pageTop(frame.window) : null;
+    } catch {
+      return null;
+    }
   };
   const clickTurn = (x: number) => {
     // A click on the page with a panel open only closes the panel.
