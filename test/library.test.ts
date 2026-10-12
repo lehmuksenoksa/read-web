@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry } from "../src/dropbox";
-import { furthest, lastReadBook, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem } from "../src/library";
+import { furthest, lastReadBook, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem, stillKnown } from "../src/library";
 
 const hash = (c: string) => c.repeat(64);
 const file = (name: string, id: string, folder = "/Books"): FileEntry => ({ path: `${folder}/${name}`, pathLower: `${folder}/${name}`.toLowerCase(), name, contentHash: id, size: 1, modified: "2026-10-01T10:00:00Z" });
@@ -84,5 +84,18 @@ describe("the start", () => {
   it("opens nothing before any reading", () => {
     expect(lastReadBook([b("a", null)])).toBeNull();
     expect(lastReadBook([])).toBeNull();
+  });
+});
+
+describe("progress kept in this browser", () => {
+  const book = { id: "a", path: "/Books/a.epub", title: "A", author: null, series: null, seriesIndex: null, read: false, cover: null, lastRead: "2026-10-12T10:00:00Z", hasSyncFile: true };
+
+  it("is used while the book's sync file is unchanged", () => {
+    expect(stillKnown({ at: "2026-10-12T10:00:00Z", p: 0.4 }, book)).toBe(0.4);
+  });
+
+  it("is read again when another device saved a place since, or when there's none", () => {
+    expect(stillKnown({ at: "2026-10-11T10:00:00Z", p: 0.4 }, book)).toBeNull();
+    expect(stillKnown(undefined, book)).toBeNull();
   });
 });

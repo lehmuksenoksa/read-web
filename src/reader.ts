@@ -13,6 +13,7 @@ import {
 } from "./looks";
 import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
+import { keepBook, keptBook } from "./store";
 import { openingPlan, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
 import { h } from "./ui";
 
@@ -567,9 +568,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   // --- Opening ---
 
   try {
-    const [file, syncFile] = await Promise.all([dropbox.download(props.path), readSyncFile()]);
-    if (!file) throw new Error("This book is no longer in Dropbox.");
-    book = await openBook(file.bytes);
+    // The book as this browser kept it, else from Dropbox (and kept); the place is always read fresh.
+    const [bytes, syncFile] = await Promise.all([bookFile(dropbox, id, props.path), readSyncFile()]);
+    book = await openBook(bytes);
     const plan = openingPlan(syncFile, null);
     const saved = plan.start ? Locator.deserialize(plan.start.locator) ?? null : null;
     if (!(await mount(saved))) tell("Couldn't find your place in this book.");
@@ -598,4 +599,14 @@ function swipes(el: HTMLElement, turn: (forward: boolean) => void) {
     const dy = t.clientY - y;
     if (Math.abs(dx) >= 40 && Math.abs(dx) > 1.5 * Math.abs(dy)) turn(dx < 0);
   });
+}
+
+/** A book's file: kept in this browser by its id (Dropbox's content hash), else downloaded and kept. */
+async function bookFile(dropbox: Dropbox, id: string, path: string): Promise<Uint8Array> {
+  const kept = await keptBook(id);
+  if (kept) return kept;
+  const file = await dropbox.download(path);
+  if (!file) throw new Error("This book is no longer in Dropbox.");
+  void keepBook(id, file.bytes);
+  return file.bytes;
 }

@@ -2,10 +2,11 @@ import "./style.css";
 import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
 import { Dropbox } from "./dropbox";
-import { furthest, lastReadBook, libraryBooks, libraryItems, type IndexEntry, type LibraryBook, type LibraryItem, type SortBy } from "./library";
+import { furthest, lastReadBook, libraryBooks, libraryItems, stillKnown, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
 import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
 import { BOOKS_FOLDER, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { showReader } from "./reader";
+import { forgetAll, keepValue, keptValue } from "./store";
 import { h } from "./ui";
 
 const root = document.getElementById("app")!;
@@ -58,6 +59,8 @@ async function signOut(api: Dropbox) {
   await appearance?.flush();
   await api.revoke().catch(() => undefined);
   forgetSignIn();
+  // What this browser kept (books, fonts, the Library) goes with the sign-in.
+  await forgetAll();
   showSignIn("Signed out.");
 }
 
@@ -160,27 +163,31 @@ async function showApp() {
 
   // --- The books ---
 
-  let books: LibraryBook[] = [];
-  try {
-    const [files, index, syncFiles] = await Promise.all([
-      api.listFolder(BOOKS_FOLDER, true),
-      api.readText(LIBRARY_INDEX_PATH).then(r => (r ? (JSON.parse(r.text).books as Record<string, IndexEntry>) : {})).catch(() => ({})),
-      api.listFolder(SYNC_FOLDER, false),
-    ]);
-    books = libraryBooks(files, index, syncFiles);
-  } catch (e) {
-    note.textContent = `Couldn't reach Dropbox: ${e instanceof Error ? e.message : e}`;
-    return;
-  }
-  note.remove();
+  // The Library as this browser last saw it shows at once; Dropbox's replaces it when it comes.
+  const kept = await keptValue<KeptLibrary>("library");
+  let books: LibraryBook[] = kept?.books ?? [];
+  /** Each book's furthest place, with the time of the sync file it was read from: read again only when that changes. */
+  const known = new Map<string, KnownProgress>(Object.entries(kept?.progress ?? {}));
+  let saveTimer: number | undefined;
+  const saveLibrary = () => {
+    window.clearTimeout(saveTimer);
+    // Not after Sign out, which empties what this browser kept.
+    saveTimer = window.setTimeout(() => currentToken() && void keepValue("library", {
+      books: books.map(b => ({ ...b, cover: null })),
+      progress: Object.fromEntries(known),
+    } satisfies KeptLibrary), 1000);
+  };
 
-  const progress = new Map<string, Promise<number>>();
+  let progress = new Map<string, Promise<number>>();
   const progressOf = (book: LibraryBook) => {
     if (!book.hasSyncFile) return Promise.resolve(0);
+    const was = stillKnown(known.get(book.id), book);
+    if (was != null) return Promise.resolve(was);
     let p = progress.get(book.id);
     if (!p) {
       p = api.readText(syncFilePath(book.id)).then(r => (r ? furthest(JSON.parse(r.text)) : 0)).catch(() => 0);
       progress.set(book.id, p);
+      void p.then(value => { known.set(book.id, { at: book.lastRead, p: value }); saveLibrary(); });
     }
     return p;
   };
@@ -204,6 +211,8 @@ async function showApp() {
   const open = new Set<string>();
   /** The book in the reader. */
   let currentId: string | null = null;
+  /** The book in the reader is the one the page started with, not one picked: a newer last-read book replaces it. */
+  let startedWith = false;
 
   const line = (fraction: number) => h("span", { class: "line" }, h("i", { style: `width: ${Math.round(fraction * 100)}%` }));
   const bookRow = (book: LibraryBook, inSeries: boolean) => {
@@ -239,20 +248,21 @@ async function showApp() {
     const items = libraryItems(books, sortBy, query, setup.groupSeries);
     list.replaceChildren(...items.flatMap(item => (item.kind === "book" ? [bookRow(item.book, false)] : seriesRows(item))));
     list.querySelectorAll(".row[data-id]").forEach(el => seen.observe(el));
-    if (!items.length) list.replaceChildren(h("p", { class: "note muted" }, books.length ? "No books match." : "No books in Dropbox's /Books/ yet."));
+    if (!items.length && !note.isConnected) list.replaceChildren(h("p", { class: "note muted" }, books.length ? "No books match." : "No books in Dropbox's /Books/ yet."));
   };
   sort.addEventListener("change", () => { sortBy = sort.value as SortBy; render(); });
   search.addEventListener("input", () => { query = search.value; render(); });
 
   /** A book into the reader: the one open before saves its place and closes first. */
   let opening = Promise.resolve();
-  const openBook = (book: LibraryBook) => {
+  const openBook = (book: LibraryBook, atStart = false) => {
+    startedWith = atStart;
     if (book.id === currentId) return opening;
     currentId = book.id;
     // Its series open, so the highlighted row shows.
     if (book.series) open.add(book.series.toLocaleLowerCase());
     render();
-    if (NARROW.matches) { overlayOpen = false; layout(); }
+    if (NARROW.matches && !atStart) { overlayOpen = false; layout(); }
     opening = opening.then(async () => {
       await closeReader?.();
       closeReader = null;
@@ -261,12 +271,45 @@ async function showApp() {
     }).catch(() => undefined); // One book that fails to open doesn't stop the next.
     return opening;
   };
+  /** At the start, the book read last on any device; opening it saves no place. */
+  const startWithLastRead = () => {
+    const last = lastReadBook(books);
+    if (last) void openBook(last, true);
+    else if (!currentId) pane.replaceChildren(h("p", { class: "empty muted" }, "Choose a book from the Library."));
+  };
 
+  if (kept) {
+    note.remove();
+    render();
+    startWithLastRead();
+  }
+  try {
+    const [files, index, syncFiles] = await Promise.all([
+      api.listFolder(BOOKS_FOLDER, true),
+      api.readText(LIBRARY_INDEX_PATH).then(r => (r ? (JSON.parse(r.text).books as Record<string, IndexEntry>) : {})).catch(() => ({})),
+      api.listFolder(SYNC_FOLDER, false),
+    ]);
+    books = libraryBooks(files, index, syncFiles);
+  } catch (e) {
+    if (!kept) {
+      note.textContent = `Couldn't reach Dropbox: ${e instanceof Error ? e.message : e}`;
+      return;
+    }
+    list.before(h("p", { class: "note muted" }, "Couldn't reach Dropbox: the Library as last seen."));
+    return;
+  }
+  note.remove();
+  progress = new Map();
+  saveLibrary();
   render();
-  // At the start, the book read last on any device; opening it saves no place.
-  const last = lastReadBook(books);
-  if (last) await openBook(last);
-  else pane.replaceChildren(h("p", { class: "empty muted" }, "Choose a book from the Library."));
+  // Another device may have read another book since: the page starts with that one, unless a book was picked meanwhile.
+  if (!currentId || startedWith) startWithLastRead();
+}
+
+/** The Library as this browser last saw it (WEB.md → Kept in this browser). */
+interface KeptLibrary {
+  books: LibraryBook[];
+  progress: Record<string, KnownProgress>;
 }
 
 // --- Start ---

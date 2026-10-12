@@ -6,6 +6,7 @@ import { RevConflict, type Dropbox } from "./dropbox";
 import { CATALOGUE, fontIndex, fontIndexName, googleCssUrl, parseGoogleCss, type FontIndex } from "./fonts";
 import { BOOKERLY_FILES, decodeSetup, DEFAULT_SETUP, hex, pageBackground, pageText, weightsOf, type FontFileFace, type Look, type Setup } from "./looks";
 import { FONTS_FOLDER, fontPath, WEB_SETUP_PATH } from "./paths";
+import { keepValue, keptFile, keptValue } from "./store";
 
 /** Setup changes go to Dropbox this long after the last one. */
 const SAVE_DELAY_MS = 1500;
@@ -30,7 +31,7 @@ const LITERATA: FontFileFace[] = [
 ];
 
 export class Appearance {
-  private setupLoad: Promise<Setup> | null = null;
+  private setupLoad: Promise<void> | null = null;
   private current: Setup = DEFAULT_SETUP;
   private rev: string | null = null;
   private saveTimer: number | undefined;
@@ -42,17 +43,36 @@ export class Appearance {
 
   constructor(private readonly api: Dropbox) {}
 
-  /** Web's setup as it is now: read from Dropbox once; the defaults when there's none yet. */
+  /**
+   * Web's setup as it is now: as this browser kept it, at once, while Dropbox's is read (and
+   * replaces it if it differs); without a kept one, Dropbox's; the defaults when there's none yet.
+   */
   async setup(): Promise<Setup> {
-    this.setupLoad ??= this.api.readText(WEB_SETUP_PATH)
-      .then(remote => {
-        this.rev = remote?.rev ?? null;
-        this.current = decodeSetup(remote?.text ?? null);
-        return this.current;
-      })
-      .catch(() => this.current);
+    this.setupLoad ??= this.loadSetup();
     await this.setupLoad;
     return this.current;
+  }
+
+  private async loadSetup() {
+    const fresh = this.api.readText(WEB_SETUP_PATH).then(remote => {
+      this.rev = remote?.rev ?? null;
+      return decodeSetup(remote?.text ?? null);
+    });
+    const kept = await keptValue<string>("setup");
+    if (kept) {
+      this.current = decodeSetup(kept);
+      void fresh.then(setup => {
+        // A change made here meanwhile is the newer one: it's saved over Dropbox's.
+        if (this.saveTimer !== undefined) return;
+        void keepValue("setup", JSON.stringify(setup));
+        if (JSON.stringify(setup) === JSON.stringify(this.current)) return;
+        this.current = setup;
+        for (const listener of this.listeners) listener(setup);
+      }).catch(() => undefined);
+      return;
+    }
+    this.current = await fresh.catch(() => this.current);
+    void keepValue("setup", JSON.stringify(this.current));
   }
 
   onChange(listener: (setup: Setup) => void): () => void {
@@ -63,6 +83,7 @@ export class Appearance {
   /** A change: shown at once, saved to Dropbox a moment after the last one. */
   update(next: Setup) {
     this.current = next;
+    void keepValue("setup", JSON.stringify(next));
     for (const listener of this.listeners) listener(next);
     window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => void this.save(), SAVE_DELAY_MS);
@@ -138,8 +159,8 @@ export class Appearance {
     if (index) {
       const bytes = new Map<string, Uint8Array>();
       await Promise.all([...new Set(index.faces.map(f => f.file))].map(async file => {
-        const got = await this.api.download(fontPath(file));
-        if (got) bytes.set(file, got.bytes);
+        const got = await this.fontFile(fontPath(file));
+        if (got) bytes.set(file, got);
       }));
       const faces = index.faces.filter(f => bytes.has(f.file));
       if (faces.length) {
@@ -192,11 +213,16 @@ export class Appearance {
 
   private bookerlyFiles(): Promise<Map<string, Uint8Array> | null> {
     this.bookerly ??= (async () => {
-      const files = await Promise.all(BOOKERLY_FILES.map(f => this.api.download(`${FONTS_FOLDER}/${f.file}`)));
+      const files = await Promise.all(BOOKERLY_FILES.map(f => this.fontFile(`${FONTS_FOLDER}/${f.file}`)));
       if (files.some(f => !f)) return null;
-      return new Map(BOOKERLY_FILES.map((f, i) => [f.file, files[i]!.bytes]));
+      return new Map(BOOKERLY_FILES.map((f, i) => [f.file, files[i]!]));
     })().catch(() => null);
     return this.bookerly;
+  }
+
+  /** A font file from `/Apps/Read/Fonts/`: fetched once, then kept in this browser (fonts there never change). */
+  private fontFile(path: string): Promise<Uint8Array | null> {
+    return keptFile(path, async () => (await this.api.download(path))?.bytes ?? null);
   }
 
   close() {

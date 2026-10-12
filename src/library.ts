@@ -161,3 +161,14 @@ export function libraryItems(books: LibraryBook[], by: SortBy, query: string, gr
 export function lastReadBook(books: LibraryBook[]): LibraryBook | null {
   return books.filter(b => b.lastRead).sort((a, b) => b.lastRead!.localeCompare(a.lastRead!))[0] ?? null;
 }
+
+/** A book's furthest place as this browser last read it, with its sync file's time then. */
+export interface KnownProgress {
+  at: string | null;
+  p: number;
+}
+
+/** The kept progress while the book's sync file is unchanged since; null: read it again. */
+export function stillKnown(was: KnownProgress | undefined, book: LibraryBook): number | null {
+  return was && was.at === book.lastRead ? was.p : null;
+}
