@@ -258,7 +258,7 @@ async function showApp() {
       closeReader = null;
       if (currentId !== book.id) return;
       closeReader = await showReader(pane, { dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title });
-    });
+    }).catch(() => undefined); // One book that fails to open doesn't stop the next.
     return opening;
   };
 

@@ -18,6 +18,8 @@ import { h } from "./ui";
 
 /** Uploads wait this long after the last page turn (the phones wait 5 s). */
 export const UPLOAD_DELAY_MS = 4000;
+/** How long opening waits for Readium to find the place before showing the chapter as it is. */
+const GO_TIMEOUT_MS = 8000;
 
 type AaTab = "Text" | "Layout" | "Colour" | "Looks";
 
@@ -433,8 +435,10 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     applyLook(look);
   };
   const stage = left.parentElement!;
-  // A narrower or wider pane (the window, the sidebar): the page follows.
-  const resized = new ResizeObserver(() => fitPage(shown(setup)));
+  // A narrower or wider pane (the window, the sidebar): the page follows, once it has opened
+  // (resizing Readium while it loads can leave it never arriving).
+  let mounting = false;
+  const resized = new ResizeObserver(() => { if (!mounting) fitPage(shown(setup)); });
   resized.observe(stage);
 
   /**
@@ -443,6 +447,16 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
    * chapter isn't in the book.
    */
   const mount = async (at: Locator | null): Promise<boolean> => {
+    if (!book) return false;
+    mounting = true;
+    try {
+      return await mountNow(at);
+    } finally {
+      mounting = false;
+      fitPage(shown(setup));
+    }
+  };
+  const mountNow = async (at: Locator | null): Promise<boolean> => {
     if (!book) return false;
     const look = shown(setup);
     const font: PageFont = await appearance.font(look.font);
@@ -465,7 +479,10 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     await nav.load();
     if (at && entry) {
       const there = new Locator({ href: entry.href, type: at.type, title: at.title, locations: at.locations, text: at.text });
-      await new Promise<void>(done => nav!.go(there, false, () => done()));
+      await Promise.race([
+        new Promise<void>(done => nav!.go(there, false, () => done())),
+        new Promise<void>(done => window.setTimeout(done, GO_TIMEOUT_MS)),
+      ]);
     }
     return !at || entry != null;
   };
