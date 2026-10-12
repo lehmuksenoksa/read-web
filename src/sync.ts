@@ -97,6 +97,27 @@ export function openingPlan(file: SyncFile | null, dismissedAt: number | null = 
   }
 }
 
+/** The sync file with Web's place as this browser kept it, when Dropbox's is older or missing (an upload that didn't get through). */
+export function withKeptPlace(file: SyncFile | null, bookId: string, kept: Position): SyncFile {
+  const theirs = file?.positions[WEB_DEVICE_ID];
+  if (file && theirs && theirs.timestamp >= kept.timestamp) return file;
+  const base = file ?? { bookId, positions: {} };
+  return { ...base, positions: { ...base.positions, [WEB_DEVICE_ID]: kept } };
+}
+
+/**
+ * A book opened at the place this browser kept, without waiting for Dropbox (WEB.md → Kept in
+ * this browser). When its sync file comes: Web's own place, newer from another browser, moves the
+ * page if no page was turned yet; another device further on is asked about, as at any opening.
+ */
+export function afterKeptOpening(
+  file: SyncFile | null, bookId: string, kept: Position, moved: boolean, dismissedAt: number | null = null,
+): { moveTo: Position | null; ask: Position | null } {
+  const theirs = file?.positions[WEB_DEVICE_ID] ?? null;
+  const moveTo = !moved && theirs && theirs.timestamp > kept.timestamp && !samePosition(theirs, kept) ? theirs : null;
+  return { moveTo, ask: openingPlan(withKeptPlace(file, bookId, moveTo ?? kept), dismissedAt).ask };
+}
+
 /** The first words, cut at a word boundary. */
 export function snippet(text: string): string {
   const clean = text.trim().replace(/\s+/g, " ");

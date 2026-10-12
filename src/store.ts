@@ -14,28 +14,36 @@ const FILES = "files";
 /** Small values: the Library as last seen, Web's setup. */
 const VALUES = "values";
 
-/** At most this many books, and this many bytes of them; the least recently opened go first. */
-export const BOOKS_KEPT = { count: 10, bytes: 200 * 1024 * 1024 };
+/**
+ * At most [count] books opened here and [fetched] fetched in the background, and [bytes] of them
+ * all. Fetched books go first, so they never push out a book opened here; then the least recently
+ * opened.
+ */
+export const BOOKS_KEPT = { count: 10, fetched: 3, bytes: 200 * 1024 * 1024 };
 
 export interface KeptBook {
   id: string;
   size: number;
+  /** When it was opened here; for a fetched book, when any device last read it. */
   usedAt: number;
+  /** Fetched in the background (one of the books read last), not opened here yet. */
+  fetched?: boolean;
 }
 
-/** The books to drop to stay within [limit]: the newest are kept, and always the newest one. */
+/** The books to drop to stay within [limit]; the newest book opened here is always kept. */
 export function booksToDrop(books: KeptBook[], limit = BOOKS_KEPT): string[] {
-  const newestFirst = [...books].sort((a, b) => b.usedAt - a.usedAt);
-  const drop: string[] = [];
-  let count = 0;
-  let bytes = 0;
-  for (const book of newestFirst) {
-    if (count > 0 && (count >= limit.count || bytes + book.size > limit.bytes)) {
-      drop.push(book.id);
-      continue;
-    }
-    count++;
-    bytes += book.size;
+  const newestFirst = (list: KeptBook[]) => [...list].sort((a, b) => b.usedAt - a.usedAt);
+  const opened = newestFirst(books.filter(b => !b.fetched));
+  const fetched = newestFirst(books.filter(b => b.fetched));
+  const keptOpened = opened.slice(0, Math.max(1, limit.count));
+  const keptFetched = fetched.slice(0, limit.fetched);
+  const drop = [...opened.slice(keptOpened.length), ...fetched.slice(keptFetched.length)].map(b => b.id);
+  let bytes = [...keptOpened, ...keptFetched].reduce((sum, b) => sum + b.size, 0);
+  // Over the size: fetched books first, the oldest first; then opened ones, never the newest.
+  for (const book of [...keptFetched.reverse(), ...keptOpened.slice(1).reverse()]) {
+    if (bytes <= limit.bytes) break;
+    drop.push(book.id);
+    bytes -= book.size;
   }
   return drop;
 }
@@ -95,15 +103,30 @@ export async function keptBook(id: string): Promise<Uint8Array | null> {
   return bytes;
 }
 
-/** Keeps a book's file, dropping the least recently opened beyond [BOOKS_KEPT]. */
-export async function keepBook(id: string, bytes: Uint8Array): Promise<void> {
+/** The books this browser has. */
+export async function keptBooks(): Promise<KeptBook[]> {
+  try {
+    const d = await db();
+    if (!d) return [];
+    return await done(d.transaction(BOOK_META).objectStore(BOOK_META).getAll() as IDBRequest<KeptBook[]>);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Keeps a book's file: opened here now, or [fetched] in the background (with when it was last
+ * read anywhere); then drops what's beyond [BOOKS_KEPT].
+ */
+export async function keepBook(id: string, bytes: Uint8Array, fetched?: { lastReadAt: number }): Promise<void> {
   await write(BOOKS, id, bytes);
-  await write(BOOK_META, id, { id, size: bytes.byteLength, usedAt: Date.now() } satisfies KeptBook);
+  await write(BOOK_META, id, (fetched
+    ? { id, size: bytes.byteLength, usedAt: fetched.lastReadAt, fetched: true }
+    : { id, size: bytes.byteLength, usedAt: Date.now() }) satisfies KeptBook);
   try {
     const d = await db();
     if (!d) return;
-    const all = await done(d.transaction(BOOK_META).objectStore(BOOK_META).getAll() as IDBRequest<KeptBook[]>);
-    const drop = booksToDrop(all);
+    const drop = booksToDrop(await keptBooks());
     if (!drop.length) return;
     const tx = d.transaction([BOOKS, BOOK_META], "readwrite");
     for (const old of drop) {

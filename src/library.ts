@@ -172,3 +172,9 @@ export interface KnownProgress {
 export function stillKnown(was: KnownProgress | undefined, book: LibraryBook): number | null {
   return was && was.at === book.lastRead ? was.p : null;
 }
+
+/** Books to fetch in the background: of the [count] read last on any device, those this browser doesn't have. */
+export function booksToFetch(books: LibraryBook[], kept: Set<string>, openNow: string | null, count = 3): LibraryBook[] {
+  return books.filter(b => b.lastRead).sort((a, b) => b.lastRead!.localeCompare(a.lastRead!)).slice(0, count)
+    .filter(b => !kept.has(b.id) && b.id !== openNow);
+}

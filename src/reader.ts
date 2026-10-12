@@ -13,8 +13,8 @@ import {
 } from "./looks";
 import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
-import { keepBook, keptBook } from "./store";
-import { openingPlan, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
+import { keepBook, keptBook, keepValue, keptValue } from "./store";
+import { afterKeptOpening, openingPlan, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
 import { h } from "./ui";
 
 /** Uploads wait this long after the last page turn (the phones wait 5 s). */
@@ -84,6 +84,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (!current) return;
     const place = positionFromLocator(withPageTop(current.serialize() as Record<string, unknown>, currentTop), Date.now());
     if (!place) return;
+    // This browser keeps it too, to open here next time without waiting for Dropbox.
+    void keepValue(`place:${id}`, place);
     for (let attempt = 0; attempt < 3; attempt++) {
       const remote = await dropbox.readText(syncFilePath(id));
       try {
@@ -215,11 +217,12 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     prompt.hidden = false;
     if (action) undoTimer = window.setTimeout(() => { prompt.hidden = true; }, 8000);
   };
-  const goThere = (other: Position) => {
+  /** To [other]'s place; [ownPlace]: Web's own, from another browser, so nothing new to save. */
+  const goThere = (other: Position, ownPlace = false) => {
     const locator = Locator.deserialize(other.locator);
     const entry = locator && book ? startPosition(book.positions, locator) : null;
     if (!locator || !entry || !nav) return tell("Couldn't find that place in this book.");
-    moved = true;
+    if (!ownPlace) moved = true;
     anchor = null;
     nav.go(new Locator({ href: entry.href, type: locator.type, title: locator.title, locations: locator.locations, text: locator.text }), false, () => undefined);
   };
@@ -568,13 +571,27 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   // --- Opening ---
 
   try {
-    // The book as this browser kept it, else from Dropbox (and kept); the place is always read fresh.
-    const [bytes, syncFile] = await Promise.all([bookFile(dropbox, id, props.path), readSyncFile()]);
+    // The book as this browser kept it, else from Dropbox (and kept). The place: as this browser
+    // kept it, at once, with Dropbox's read alongside (WEB.md → Kept in this browser); else Dropbox's.
+    const syncRead = readSyncFile();
+    syncRead.catch(() => undefined);
+    const [bytes, kept] = await Promise.all([bookFile(dropbox, id, props.path), keptValue<Position>(`place:${id}`)]);
     book = await openBook(bytes);
-    const plan = openingPlan(syncFile, null);
-    const saved = plan.start ? Locator.deserialize(plan.start.locator) ?? null : null;
-    if (!(await mount(saved))) tell("Couldn't find your place in this book.");
-    if (plan.ask) ask(plan.ask);
+    if (kept) {
+      if (!(await mount(Locator.deserialize(kept.locator) ?? null))) tell("Couldn't find your place in this book.");
+      void syncRead.then(file => {
+        if (closed) return;
+        const next = afterKeptOpening(withCurrent(file), id, kept, moved, dismissedAt);
+        if (next.moveTo) goThere(next.moveTo, true);
+        if (next.ask) ask(next.ask);
+      }).catch(() => undefined);
+    } else {
+      const plan = openingPlan(await syncRead, null);
+      if (plan.start) void keepValue(`place:${id}`, plan.start);
+      const saved = plan.start ? Locator.deserialize(plan.start.locator) ?? null : null;
+      if (!(await mount(saved))) tell("Couldn't find your place in this book.");
+      if (plan.ask) ask(plan.ask);
+    }
   } catch (e) {
     status.textContent = e instanceof Error ? e.message : String(e);
   }

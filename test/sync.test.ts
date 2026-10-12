@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decide, openingPlan, otherToCompare, positionFromLocator, samePosition, snippet, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "../src/sync";
+import { afterKeptOpening, decide, openingPlan, otherToCompare, positionFromLocator, samePosition, snippet, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "../src/sync";
 
 function position(p: Partial<Position> = {}): Position {
   const href = p.href ?? "chapter12.xhtml";
@@ -117,5 +117,34 @@ describe("Web's place in the sync file", () => {
 
   it("cuts snippets at a word", () => {
     expect(snippet("word ".repeat(30))).toMatch(/^(word ){15}word…$/);
+  });
+});
+
+describe("opening at the place this browser kept, before Dropbox answers", () => {
+  const kept = position({ deviceName: "Web", progression: 0.3, totalProgression: 0.3, timestamp: 5000 });
+
+  it("stays when Dropbox has the same or nothing newer", () => {
+    expect(afterKeptOpening(file({ [WEB_DEVICE_ID]: kept }), "b", kept, false)).toEqual({ moveTo: null, ask: null });
+    expect(afterKeptOpening(null, "b", kept, false)).toEqual({ moveTo: null, ask: null });
+  });
+
+  it("moves to Web's place from another browser while no page was turned", () => {
+    const elsewhere = position({ deviceName: "Web", progression: 0.6, totalProgression: 0.35, timestamp: 9000 });
+    expect(afterKeptOpening(file({ [WEB_DEVICE_ID]: elsewhere }), "b", kept, false).moveTo).toEqual(elsewhere);
+    expect(afterKeptOpening(file({ [WEB_DEVICE_ID]: elsewhere }), "b", kept, true).moveTo).toBeNull();
+  });
+
+  it("asks when another device is further on, as at any opening", () => {
+    const boox = position({ deviceName: "Boox", href: "chapter20.xhtml", progression: 0.2, totalProgression: 0.7, timestamp: 8000 });
+    const next = afterKeptOpening(file({ [WEB_DEVICE_ID]: kept, "boox-id": boox }), "b", kept, false);
+    expect(next.moveTo).toBeNull();
+    expect(next.ask).toEqual(boox);
+  });
+
+  it("compares with the kept place when Dropbox's is older (an upload that didn't get through)", () => {
+    const old = position({ deviceName: "Web", href: "chapter3.xhtml", progression: 0.1, totalProgression: 0.1, timestamp: 1000 });
+    const further = position({ deviceName: "Web", href: "chapter30.xhtml", progression: 0.5, totalProgression: 0.9, timestamp: 6000 });
+    const boox = position({ deviceName: "Boox", href: "chapter20.xhtml", progression: 0.2, totalProgression: 0.7, timestamp: 4000 });
+    expect(afterKeptOpening(file({ [WEB_DEVICE_ID]: old, "boox-id": boox }), "b", further, false)).toEqual({ moveTo: null, ask: null });
   });
 });

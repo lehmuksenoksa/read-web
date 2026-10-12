@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry } from "../src/dropbox";
-import { furthest, lastReadBook, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem, stillKnown } from "../src/library";
+import { furthest, lastReadBook, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem, stillKnown, booksToFetch } from "../src/library";
 
 const hash = (c: string) => c.repeat(64);
 const file = (name: string, id: string, folder = "/Books"): FileEntry => ({ path: `${folder}/${name}`, pathLower: `${folder}/${name}`.toLowerCase(), name, contentHash: id, size: 1, modified: "2026-10-01T10:00:00Z" });
@@ -97,5 +97,15 @@ describe("progress kept in this browser", () => {
   it("is read again when another device saved a place since, or when there's none", () => {
     expect(stillKnown({ at: "2026-10-11T10:00:00Z", p: 0.4 }, book)).toBeNull();
     expect(stillKnown(undefined, book)).toBeNull();
+  });
+});
+
+describe("books fetched in the background", () => {
+  const at = (id: string, lastRead: string | null) => ({ id, path: `/Books/${id}.epub`, title: id, author: null, series: null, seriesIndex: null, read: false, cover: null, lastRead, hasSyncFile: lastRead != null });
+  const books = [at("a", "2026-10-10"), at("b", "2026-10-12"), at("c", null), at("d", "2026-10-11"), at("e", "2026-10-09")];
+
+  it("are the three read last on any device that this browser doesn't have", () => {
+    expect(booksToFetch(books, new Set(), null).map(b => b.id)).toEqual(["b", "d", "a"]);
+    expect(booksToFetch(books, new Set(["d"]), "b").map(b => b.id)).toEqual(["a"]);
   });
 });

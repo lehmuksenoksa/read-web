@@ -2,11 +2,11 @@ import "./style.css";
 import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
 import { Dropbox } from "./dropbox";
-import { furthest, lastReadBook, libraryBooks, libraryItems, stillKnown, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
+import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, stillKnown, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
 import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
 import { BOOKS_FOLDER, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { showReader } from "./reader";
-import { forgetAll, keepValue, keptValue } from "./store";
+import { forgetAll, keepBook, keptBooks, keepValue, keptValue } from "./store";
 import { h } from "./ui";
 
 const root = document.getElementById("app")!;
@@ -304,6 +304,15 @@ async function showApp() {
   render();
   // Another device may have read another book since: the page starts with that one, unless a book was picked meanwhile.
   if (!currentId || startedWith) startWithLastRead();
+  // Then, quietly, the books read last that this browser doesn't have yet, one at a time.
+  void opening.then(async () => {
+    const kept = new Set((await keptBooks()).map(b => b.id));
+    for (const book of booksToFetch(books, kept, currentId)) {
+      if (!currentToken()) return;
+      const file = await api.download(book.path).catch(() => null);
+      if (file) await keepBook(book.id, file.bytes, { lastReadAt: Date.parse(book.lastRead ?? "") || 0 });
+    }
+  });
 }
 
 /** The Library as this browser last saw it (WEB.md → Kept in this browser). */
