@@ -3,7 +3,7 @@ import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
 import { Dropbox } from "./dropbox";
 import { furthest, lastReadBook, libraryBooks, libraryItems, type IndexEntry, type LibraryBook, type LibraryItem, type SortBy } from "./library";
-import { shown, type Setup } from "./looks";
+import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
 import { BOOKS_FOLDER, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { showReader } from "./reader";
 import { h } from "./ui";
@@ -84,7 +84,9 @@ async function showApp() {
   const hideButton = h("button", { class: "icon", title: "Hide the Library", "aria-label": "Hide the Library" }, "⇤");
   const menuButton = h("button", { class: "icon", title: "More", "aria-label": "More", "aria-expanded": "false" }, "⋯");
   const menu = h("div", { class: "panel menu", hidden: true });
+  const handle = h("div", { class: "resizer", title: "Drag to resize; double-click for the usual width", role: "separator", "aria-orientation": "vertical", "aria-label": "Library width" });
   const side = h("aside", { class: "sidebar" },
+    handle,
     h("div", { class: "shead" }, h("h1", {}, "Library"), hideButton, menuButton),
     h("div", { class: "sfilter" }, search, sort),
     menu,
@@ -100,7 +102,25 @@ async function showApp() {
   const layout = () => {
     const visible = NARROW.matches ? overlayOpen : setup.sidebar;
     root.className = `app${visible ? "" : " noside"}${NARROW.matches ? " narrow" : ""}`;
+    side.style.width = `${setup.sidebarWidth}px`;
   };
+  // Dragging the sidebar's edge resizes it; the width is kept in Web's setup when the drag ends.
+  handle.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    root.classList.add("dragging");
+    const left = side.getBoundingClientRect().left;
+    const move = (m: PointerEvent) => { side.style.width = `${sidebarWidth(m.clientX - left)}px`; };
+    const done = () => {
+      handle.removeEventListener("pointermove", move);
+      root.classList.remove("dragging");
+      look.update({ ...setup, sidebarWidth: sidebarWidth(side.getBoundingClientRect().width) });
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", done, { once: true });
+    handle.addEventListener("pointercancel", done, { once: true });
+  });
+  handle.addEventListener("dblclick", () => look.update({ ...setup, sidebarWidth: SIDEBAR.normal }));
   const setSidebar = (visible: boolean) => {
     if (NARROW.matches) overlayOpen = visible;
     else look.update({ ...setup, sidebar: visible });

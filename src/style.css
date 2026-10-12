@@ -57,11 +57,12 @@ button:disabled { opacity: .35; cursor: default; }
 .rbar { height: 48px; display: flex; align-items: center; gap: 26px; padding: 0 32px; }
 .rbar .spacer { margin-right: auto; }
 .stage { position: relative; height: calc(100vh - 48px - 40px); display: flex; justify-content: center; }
-.page { width: min(760px, 100%); height: 100%; position: relative; }
-.page.two { width: min(1480px, calc(100% - 96px)); }
+/* The page's box is as wide as the look's margins leave (textWidth); the arrows fill the space beside it. */
+.pagebox { height: 100%; flex: none; }
+.page { height: 100%; position: relative; }
 /* Readium's page frames fill the page; no frame border. */
 .page iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.side { flex: 1; font-size: 24px; color: var(--ink3); text-align: center; }
+.side { flex: 1; min-width: 40px; font-size: 24px; color: var(--ink3); text-align: center; }
 .side:hover { color: var(--ink2); }
 .foot { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--ink3); pointer-events: none; }
 .msg { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); padding: 10px 16px; display: flex; gap: 22px; align-items: center; width: min(560px, calc(100% - 32px)); z-index: 6; }
@@ -136,6 +137,12 @@ button.r:hover, .r .use:hover { background: var(--sel); }
 .main .empty { position: absolute; top: 45%; width: 100%; text-align: center; }
 .showside { display: none; position: absolute; top: 14px; left: 24px; z-index: 4; }
 .app.noside .sidebar { display: none; }
+/* The sidebar's edge: drag to resize. */
+.resizer { position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; cursor: col-resize; z-index: 3; }
+.resizer:hover, .dragging .resizer { background: color-mix(in srgb, var(--tx) 14%, transparent); }
+.dragging, .dragging * { cursor: col-resize !important; user-select: none; }
+.dragging iframe { pointer-events: none; }
+.app.narrow .resizer { display: none; }
 .app.noside .showside { display: block; }
 /* A narrow window: the Library opens over the page. */
 .app.narrow .sidebar { position: absolute; z-index: 7; top: 0; bottom: 0; left: 0; box-shadow: var(--shadow); max-width: 85vw; }

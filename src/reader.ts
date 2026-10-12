@@ -8,7 +8,7 @@ import { applyLook, type Appearance, type FontChoice, type PageFont } from "./ap
 import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
 import {
-  argb, cantRemove, edit, hex, isChanged, pageBackground, pageText, preferences, removeLook, restoreLook, saveAsNew,
+  argb, cantRemove, edit, hex, isChanged, textWidth, pageBackground, pageText, preferences, removeLook, restoreLook, saveAsNew,
   shown, step, stepOptional, STEPS, stepWeight, useLook, weightName, type Look, type Setup, type Steps,
 } from "./looks";
 import { pageTop, withPageTop, type PageTop } from "./pagetop";
@@ -45,7 +45,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const aa = h("div", { class: "panel", hidden: true });
   root.replaceChildren(
     h("div", { class: "rbar" }, h("span", { class: "spacer" }), contentsButton, aaButton),
-    h("div", { class: "stage" }, left, page, right),
+    h("div", { class: "stage" }, left, h("div", { class: "pagebox" }, page), right),
     contents,
     aa,
     prompt,
@@ -109,6 +109,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     closed = true;
     document.title = "Library";
     stopListening();
+    resized.disconnect();
     window.removeEventListener("keydown", onKey);
     document.removeEventListener("visibilitychange", onVisible);
     document.removeEventListener("click", onOutside);
@@ -425,11 +426,16 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     return true;
   };
 
-  /** The page around the book takes the look's colours too. */
+  /** The page around the book takes the look's colours too; the text takes the pane's width less the margins. */
   const fitPage = (look: Look) => {
-    page.classList.toggle("two", look.columns === 2);
+    // Readium sizes the page from its parent: the box is the width the margins leave.
+    (page.parentElement as HTMLElement).style.width = `${textWidth(stage.clientWidth, look.margins)}px`;
     applyLook(look);
   };
+  const stage = left.parentElement!;
+  // A narrower or wider pane (the window, the sidebar): the page follows.
+  const resized = new ResizeObserver(() => fitPage(shown(setup)));
+  resized.observe(stage);
 
   /**
    * Readium shown in the page, in what you see now, at [at]: it opens at an entry of its page

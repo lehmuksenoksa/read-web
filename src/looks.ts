@@ -63,10 +63,12 @@ export interface Setup {
   groupSeries: boolean;
   /** The Library shows as a sidebar beside the reader (false: hidden). */
   sidebar: boolean;
+  /** The sidebar's width, dragged by its edge (page pixels). */
+  sidebarWidth: number;
   version: 1;
 }
 
-export const DEFAULT_SETUP: Setup = { looks: WEB_LOOKS, lookId: "office", page: null, groupSeries: true, sidebar: true, version: 1 };
+export const DEFAULT_SETUP: Setup = { looks: WEB_LOOKS, lookId: "office", page: null, groupSeries: true, sidebar: true, sidebarWidth: 320, version: 1 };
 
 /** The setup file's text, read leniently: anything missing or unreadable is the default. */
 export function decodeSetup(text: string | null): Setup {
@@ -80,11 +82,32 @@ export function decodeSetup(text: string | null): Setup {
       page: raw.page && typeof raw.page.id === "string" ? withDefaults(raw.page) : null,
       groupSeries: raw.groupSeries !== false,
       sidebar: raw.sidebar !== false,
+      sidebarWidth: sidebarWidth(raw.sidebarWidth ?? SIDEBAR.normal),
       version: 1,
     };
   } catch {
     return DEFAULT_SETUP;
   }
+}
+
+/** The sidebar's width: 240 to 520 pixels, 320 to start with. */
+export const SIDEBAR = { min: 240, max: 520, normal: 320 };
+
+export function sidebarWidth(width: number): number {
+  return Number.isFinite(width) ? Math.round(Math.min(SIDEBAR.max, Math.max(SIDEBAR.min, width))) : SIDEBAR.normal;
+}
+
+/** The space beside the page's arrows: the page's ‹ › take this much on each side. */
+export const ARROW_SPACE = 40;
+
+/**
+ * The text's width in a reading pane [paneWidth] wide: the pane less the arrows and the look's
+ * margins on each side, Margins 1.0 being 8% of the pane (2026-10-12: the page had a fixed width
+ * that Margins couldn't change).
+ */
+export function textWidth(paneWidth: number, margins: number): number {
+  const side = ARROW_SPACE + margins * 0.08 * paneWidth;
+  return Math.max(200, Math.round(paneWidth - 2 * side));
 }
 
 export function savedLook(setup: Setup): Look {
@@ -237,7 +260,7 @@ export function pageText(look: Look): number {
   return !isLight(look) && opaque === WHITE ? NEAR_WHITE : opaque;
 }
 
-/** Readium's side margin at 1.0, in pixels: the look's margins scale it, as in the app. */
+/** Readium's gutter inside the page, in pixels: twice this is the gap between two columns. */
 const GUTTER_PX = 20;
 
 /** Readium's page settings for [look], its font declared as [fontFamily]. */
@@ -254,7 +277,8 @@ export function preferences(look: Look, fontFamily: string): IEpubPreferences {
     fontSize: look.fontSize,
     fontWeight: look.fontWeight,
     lineHeight: look.lineHeight,
-    pageGutter: Math.round(look.margins * GUTTER_PX),
+    // The margins are the space beside the page (textWidth); Readium keeps only a small gutter, the gap between two columns.
+    pageGutter: GUTTER_PX,
     letterSpacing: look.letterSpacing,
     wordSpacing: look.wordSpacing,
     paragraphSpacing: look.paragraphSpacing,
@@ -262,8 +286,10 @@ export function preferences(look: Look, fontFamily: string): IEpubPreferences {
     textAlign: look.justify ? TextAlignment.justify : TextAlignment.left,
     hyphens: look.hyphens,
     columnCount: look.columns,
-    optimalLineLength: 62,
-    maximalLineLength: 70,
+    // No line-length limit: the page's width (the margins) decides it.
+    optimalLineLength: 40,
+    minimalLineLength: 20,
+    maximalLineLength: 2000,
   };
 }
 

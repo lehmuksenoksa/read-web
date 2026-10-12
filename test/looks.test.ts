@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   argb, cantRemove, decodeSetup, DEFAULT_SETUP, edit, faceOfFile, fileSafe, hex, isChanged, isLight, pageText, preferences,
-  removeLook, restoreLook, saveAsNew, saveName, shown, step, stepOptional, STEPS, stepWeight, useLook, weightsOf, WEB_LOOKS,
+  removeLook, restoreLook, saveAsNew, saveName, shown, sidebarWidth, step, stepOptional, STEPS, stepWeight, textWidth, useLook, weightsOf, WEB_LOOKS,
 } from "../src/looks";
 
 describe("Web's setup", () => {
@@ -108,7 +108,7 @@ describe("the page", () => {
     const look = shown(edit(DEFAULT_SETUP, { columns: 2, margins: 1.5, justify: false, paragraphIndent: 1 }));
     expect(preferences(look, "Bookerly")).toMatchObject({
       backgroundColor: "#ffffff", textColor: "#1f1f1f", fontFamily: "Bookerly", fontSize: 1, fontWeight: 400,
-      lineHeight: 1.5, pageGutter: 30, textAlign: "left", hyphens: true, paragraphIndent: 1, paragraphSpacing: null, columnCount: 2,
+      lineHeight: 1.5, pageGutter: 20, textAlign: "left", hyphens: true, paragraphIndent: 1, paragraphSpacing: null, columnCount: 2,
     });
   });
 
@@ -122,5 +122,23 @@ describe("the page", () => {
     expect(faceOfFile("Open-Sans-400.otf")).toMatchObject({ family: "Open-Sans", weight: "400", italic: false });
     expect(faceOfFile("licences")).toBeNull();
     expect(fileSafe("Open Sans")).toBe("Open-Sans");
+  });
+});
+
+describe("widths", () => {
+  it("of the text: the pane less the arrows and the margins (1.0 is 8% a side)", () => {
+    expect(textWidth(1040, 1)).toBe(794);
+    expect(textWidth(1040, 0)).toBe(960);
+    expect(textWidth(1040, 3)).toBe(461);
+    expect(textWidth(300, 3)).toBe(200);
+  });
+
+  it("of the sidebar: 240 to 520 pixels, 320 to start with", () => {
+    expect(sidebarWidth(100)).toBe(240);
+    expect(sidebarWidth(900)).toBe(520);
+    expect(sidebarWidth(401.6)).toBe(402);
+    expect(sidebarWidth(NaN)).toBe(320);
+    expect(decodeSetup(null).sidebarWidth).toBe(320);
+    expect(decodeSetup(JSON.stringify({ looks: [{ id: "a" }], sidebarWidth: 9999 })).sidebarWidth).toBe(520);
   });
 });
