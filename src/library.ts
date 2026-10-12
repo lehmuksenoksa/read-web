@@ -104,3 +104,55 @@ export function searchBooks(books: LibraryBook[], query: string): LibraryBook[] 
 export function furthest(syncFile: { positions?: Record<string, { totalProgression?: number }> } | null): number {
   return Math.max(0, ...Object.values(syncFile?.positions ?? {}).map(p => p.totalProgression ?? 0));
 }
+
+/** A Library row: a book, or a series of two or more books (grouped). */
+export type LibraryItem =
+  | { kind: "book"; book: LibraryBook }
+  | { kind: "series"; name: string; author: string | null; books: LibraryBook[]; read: number; lastRead: string | null };
+
+/**
+ * The rows to show: the books found, sorted, with a series of two or more books as one row
+ * ([group]) placed where its most recently read book would be (Recent), by its name (Title) or
+ * its author (Author). Inside a series the newest book comes first.
+ */
+export function libraryItems(books: LibraryBook[], by: SortBy, query: string, group: boolean): LibraryItem[] {
+  const found = searchBooks(books, query);
+  if (!group) return sortBooks(found, by).map(book => ({ kind: "book", book }));
+  const bySeries = new Map<string, LibraryBook[]>();
+  for (const book of found) {
+    if (!book.series) continue;
+    const key = book.series.toLocaleLowerCase();
+    bySeries.set(key, [...(bySeries.get(key) ?? []), book]);
+  }
+  const items: LibraryItem[] = [];
+  const grouped = new Set<string>();
+  for (const book of found) {
+    const members = book.series ? bySeries.get(book.series.toLocaleLowerCase())! : [];
+    if (members.length < 2) {
+      items.push({ kind: "book", book });
+      continue;
+    }
+    const key = book.series!.toLocaleLowerCase();
+    if (grouped.has(key)) continue;
+    grouped.add(key);
+    const ordered = [...members].sort((a, b) => (b.seriesIndex ?? 0) - (a.seriesIndex ?? 0));
+    items.push({
+      kind: "series",
+      name: book.series!,
+      author: members.find(m => m.author)?.author ?? null,
+      books: ordered,
+      read: members.filter(m => m.read).length,
+      lastRead: members.map(m => m.lastRead ?? "").sort().pop() || null,
+    });
+  }
+  const title = (i: LibraryItem) => sortKey(i.kind === "book" ? i.book.title : i.name);
+  const author = (i: LibraryItem) => sortKey((i.kind === "book" ? i.book.author : i.author) ?? "￿");
+  const recent = (i: LibraryItem) => (i.kind === "book" ? i.book.lastRead : i.lastRead) ?? "";
+  return items.sort((a, b) => {
+    switch (by) {
+      case "recent": return recent(b).localeCompare(recent(a)) || title(a).localeCompare(title(b));
+      case "title": return title(a).localeCompare(title(b));
+      case "author": return author(a).localeCompare(author(b)) || title(a).localeCompare(title(b));
+    }
+  });
+}

@@ -53,19 +53,18 @@ export function withDefaults(look: Partial<Look> & { id: string }): Look {
   return { ...DEFAULT, name: look.id, ...look } as Look;
 }
 
-export type InterfaceTheme = "Light" | "Dark";
-
-/** Web's setup (`/Apps/Read/Sync/devices/Web/setup.json`): its looks, the one in use, what you see, the interface. */
+/** Web's setup (`/Apps/Read/Sync/devices/Web/setup.json`): its looks, the one in use, what you see, the Library's grouping. */
 export interface Setup {
   looks: Look[];
   lookId: string;
   /** What you see when it differs from the look in use (Aa's changes); null: the look itself. */
   page: Look | null;
-  interface: InterfaceTheme;
+  /** Series of two or more books are one row in the Library. */
+  groupSeries: boolean;
   version: 1;
 }
 
-export const DEFAULT_SETUP: Setup = { looks: WEB_LOOKS, lookId: "office", page: null, interface: "Light", version: 1 };
+export const DEFAULT_SETUP: Setup = { looks: WEB_LOOKS, lookId: "office", page: null, groupSeries: true, version: 1 };
 
 /** The setup file's text, read leniently: anything missing or unreadable is the default. */
 export function decodeSetup(text: string | null): Setup {
@@ -77,7 +76,7 @@ export function decodeSetup(text: string | null): Setup {
       looks,
       lookId: looks.some(l => l.id === raw.lookId) ? raw.lookId! : looks[0].id,
       page: raw.page && typeof raw.page.id === "string" ? withDefaults(raw.page) : null,
-      interface: raw.interface === "Dark" ? "Dark" : "Light",
+      groupSeries: raw.groupSeries !== false,
       version: 1,
     };
   } catch {

@@ -1,17 +1,18 @@
-// Web's setup (its own looks and interface theme), kept in Dropbox in Web's setup file, and the
-// fonts the page can use: Bookerly from `/Apps/Read/Fonts/`, Literata (the page's own), and the
-// phones' own fonts from their setup backups. Fonts are read into the page's memory only.
+// Web's setup (its own looks, the Library's grouping), kept in Dropbox in Web's setup file, and the
+// fonts the page can use: Bookerly and the fonts downloaded from Google Fonts, both in
+// `/Apps/Read/Fonts/`, and Literata (the page's own). Fonts are read into the page's memory only.
 
 import { RevConflict, type Dropbox } from "./dropbox";
-import { BOOKERLY_FILES, decodeSetup, DEFAULT_SETUP, faceOfFile, fileSafe, weightsOf, type FontFileFace, type InterfaceTheme, type Setup } from "./looks";
-import { backupPath, DEVICES_PATH, FONTS_FOLDER, fontsPath, WEB_SETUP_PATH } from "./paths";
+import { CATALOGUE, fontIndex, fontIndexName, googleCssUrl, parseGoogleCss, type FontIndex } from "./fonts";
+import { BOOKERLY_FILES, decodeSetup, DEFAULT_SETUP, hex, pageBackground, pageText, weightsOf, type FontFileFace, type Look, type Setup } from "./looks";
+import { FONTS_FOLDER, fontPath, WEB_SETUP_PATH } from "./paths";
 
 /** Setup changes go to Dropbox this long after the last one. */
 const SAVE_DELAY_MS = 1500;
 
 export interface FontChoice {
   family: string;
-  /** The phone it comes from ("S23"); null for Bookerly and Literata. */
+  /** Where it comes from, when not the page's own (unused for now). */
   from: string | null;
 }
 
@@ -34,16 +35,15 @@ export class Appearance {
   private rev: string | null = null;
   private saveTimer: number | undefined;
   private readonly listeners = new Set<(setup: Setup) => void>();
-  private devicesLoad: Promise<{ device: string; fonts: string[] }[]> | null = null;
+  private downloadedLoad: Promise<Map<string, FontIndex>> | null = null;
   private bookerly: Promise<Map<string, Uint8Array> | null> | null = null;
-  private readonly deviceFontFiles = new Map<string, Promise<Record<string, string>>>();
   private readonly pageFonts = new Map<string, Promise<PageFont>>();
   private readonly urls: string[] = [];
 
   constructor(private readonly api: Dropbox) {}
 
-  /** Web's setup: read from Dropbox once; the defaults when there's none yet. */
-  setup(): Promise<Setup> {
+  /** Web's setup as it is now: read from Dropbox once; the defaults when there's none yet. */
+  async setup(): Promise<Setup> {
     this.setupLoad ??= this.api.readText(WEB_SETUP_PATH)
       .then(remote => {
         this.rev = remote?.rev ?? null;
@@ -51,7 +51,8 @@ export class Appearance {
         return this.current;
       })
       .catch(() => this.current);
-    return this.setupLoad;
+    await this.setupLoad;
+    return this.current;
   }
 
   onChange(listener: (setup: Setup) => void): () => void {
@@ -89,16 +90,31 @@ export class Appearance {
     }
   }
 
-  /** The fonts the page can use: Bookerly (when it's in Dropbox), Literata, then the phones' own. */
-  async fontChoices(): Promise<FontChoice[]> {
-    const [bookerly, devices] = await Promise.all([this.bookerlyFiles(), this.devices()]);
-    const choices: FontChoice[] = [...(bookerly ? [{ family: "Bookerly", from: null }] : []), { family: "Literata", from: null }];
-    for (const d of devices) {
-      for (const family of d.fonts) {
-        if (!choices.some(c => c.family === family)) choices.push({ family, from: d.device });
-      }
-    }
-    return choices;
+  /** The fonts the page can use: Bookerly (when it's in Dropbox), Literata, those downloaded; and the catalogue's others. */
+  async fontChoices(): Promise<{ ready: FontChoice[]; toDownload: string[] }> {
+    const [bookerly, downloaded] = await Promise.all([this.bookerlyFiles(), this.downloaded()]);
+    const ready: FontChoice[] = [...(bookerly ? [{ family: "Bookerly", from: null }] : []), { family: "Literata", from: null }];
+    for (const family of downloaded.keys()) ready.push({ family, from: null });
+    return { ready, toDownload: CATALOGUE.filter(f => !downloaded.has(f)) };
+  }
+
+  /**
+   * Download: [family]'s files from Google Fonts (the only time the page reaches Google), added to
+   * `/Apps/Read/Fonts/` with their list last, so a font is there only when it's whole.
+   */
+  async download(family: string): Promise<void> {
+    const css = await fetch(googleCssUrl(family), { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer" });
+    if (!css.ok) throw new Error(`Google Fonts: ${css.status}`);
+    const faces = parseGoogleCss(await css.text());
+    if (!faces.length) throw new Error("Google Fonts listed no files");
+    const { index, files } = fontIndex(family, faces);
+    await Promise.all([...files].map(async ([url, file]) => {
+      const response = await fetch(url, { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer" });
+      if (!response.ok) throw new Error(`Google Fonts: ${response.status}`);
+      await this.api.addFile(fontPath(file), new Uint8Array(await response.arrayBuffer()));
+    }));
+    await this.api.addFile(fontPath(fontIndexName(family)), new TextEncoder().encode(JSON.stringify(index)));
+    this.downloadedLoad = null;
   }
 
   /** The look's font for the book's pages: `@font-face` rules pointing at in-memory copies. */
@@ -107,6 +123,8 @@ export class Appearance {
     if (!load) {
       load = this.loadFont(family);
       this.pageFonts.set(family, load);
+      // A font that didn't come is tried again next time.
+      load.catch(() => this.pageFonts.delete(family));
     }
     return load;
   }
@@ -116,12 +134,19 @@ export class Appearance {
       const files = await this.bookerlyFiles();
       if (files) return this.declare("Bookerly", BOOKERLY_FILES.map(f => ({ face: f, bytes: files.get(f.file)! })));
     }
-    if (family !== "Literata") {
-      for (const d of await this.devices()) {
-        if (!d.fonts.includes(family)) continue;
-        const own = await this.fontFiles(d.device);
-        const faces = Object.keys(own).map(faceOfFile).filter((f): f is FontFileFace => f != null && f.family === fileSafe(family));
-        if (faces.length) return this.declare(family, faces.map(f => ({ face: f, bytes: base64Bytes(own[f.file]) })));
+    const index = (await this.downloaded()).get(family);
+    if (index) {
+      const bytes = new Map<string, Uint8Array>();
+      await Promise.all([...new Set(index.faces.map(f => f.file))].map(async file => {
+        const got = await this.api.download(fontPath(file));
+        if (got) bytes.set(file, got.bytes);
+      }));
+      const faces = index.faces.filter(f => bytes.has(f.file));
+      if (faces.length) {
+        return this.declare(family, faces.map(f => ({
+          face: { file: f.file, family, weight: String(f.weight), italic: f.italic, unicodeRange: f.unicodeRange },
+          bytes: bytes.get(f.file)!,
+        })));
       }
     }
     const literata = await Promise.all(LITERATA.map(async f => ({
@@ -130,31 +155,39 @@ export class Appearance {
     return this.declare("Literata", literata);
   }
 
-  private declare(family: string, files: { face: FontFileFace; bytes: Uint8Array }[]): PageFont {
+  private declare(family: string, files: { face: FontFileFace & { unicodeRange?: string }; bytes: Uint8Array }[]): PageFont {
+    const urls = new Map<Uint8Array, string>();
     const css = files.map(({ face, bytes }) => {
-      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: face.file.toLowerCase().endsWith(".otf") ? "font/otf" : "font/ttf" }));
-      this.urls.push(url);
-      return `@font-face { font-family: "${family}"; src: url("${url}"); font-weight: ${face.weight}; font-style: ${face.italic ? "italic" : "normal"}; }`;
+      let url = urls.get(bytes);
+      if (!url) {
+        const type = face.file.endsWith(".woff2") ? "font/woff2" : face.file.toLowerCase().endsWith(".otf") ? "font/otf" : "font/ttf";
+        url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
+        urls.set(bytes, url);
+        this.urls.push(url);
+      }
+      const range = face.unicodeRange ? ` unicode-range: ${face.unicodeRange};` : "";
+      return `@font-face { font-family: "${family}"; src: url("${url}"); font-weight: ${face.weight}; font-style: ${face.italic ? "italic" : "normal"};${range} }`;
     }).join("\n");
     return { family, css, weights: weightsOf(files.map(f => f.face)) };
   }
 
-  /** The phones and the font families in their setup backups (the backup lists them by name). */
-  private devices(): Promise<{ device: string; fonts: string[] }[]> {
-    this.devicesLoad ??= (async () => {
-      const index = await this.api.readText(DEVICES_PATH).catch(() => null);
-      const names = index ? ((JSON.parse(index.text).devices as string[]) ?? []) : [];
-      const devices = await Promise.all(names.map(async device => {
-        const backup = await this.api.readText(backupPath(device)).catch(() => null);
+  /** The fonts downloaded into `/Apps/Read/Fonts/`, by family, from their lists of files. */
+  private downloaded(): Promise<Map<string, FontIndex>> {
+    this.downloadedLoad ??= (async () => {
+      const files = await this.api.listFolder(FONTS_FOLDER, false);
+      const lists = await Promise.all(files.filter(f => f.name.endsWith(".json")).map(f => this.api.readText(f.path).catch(() => null)));
+      const fonts = new Map<string, FontIndex>();
+      for (const list of lists) {
         try {
-          return { device, fonts: backup ? ((JSON.parse(backup.text).fonts as string[]) ?? []) : [] };
+          const index = list && (JSON.parse(list.text) as FontIndex);
+          if (index && index.family && index.faces?.length) fonts.set(index.family, index);
         } catch {
-          return { device, fonts: [] };
+          // Not one of ours: left alone.
         }
-      }));
-      return devices.sort((a, b) => Number(b.device === "S23") - Number(a.device === "S23"));
-    })().catch(() => []);
-    return this.devicesLoad;
+      }
+      return fonts;
+    })().catch(() => new Map());
+    return this.downloadedLoad;
   }
 
   private bookerlyFiles(): Promise<Map<string, Uint8Array> | null> {
@@ -166,31 +199,15 @@ export class Appearance {
     return this.bookerly;
   }
 
-  private fontFiles(device: string): Promise<Record<string, string>> {
-    let load = this.deviceFontFiles.get(device);
-    if (!load) {
-      load = this.api.readText(fontsPath(device))
-        .then(r => (r ? ((JSON.parse(r.text).files ?? {}) as Record<string, string>) : {}))
-        .catch(() => ({}));
-      this.deviceFontFiles.set(device, load);
-    }
-    return load;
-  }
-
   close() {
     for (const url of this.urls) URL.revokeObjectURL(url);
     this.urls.length = 0;
   }
 }
 
-function base64Bytes(text: string): Uint8Array {
-  const raw = atob(text);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return bytes;
-}
-
-/** The interface (Library, bars, panels): light or dark, whatever the page's look. */
-export function applyTheme(theme: InterfaceTheme) {
-  document.documentElement.classList.toggle("dark", theme === "Dark");
+/** The whole page takes the look in use's colours: the greys around the book are made from its text colour. */
+export function applyLook(look: Look) {
+  const root = document.documentElement.style;
+  root.setProperty("--bg", hex(pageBackground(look)));
+  root.setProperty("--tx", hex(pageText(look)));
 }

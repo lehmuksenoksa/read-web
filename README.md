@@ -12,19 +12,21 @@ place goes back to the phones through the same sync files they use.
   is further on; a book never read here opens at the furthest place.
 - Turns pages with the arrow keys, Page Up/Down, Space, a click on either side, or a swipe.
 - Saves the place a few seconds after the last page turn, to the book's own sync file only.
-- Quiet for an office: a plain list, the system font, Light or Dark, no titles on the reader page
-  or in the browser tab.
+- Quiet for an office: a plain list (series grouped, a progress line per row), the system font,
+  the look's colours on the whole page, no titles on the reader page or in the browser tab.
 - **Aa**: Web's own looks (Text, Layout with 1 or 2 columns, Colour, Looks), kept in Dropbox in
-  `/Apps/Read/Sync/devices/Web/setup.json`; Bookerly (`/Apps/Read/Fonts/`) and the phones' own
-  fonts read into memory. **Contents** goes to a chapter.
+  `/Apps/Read/Sync/devices/Web/setup.json`; Bookerly and fonts downloaded from Google Fonts, both
+  in `/Apps/Read/Fonts/`, read into memory. **Contents** goes to a chapter.
 
 ## Security and privacy
 - No secrets in the code or the build: Dropbox's browser sign-in (PKCE) is made for public code.
   The Dropbox app key is public by design and comes from a repository variable at build time.
-- No third parties: no analytics, no fonts or scripts from other sites. The page's Content
-  Security Policy allows connections to Dropbox only.
-- Writes only a book's sync file in `/Apps/Read/Sync/` and Web's own setup file; never anything in
-  `/Books/` or elsewhere (`src/paths.ts`, checked by `test/paths.test.ts`).
+- No third parties: no analytics, no scripts from other sites. The page's Content Security Policy
+  allows connections to Dropbox, and to Google Fonts for a font's Download only (the font then
+  lives in Dropbox and is read from there).
+- Writes only a book's sync file in `/Apps/Read/Sync/`, Web's own setup file, and new font files
+  in `/Apps/Read/Fonts/` (never overwriting); never anything in `/Books/` or elsewhere
+  (`src/paths.ts`, checked by `test/paths.test.ts`).
 - The sign-in lasts until the tab or browser is closed; Sign out revokes it at Dropbox.
 - Books, covers and fonts are read into the page's memory, never stored by the browser
   (`cache: no-store`). The browser itself keeps nothing.

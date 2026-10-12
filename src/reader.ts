@@ -4,7 +4,7 @@
 
 import { EpubNavigator, EpubPreferences, type EpubNavigatorListeners } from "@readium/navigator";
 import { Locator, LocatorLocations } from "@readium/shared";
-import type { Appearance, FontChoice, PageFont } from "./appearance";
+import { applyLook, type Appearance, type FontChoice, type PageFont } from "./appearance";
 import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
 import {
@@ -60,7 +60,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   let mountedFont: string | null = null;
   let mountedColumns = 1;
   let aaTab: AaTab = "Text";
-  let fontChoices: FontChoice[] | null = null;
+  let fontChoices: { ready: FontChoice[]; toDownload: string[] } | null = null;
+  /** Fonts being downloaded now. */
+  const downloading = new Set<string>();
   let undoTimer: number | undefined;
   /** Where the reader was before Aa changes set the page up again: kept until a page is turned, so changes don't creep backwards. */
   let anchor: Locator | null = null;
@@ -286,14 +288,18 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     let body: HTMLElement;
     switch (aaTab) {
       case "Text": {
-        fontChoices ??= await appearance.fontChoices();
+        const choices = fontChoices ??= await appearance.fontChoices();
         const font = await appearance.font(look.font);
         body = h("div", { class: "sec" },
           h("div", { class: "lab" }, "Font"),
-          ...fontChoices.map(f => h("button", {
+          ...choices.ready.map(f => h("button", {
             class: `r${f.family === look.font ? " sel" : ""}`,
             onclick: () => change({ font: f.family }),
-          }, f.family, f.from ? h("span", { class: "from" }, `from ${f.from}`) : null, f.family === look.font ? h("span", { class: "v" }, "✓") : null)),
+          }, f.family, f.family === look.font ? h("span", { class: "v" }, "✓") : null)),
+          ...(choices.toDownload.length ? [h("div", { class: "lab" }, "From Google Fonts")] : []),
+          ...choices.toDownload.map(family => h("div", { class: "r" }, family, downloading.has(family)
+            ? h("span", { class: "v small" }, "Downloading…")
+            : h("button", { class: "dl", onclick: () => void download(family) }, "Download"))),
           h("div", { class: "lab" }, "Size and weight"),
           stepped("Size", "fontSize", v => `${Math.round(v * 100)}%`),
           stepper("Weight", weightName(look.fontWeight),
@@ -349,6 +355,22 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     }
     aa.replaceChildren(tabs, body);
   };
+  /** Download: the font goes to Dropbox, then it's used. */
+  const download = async (family: string) => {
+    downloading.add(family);
+    void fillAa();
+    try {
+      await appearance.download(family);
+      fontChoices = null;
+      change({ font: family });
+    } catch {
+      tell(`Couldn't download ${family}. Try again later.`);
+    } finally {
+      downloading.delete(family);
+      void fillAa();
+    }
+  };
+
   const remove = (lookId: string) => {
     const why = cantRemove(setup, lookId);
     if (why) return tell(why);
@@ -387,9 +409,10 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     return true;
   };
 
+  /** The page around the book takes the look's colours too. */
   const fitPage = (look: Look) => {
     page.classList.toggle("two", look.columns === 2);
-    page.style.background = hex(pageBackground(look));
+    applyLook(look);
   };
 
   /**

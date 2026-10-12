@@ -1,7 +1,7 @@
 // Dropbox through its plain HTTP API (no Dropbox library). Nothing it fetches is cached by the
 // browser (no-store), and it can only write the paths [isWritablePath] allows.
 
-import { isWritablePath } from "./paths";
+import { isAddablePath, isWritablePath } from "./paths";
 
 const API = "https://api.dropboxapi.com/2";
 const CONTENT = "https://content.dropboxapi.com/2";
@@ -102,13 +102,30 @@ export class Dropbox {
    */
   async writeText(path: string, text: string, rev: string | null): Promise<string> {
     if (!isWritablePath(path)) throw new Error(`Read on the web doesn't write ${path}`);
+    return this.upload(path, new TextEncoder().encode(text), rev ? { ".tag": "update", update: rev } : "add");
+  }
+
+  /**
+   * Adds a new file of Read's own (a downloaded font: see [isAddablePath]); never overwrites. A file
+   * already there is left as it is.
+   */
+  async addFile(path: string, bytes: Uint8Array): Promise<void> {
+    if (!isAddablePath(path)) throw new Error(`Read on the web doesn't add ${path}`);
+    try {
+      await this.upload(path, bytes, "add");
+    } catch (e) {
+      if (!(e instanceof RevConflict)) throw e;
+    }
+  }
+
+  private async upload(path: string, body: Uint8Array, mode: unknown): Promise<string> {
     const response = await this.call(`${CONTENT}/files/upload`, {
       method: "POST",
       headers: {
         "Content-Type": "application/octet-stream",
-        "Dropbox-API-Arg": headerJson({ path, mode: rev ? { ".tag": "update", update: rev } : "add", autorename: false, mute: true }),
+        "Dropbox-API-Arg": headerJson({ path, mode, autorename: false, mute: true }),
       },
-      body: new TextEncoder().encode(text),
+      body: body as BodyInit,
     });
     if (response.status === 409) {
       const body = await response.text();

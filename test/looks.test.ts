@@ -5,20 +5,21 @@ import {
 } from "../src/looks";
 
 describe("Web's setup", () => {
-  it("starts with two quiet looks, Office in use, a light interface", () => {
+  it("starts with two quiet looks, Office in use, series grouped", () => {
     const setup = decodeSetup(null);
     expect(setup.looks.map(l => l.name)).toEqual(["Office", "Office dark"]);
     expect(setup.lookId).toBe("office");
-    expect(setup.interface).toBe("Light");
+    expect(setup.groupSeries).toBe(true);
     expect(hex(shown(setup).textColor)).toBe("#1f1f1f");
     expect(isLight(WEB_LOOKS[0])).toBe(true);
     expect(isLight(WEB_LOOKS[1])).toBe(false);
   });
 
   it("is read leniently: missing fields take the defaults, a gone look falls back", () => {
-    const setup = decodeSetup(JSON.stringify({ looks: [{ id: "a", name: "A", fontSize: 1.3 }], lookId: "gone", interface: "Dark" }));
+    const setup = decodeSetup(JSON.stringify({ looks: [{ id: "a", name: "A", fontSize: 1.3 }], lookId: "gone", interface: "Dark", groupSeries: false }));
     expect(setup.lookId).toBe("a");
-    expect(setup.interface).toBe("Dark");
+    expect(setup.groupSeries).toBe(false);
+    expect("interface" in setup).toBe(false);
     expect(shown(setup)).toMatchObject({ font: "Bookerly", lineHeight: 1.5, columns: 1, fontSize: 1.3 });
     expect(decodeSetup("{broken")).toEqual(DEFAULT_SETUP);
   });

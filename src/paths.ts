@@ -22,6 +22,17 @@ export function isWritablePath(path: string): boolean {
   return /^\/Apps\/Read\/Sync\/[0-9a-f]{64}\.json$/.test(path) || path === WEB_SETUP_PATH;
 }
 
+/** A font file or a font's list of files, in `/Apps/Read/Fonts/` (fonts downloaded from Google Fonts). */
+export const fontPath = (name: string) => `${FONTS_FOLDER}/${name}`;
+
+/**
+ * Files the web version may add (never overwrite or remove): a downloaded font's files and its
+ * list of files in `/Apps/Read/Fonts/`. Bookerly's .ttf files there are never touched.
+ */
+export function isAddablePath(path: string): boolean {
+  return /^\/Apps\/Read\/Fonts\/[A-Za-z0-9-]+\.(woff2|json)$/.test(path);
+}
+
 /** The phones' setup backups (read only): the device list, each device's settings and fonts. */
 export const DEVICES_PATH = `${SYNC_FOLDER}/devices.json`;
 export const backupPath = (device: string) => `${SYNC_FOLDER}/devices/${device}/backup.json`;

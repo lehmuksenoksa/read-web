@@ -1,14 +1,14 @@
-/* Quiet in an office (WEB.md): the system's own font, greys only, no colour accents. */
+/* Quiet in an office (WEB.md): the system's own font; the look in use colours the whole page
+   (--bg and --tx, set from the look), and every grey is made from its text colour. */
 :root {
-  --ground: #fff; --ink: #1f1f1f; --ink2: #5f5f5f; --ink3: #8a8a8a; --rule: #e6e6e6;
-  --raised: #fff; --line: #d6d6d6; --sel: #ececec; --shadow: 0 6px 24px rgba(0, 0, 0, .08);
-  color-scheme: light;
-}
-:root.dark {
-  /* Never pure white on dark (DESIGN). */
-  --ground: #121212; --ink: #d6d6d6; --ink2: #a0a0a0; --ink3: #767676; --rule: #262626;
-  --raised: #1c1c1c; --line: #333; --sel: #2a2a2a; --shadow: 0 6px 24px rgba(0, 0, 0, .5);
-  color-scheme: dark;
+  --bg: #ffffff; --tx: #1f1f1f;
+  --ground: var(--bg); --ink: var(--tx); --raised: var(--bg);
+  --ink2: color-mix(in srgb, var(--tx) 68%, var(--bg));
+  --ink3: color-mix(in srgb, var(--tx) 48%, var(--bg));
+  --rule: color-mix(in srgb, var(--tx) 11%, var(--bg));
+  --line: color-mix(in srgb, var(--tx) 22%, var(--bg));
+  --sel: color-mix(in srgb, var(--tx) 7%, var(--bg));
+  --shadow: 0 6px 24px color-mix(in srgb, var(--tx) 10%, transparent);
 }
 * { box-sizing: border-box; margin: 0; }
 html, body { height: 100%; }
@@ -35,14 +35,22 @@ button:disabled { opacity: .35; cursor: default; }
 .search { border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; width: 280px; max-width: 40vw; background: var(--ground); color: var(--ink); font: inherit; }
 .search::placeholder { color: var(--ink3); }
 .sel { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: var(--ground); color: var(--ink); font: inherit; }
-/* Two columns on a laptop, more on a wide screen. */
-.list { display: grid; grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); column-gap: 48px; padding: 8px 40px 40px; }
-.row { display: grid; grid-template-columns: 1fr auto; padding: 9px 4px; border-bottom: 1px solid var(--rule); width: 100%; }
+/* Two columns on a laptop, more on a wide screen; the list runs down each column. */
+.list { columns: 520px; column-gap: 48px; padding: 8px 40px 40px; }
+.list > .note { column-span: all; padding-left: 0; }
+.row { display: grid; grid-template-columns: 1fr auto; padding: 9px 4px 10px; border-bottom: 1px solid var(--rule); width: 100%; break-inside: avoid; }
 .row:hover { background: var(--sel); }
 .row .t { font-size: 15px; }
-.row .a { grid-row: 2; color: var(--ink2); font-size: 13px; margin-top: 2px; }
+.row .a { grid-row: 2; grid-column: 1; color: var(--ink2); font-size: 13px; margin-top: 2px; }
 .row .p { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: var(--ink3); font-size: 13px; padding-left: 16px; }
 .row .t, .row .a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .line { grid-column: 1 / span 2; height: 2px; background: var(--rule); margin-top: 7px; border-radius: 1px; }
+.row .line i { display: block; height: 2px; background: var(--ink3); border-radius: 1px; }
+.row.series .t::before { content: "▸ "; color: var(--ink3); }
+.row.series.open .t::before { content: "▾ "; }
+.row.child { padding-left: 24px; }
+.dl { margin-left: auto; border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font-size: 12px; }
+.dl:hover { background: var(--sel); }
 
 /* Reader */
 .rbar { height: 48px; display: flex; align-items: center; gap: 26px; padding: 0 32px; }
@@ -98,7 +106,7 @@ button.r:hover, .r .use:hover { background: var(--sel); }
 @media (max-width: 700px) {
   .bar, .note { padding-left: 16px; padding-right: 16px; }
   .bar { gap: 12px; }
-  .list { padding: 8px 16px 32px; grid-template-columns: 1fr; }
+  .list { padding: 8px 16px 32px; columns: 1; }
   .rbar { padding: 0 16px; }
   .side { flex: 0 0 24px; }
 }

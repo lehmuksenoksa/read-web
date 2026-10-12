@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry } from "../src/dropbox";
-import { furthest, libraryBooks, searchBooks, sortBooks, titleFromFileName } from "../src/library";
+import { furthest, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem } from "../src/library";
 
 const hash = (c: string) => c.repeat(64);
 const file = (name: string, id: string, folder = "/Books"): FileEntry => ({ path: `${folder}/${name}`, pathLower: `${folder}/${name}`.toLowerCase(), name, contentHash: id, size: 1, modified: "2026-10-01T10:00:00Z" });
@@ -35,5 +35,41 @@ describe("the Library", () => {
     expect(furthest({ positions: { a: { totalProgression: 0.2 }, b: { totalProgression: 0.7 } } })).toBe(0.7);
     expect(furthest(null)).toBe(0);
     expect(titleFromFileName("Mage_Tank_5.EPUB")).toBe("Mage Tank 5");
+  });
+});
+
+describe("series in the Library", () => {
+  const book = (id: string, title: string, series: string | null, n: number | null, lastRead: string | null, read = false): LibraryBook => ({
+    id, path: `/Books/${title}.epub`, title, author: "Cornman", series, seriesIndex: n, read, cover: null, lastRead, hasSyncFile: !!lastRead,
+  });
+  const books = [
+    book("1", "Mage Tank 1", "Mage Tank", 1, "2026-09-01", true),
+    book("2", "Mage Tank 2", "Mage Tank", 2, "2026-10-01", true),
+    book("3", "Mage Tank 5", "Mage Tank", 5, "2026-10-11"),
+    book("4", "Alone 1", "Alone", 1, "2026-10-12"),
+    book("5", "Katabasis", null, null, "2026-10-05"),
+  ];
+
+  it("make one row of two or more books, newest first, placed by the last reading", () => {
+    const items = libraryItems(books, "recent", "", true);
+    expect(items.map(i => (i.kind === "book" ? i.book.title : `[${i.name}]`))).toEqual(["Alone 1", "[Mage Tank]", "Katabasis"]);
+    const series = items[1] as Extract<LibraryItem, { kind: "series" }>;
+    expect(series.books.map(b => b.title)).toEqual(["Mage Tank 5", "Mage Tank 2", "Mage Tank 1"]);
+    expect(series.read).toBe(2);
+    expect(series.author).toBe("Cornman");
+  });
+
+  it("sort by the series' name for Title", () => {
+    expect(libraryItems(books, "title", "", true).map(i => (i.kind === "book" ? i.book.title : i.name))).toEqual(["Alone 1", "Katabasis", "Mage Tank"]);
+  });
+
+  it("keep only the books found by a search", () => {
+    const items = libraryItems(books, "recent", "tank 5", true);
+    expect(items.map(i => (i.kind === "book" ? i.book.title : i.name))).toEqual(["Mage Tank 5"]);
+    expect(libraryItems(books, "recent", "mage", true).map(i => i.kind)).toEqual(["series"]);
+  });
+
+  it("are left apart when grouping is off", () => {
+    expect(libraryItems(books, "recent", "", false).map(i => i.kind)).toEqual(["book", "book", "book", "book", "book"]);
   });
 });
