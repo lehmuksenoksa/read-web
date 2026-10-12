@@ -11,12 +11,15 @@ export function syncFilePath(bookId: string): string {
   return `${SYNC_FOLDER}/${bookId}.json`;
 }
 
+/** Web's own setup (its looks, the look in use, the interface): not in the phones' device list. */
+export const WEB_SETUP_PATH = `${SYNC_FOLDER}/devices/Web/setup.json`;
+
 /**
- * The only paths the web version may write: a book's own sync file in `/Apps/Read/Sync/`.
- * Never anything in `/Books/` or anywhere else (the app's rule, CLAUDE.md → Never).
+ * The only paths the web version may write: a book's own sync file in `/Apps/Read/Sync/`, and
+ * Web's own setup file. Never anything in `/Books/` or anywhere else (the app's rule, CLAUDE.md → Never).
  */
 export function isWritablePath(path: string): boolean {
-  return /^\/Apps\/Read\/Sync\/[0-9a-f]{64}\.json$/.test(path);
+  return /^\/Apps\/Read\/Sync\/[0-9a-f]{64}\.json$/.test(path) || path === WEB_SETUP_PATH;
 }
 
 /** The phones' setup backups (read only): the device list, each device's settings and fonts. */

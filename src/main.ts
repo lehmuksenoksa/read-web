@@ -9,8 +9,16 @@ import { h } from "./ui";
 
 const root = document.getElementById("app")!;
 let closeReader: (() => Promise<void>) | null = null;
-/** The looks and fonts, read once per visit. */
+/** Web's setup and the fonts, read once per visit. */
 let appearance: Appearance | null = null;
+
+// Quiet in an office: the browser tab says "Library" whatever is open, never a book's title.
+document.title = "Library";
+
+/** Closes the Library's Settings panel on a click outside it or Esc (set while the Library shows). */
+let closeLibraryPanel: ((e?: Event) => void) | null = null;
+document.addEventListener("click", e => closeLibraryPanel?.(e));
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeLibraryPanel?.(); });
 
 function dropbox(): Dropbox | null {
   const token = currentToken();
@@ -20,26 +28,25 @@ function dropbox(): Dropbox | null {
 // --- Sign-in ---
 
 function showSignIn(message?: string) {
-  document.title = "Read";
+  closeLibraryPanel = null;
   appearance?.close();
   appearance = null;
-  applyTheme(null);
   root.replaceChildren(
     h("main", { class: "signin" },
-      h("div", { class: "word" }, "Read"),
-      h("div", { class: "sub" }, "Your books, where you left them."),
+      h("h1", {}, "Library"),
       APP_KEY
         ? h("button", { class: "btn", onclick: () => void signIn() }, "Sign in with Dropbox")
-        : h("div", { class: "sub" }, "This page isn't set up yet: it has no Dropbox app key."),
-      message ? h("div", { class: "note" }, message) : null,
+        : h("p", { class: "muted" }, "This page isn't set up yet: it has no Dropbox app key."),
+      message ? h("p", { class: "muted" }, message) : null,
+      h("p", { class: "muted small" }, "Signed in until you close the browser."),
     ),
-    h("div", { class: "foot" }, "Signed in until you close the browser"),
   );
 }
 
 async function signOut(api: Dropbox) {
   await closeReader?.();
   closeReader = null;
+  await appearance?.flush();
   await api.revoke().catch(() => undefined);
   forgetSignIn();
   showSignIn("Signed out.");
@@ -53,32 +60,66 @@ let query = "";
 async function showLibrary() {
   const api = dropbox();
   if (!api) return showSignIn();
-  document.title = "Library · Read";
   appearance ??= new Appearance(api);
-  void appearance.choice().then(c => applyTheme(c?.look ?? null));
-  const grid = h("div", { class: "grid" });
-  const note = h("div", { class: "note" }, "Loading your books…");
-  const sort = h("select", { class: "sort", "aria-label": "Sort" },
+  const look = appearance;
+  const list = h("div", { class: "list" });
+  const note = h("p", { class: "note muted" }, "Loading your books…");
+  const sort = h("select", { class: "sel", "aria-label": "Sort" },
     h("option", { value: "recent" }, "Recent"), h("option", { value: "title" }, "Title"), h("option", { value: "author" }, "Author"));
   sort.value = sortBy;
-  const search = h("input", { class: "search", type: "search", placeholder: "Search title or author", value: query });
+  const search = h("input", { class: "search", type: "search", placeholder: "Search", "aria-label": "Search title or author", value: query });
+  const settingsButton = h("button", { class: "link", "aria-expanded": "false" }, "Settings");
+  const settings = h("div", { class: "panel settings", hidden: true });
   root.replaceChildren(
     h("div", { class: "bar" },
-      h("span", { class: "mark" }, "Read"),
-      h("label", { class: "sortlabel" }, "Sort: ", sort),
+      h("h1", {}, "Library"),
+      search,
+      h("label", { class: "muted" }, "Sort ", sort),
+      settingsButton,
       h("button", { class: "link", onclick: () => void signOut(api) }, "Sign out")),
-    h("div", { class: "top" }, h("h1", {}, "Library"), search),
+    settings,
     note,
-    grid,
+    list,
   );
+
+  // Settings › Interface: light or dark, kept in Web's setup.
+  const fillSettings = async () => {
+    const setup = await look.setup();
+    settings.replaceChildren(h("div", { class: "sec" },
+      h("div", { class: "lab" }, "Interface"),
+      ...(["Light", "Dark"] as const).map(theme => h("button", {
+        class: `r${setup.interface === theme ? " sel" : ""}`,
+        onclick: () => {
+          look.update({ ...setup, interface: theme });
+          applyTheme(theme);
+          void fillSettings();
+        },
+      }, theme, setup.interface === theme ? h("span", { class: "v" }, "✓") : null))));
+  };
+  const closeSettings = () => {
+    settings.hidden = true;
+    settingsButton.setAttribute("aria-expanded", "false");
+  };
+  settingsButton.addEventListener("click", () => {
+    if (!settings.hidden) return closeSettings();
+    void fillSettings().then(() => {
+      settings.hidden = false;
+      settingsButton.setAttribute("aria-expanded", "true");
+    });
+  });
+  closeLibraryPanel = (e?: Event) => {
+    if (!e || !e.composedPath().some(el => el === settings || el === settingsButton)) closeSettings();
+  };
 
   let books: LibraryBook[];
   try {
-    const [files, index, syncFiles] = await Promise.all([
+    const [files, index, syncFiles, setup] = await Promise.all([
       api.listFolder(BOOKS_FOLDER, true),
       api.readText(LIBRARY_INDEX_PATH).then(r => (r ? (JSON.parse(r.text).books as Record<string, IndexEntry>) : {})).catch(() => ({})),
       api.listFolder(SYNC_FOLDER, false),
+      look.setup(),
     ]);
+    applyTheme(setup.interface);
     books = libraryBooks(files, index, syncFiles);
   } catch (e) {
     note.textContent = `Couldn't reach Dropbox: ${e instanceof Error ? e.message : e}`;
@@ -96,33 +137,31 @@ async function showLibrary() {
     }
     return p;
   };
+  // A row's progress is read when it comes into view: "38%", "Read", or nothing before the first page.
   const shown = new IntersectionObserver(entries => {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue;
       shown.unobserve(entry.target);
-      const card = entry.target as HTMLElement;
-      const book = books.find(b => b.id === card.dataset.id);
-      const bar = card.querySelector<HTMLElement>(".prog i");
-      if (book && bar) void progressOf(book).then(p => { bar.style.width = `${Math.round((book.read ? 1 : p) * 100)}%`; });
+      const row = entry.target as HTMLElement;
+      const book = books.find(b => b.id === row.dataset.id);
+      const cell = row.querySelector<HTMLElement>(".p");
+      if (!book || !cell || book.read) continue;
+      void progressOf(book).then(p => { cell.textContent = p > 0 ? `${Math.round(p * 100)}%` : ""; });
     }
   });
 
   const render = () => {
-    const list = sortBooks(searchBooks(books, query), sortBy);
-    grid.replaceChildren(...list.map(book => card(book)));
-    grid.querySelectorAll(".book").forEach(el => shown.observe(el));
-    if (!list.length) grid.replaceChildren(h("div", { class: "note" }, books.length ? "No books match." : "No books in Dropbox's /Books/ yet."));
+    const found = sortBooks(searchBooks(books, query), sortBy);
+    list.replaceChildren(...found.map(book => row(book)));
+    list.querySelectorAll(".row").forEach(el => shown.observe(el));
+    if (!found.length) list.replaceChildren(h("p", { class: "note muted" }, books.length ? "No books match." : "No books in Dropbox's /Books/ yet."));
   };
-  const card = (book: LibraryBook) => {
+  const row = (book: LibraryBook) => {
     const byline = [book.author, book.series && `${book.series}${book.seriesIndex != null ? ` ${book.seriesIndex}` : ""}`].filter(Boolean).join(" · ");
-    const cover = book.cover
-      ? h("img", { class: "cover", src: `data:image/jpeg;base64,${book.cover}`, alt: "" })
-      : h("div", { class: "cover blank" }, book.title, book.author ? h("small", {}, book.author) : null);
-    return h("button", { class: "book", "data-id": book.id, onclick: () => void openReader(api, book) },
-      h("div", { class: "coverbox" }, cover, book.read ? h("span", { class: "tag" }, "READ") : null),
-      h("div", { class: "t" }, book.title),
-      byline ? h("div", { class: "a" }, byline) : null,
-      h("div", { class: "prog" }, h("i", {})));
+    return h("button", { class: "row", "data-id": book.id, onclick: () => void openReader(api, book) },
+      h("span", { class: "t" }, book.title),
+      h("span", { class: "a" }, byline),
+      h("span", { class: "p" }, book.read ? "Read" : ""));
   };
   sort.addEventListener("change", () => { sortBy = sort.value as SortBy; render(); });
   search.addEventListener("input", () => { query = search.value; render(); });
@@ -130,9 +169,9 @@ async function showLibrary() {
 }
 
 async function openReader(api: Dropbox, book: LibraryBook) {
-  document.title = `${book.title} · Read`;
+  closeLibraryPanel = null;
   closeReader = await showReader(root, {
-    dropbox: api, appearance: appearance ?? new Appearance(api), id: book.id, path: book.path, title: book.title,
+    dropbox: api, appearance: appearance ?? new Appearance(api), id: book.id, path: book.path,
     onClose: () => { closeReader = null; void showLibrary(); },
   });
 }

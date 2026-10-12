@@ -2,16 +2,19 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Dropbox } from "../src/dropbox";
-import { isWritablePath, syncFilePath } from "../src/paths";
+import { isWritablePath, syncFilePath, WEB_SETUP_PATH } from "../src/paths";
 
 const id = "a".repeat(64);
 
 describe("where the web version may write", () => {
-  it("is a book's sync file in /Apps/Read/Sync/ and nothing else", () => {
+  it("is a book's sync file in /Apps/Read/Sync/ and Web's own setup, nothing else", () => {
     expect(isWritablePath(syncFilePath(id))).toBe(true);
+    expect(isWritablePath("/Apps/Read/Sync/devices/Web/setup.json")).toBe(true);
+    expect(WEB_SETUP_PATH).toBe("/Apps/Read/Sync/devices/Web/setup.json");
     for (const path of [
       "/Books/Emma.epub", `/Books/${id}.json`, "/Apps/Read/Sync/library.json", "/Apps/Read/Sync/details.json",
-      "/Apps/Read/Sync/tts-rules.json", "/Apps/Read/Sync/subscriptions.json", `/Apps/Read/Sync/devices/S23/backup.json`,
+      "/Apps/Read/Sync/tts-rules.json", "/Apps/Read/Sync/subscriptions.json", `/Apps/Read/Sync/devices/S23/backup.json`, "/Apps/Read/Sync/devices/S23/fonts.json", "/Apps/Read/Sync/devices.json",
+      "/Apps/Read/Sync/devices/Web/backup.json", "/Apps/Read/Sync/devices/Web/setup.json.bak",
       "/Apps/Read/Fonts/Bookerly-Regular.ttf", `/Apps/Read/Sync/../../../Books/${id}.json`, `/apps/read/sync/${id}.json`,
       `/Apps/Read/Sync/${id}.json/x`, "/",
     ]) expect(isWritablePath(path), path).toBe(false);
@@ -30,7 +33,7 @@ describe("where the web version may write", () => {
   });
 
   it("is the only kind of write in the code", () => {
-    // Every Dropbox call that changes something goes through writeText, and every writeText is given a sync file path.
+    // Every Dropbox call that changes something goes through writeText, and every writeText is given a sync file path or Web's setup.
     const dir = join(__dirname, "../src");
     const code = readdirSync(dir).filter(f => f.endsWith(".ts")).map(f => [f, readFileSync(join(dir, f), "utf8")] as const);
     for (const [file, text] of code) {
@@ -38,7 +41,7 @@ describe("where the web version may write", () => {
         expect(text.includes(endpoint), `${file} calls ${endpoint}`).toBe(false);
       }
       if (file !== "dropbox.ts") expect(text.includes("files/upload"), `${file} uploads`).toBe(false);
-      for (const call of text.matchAll(/\.writeText\(([^,]+),/g)) expect(call[1].trim(), `${file}: ${call[0]}`).toMatch(/^syncFilePath\(/);
+      for (const call of text.matchAll(/\.writeText\(([^,]+),/g)) expect(call[1].trim(), `${file}: ${call[0]}`).toMatch(/^(syncFilePath\(|WEB_SETUP_PATH$)/);
     }
   });
 });
