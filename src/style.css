@@ -35,8 +35,8 @@ button:disabled { opacity: .35; cursor: default; }
 .search { border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; width: 280px; max-width: 40vw; background: var(--ground); color: var(--ink); font: inherit; }
 .search::placeholder { color: var(--ink3); }
 .sel { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: var(--ground); color: var(--ink); font: inherit; }
-/* Columns at least 440 px wide: two at 1440 px, three at 1720 px; the list runs down each column. */
-.list { columns: 440px; column-gap: 48px; padding: 8px 40px 40px; }
+/* Columns at least 300 px wide: three in a 1720-pixel window at Windows' 125% (about 1360 px to the page); the list runs down each column. */
+.list { columns: 300px; column-gap: 48px; padding: 8px 40px 40px; }
 .list > .note { column-span: all; padding-left: 0; }
 /* No hairline between rows: each row's progress line separates it from the next. */
 .row { display: grid; grid-template-columns: 1fr auto; padding: 11px 4px 12px; width: 100%; break-inside: avoid; }
