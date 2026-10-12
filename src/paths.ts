@@ -18,3 +18,8 @@ export function syncFilePath(bookId: string): string {
 export function isWritablePath(path: string): boolean {
   return /^\/Apps\/Read\/Sync\/[0-9a-f]{64}\.json$/.test(path);
 }
+
+/** The phones' setup backups (read only): the device list, each device's settings and fonts. */
+export const DEVICES_PATH = `${SYNC_FOLDER}/devices.json`;
+export const backupPath = (device: string) => `${SYNC_FOLDER}/devices/${device}/backup.json`;
+export const fontsPath = (device: string) => `${SYNC_FOLDER}/devices/${device}/fonts.json`;

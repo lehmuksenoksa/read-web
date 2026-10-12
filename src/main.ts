@@ -1,4 +1,5 @@
 import "./style.css";
+import { Appearance, applyTheme } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
 import { Dropbox } from "./dropbox";
 import { furthest, libraryBooks, searchBooks, sortBooks, type IndexEntry, type LibraryBook, type SortBy } from "./library";
@@ -8,6 +9,8 @@ import { h } from "./ui";
 
 const root = document.getElementById("app")!;
 let closeReader: (() => Promise<void>) | null = null;
+/** The looks and fonts, read once per visit. */
+let appearance: Appearance | null = null;
 
 function dropbox(): Dropbox | null {
   const token = currentToken();
@@ -18,6 +21,9 @@ function dropbox(): Dropbox | null {
 
 function showSignIn(message?: string) {
   document.title = "Read";
+  appearance?.close();
+  appearance = null;
+  applyTheme(null);
   root.replaceChildren(
     h("main", { class: "signin" },
       h("div", { class: "word" }, "Read"),
@@ -48,6 +54,8 @@ async function showLibrary() {
   const api = dropbox();
   if (!api) return showSignIn();
   document.title = "Library · Read";
+  appearance ??= new Appearance(api);
+  void appearance.choice().then(c => applyTheme(c?.look ?? null));
   const grid = h("div", { class: "grid" });
   const note = h("div", { class: "note" }, "Loading your books…");
   const sort = h("select", { class: "sort", "aria-label": "Sort" },
@@ -124,7 +132,7 @@ async function showLibrary() {
 async function openReader(api: Dropbox, book: LibraryBook) {
   document.title = `${book.title} · Read`;
   closeReader = await showReader(root, {
-    dropbox: api, id: book.id, path: book.path, title: book.title,
+    dropbox: api, appearance: appearance ?? new Appearance(api), id: book.id, path: book.path, title: book.title,
     onClose: () => { closeReader = null; void showLibrary(); },
   });
 }

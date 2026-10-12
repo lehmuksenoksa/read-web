@@ -1,10 +1,12 @@
 // The reader: a book from Dropbox, shown by Readium, opened at Web's place, its place saved to
 // the book's sync file a few seconds after the last page turn.
 
-import { EpubNavigator, TextAlignment, type EpubNavigatorListeners } from "@readium/navigator";
-import { Locator } from "@readium/shared";
+import { EpubNavigator, EpubPreferences, type EpubNavigatorListeners, type IEpubPreferences } from "@readium/navigator";
+import { Locator, LocatorLocations } from "@readium/shared";
+import { applyTheme, type Appearance, type Choice } from "./appearance";
 import { RevConflict, type Dropbox } from "./dropbox";
-import { openBook, startPosition, type Book } from "./epub";
+import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
+import { DEFAULT_LOOKS, hex, isLight, lookKey, pageBackground, pageText, preferences, SIZE, stepSize } from "./looks";
 import { syncFilePath } from "./paths";
 import { openingPlan, placeLabel, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
 import { h } from "./ui";
@@ -12,42 +14,9 @@ import { h } from "./ui";
 /** Uploads wait this long after the last page turn (the phones wait 5 s). */
 export const UPLOAD_DELAY_MS = 4000;
 
-/** The look for now (WEB.md phase 1): the S23's Night, in Literata until Bookerly comes from Dropbox. */
-const LOOK = {
-  backgroundColor: "#000000",
-  textColor: "#C9B27C",
-  linkColor: "#C9B27C",
-  visitedColor: "#C9B27C",
-  selectionBackgroundColor: "#5a3420",
-  selectionTextColor: "#C9B27C",
-  fontFamily: "Literata",
-  lineHeight: 1.6,
-  textAlign: TextAlignment.justify,
-  hyphens: true,
-  columnCount: 1,
-  optimalLineLength: 62,
-  maximalLineLength: 70,
-  pageGutter: 24,
-};
-
-const FONTS = [
-  { file: "literata_400.ttf", weight: "400", style: "normal" },
-  { file: "literata_400_italic.ttf", weight: "400", style: "italic" },
-  { file: "literata_700.ttf", weight: "700", style: "normal" },
-];
-
-/** Literata for the book's pages, as an in-memory stylesheet (the pages are blob: documents). */
-async function fontStylesheet(): Promise<Blob> {
-  const faces = await Promise.all(FONTS.map(async f => {
-    const bytes = await (await fetch(`${import.meta.env.BASE_URL}fonts/${f.file}`)).blob();
-    const url = URL.createObjectURL(new Blob([bytes], { type: "font/ttf" }));
-    return `@font-face { font-family: "Literata"; src: url("${url}") format("truetype"); font-weight: ${f.weight}; font-style: ${f.style}; }`;
-  }));
-  return new Blob([faces.join("\n")], { type: "text/css" });
-}
-
 export interface ReaderProps {
   dropbox: Dropbox;
+  appearance: Appearance;
   id: string;
   path: string;
   title: string;
@@ -62,9 +31,15 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const back = h("button", { class: "link", onclick: () => close().then(props.onClose) }, "‹ Library");
   const left = h("button", { class: "side left", "aria-label": "Previous page" }, "‹");
   const right = h("button", { class: "side right", "aria-label": "Next page" }, "›");
+  const contentsButton = h("button", { class: "link", "aria-expanded": "false" }, "Contents");
+  const aaButton = h("button", { class: "link", "aria-expanded": "false" }, "Aa");
+  const contents = h("div", { class: "toc", hidden: true });
+  const aa = h("div", { class: "panel", hidden: true });
   root.replaceChildren(
-    h("div", { class: "rbar" }, back, h("span", { class: "title" }, props.title)),
+    h("div", { class: "rbar" }, back, h("span", { class: "title" }, props.title), contentsButton, aaButton),
     h("div", { class: "stage" }, left, page, right),
+    contents,
+    aa,
     prompt,
     status,
   );
@@ -76,6 +51,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   let uploadTimer: number | undefined;
   let dismissedAt: number | null = null;
   let closed = false;
+  let choice: Choice | null = null;
+  const fonts = new Map<string, Promise<{ family: string; css: string }>>();
 
   // --- Saving the place ---
 
@@ -109,6 +86,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     closed = true;
     window.removeEventListener("keydown", onKey);
     document.removeEventListener("visibilitychange", onVisible);
+    document.removeEventListener("click", onOutside);
     await flush();
     await nav?.destroy();
     book?.close();
@@ -123,6 +101,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     else nav.goBackward(false, () => undefined);
   };
   const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") return closePanels();
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
@@ -200,55 +179,178 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   };
   document.addEventListener("visibilitychange", onVisible);
 
-  // --- Opening ---
+  // --- Aa and Contents ---
 
-  try {
-    const [file, syncFile] = await Promise.all([dropbox.download(props.path), readSyncFile()]);
-    if (!file) throw new Error("This book is no longer in Dropbox.");
-    book = await openBook(file.bytes);
-    const plan = openingPlan(syncFile, null);
-    const saved = plan.start ? Locator.deserialize(plan.start.locator) : undefined;
-    // Readium opens at an entry of its page list (the chapter); the exact spot follows, as Go there finds it.
-    const entry = saved ? startPosition(book.positions, saved) : null;
-    const fonts = await fontStylesheet();
+  const closePanels = () => {
+    contents.hidden = true;
+    aa.hidden = true;
+    contentsButton.setAttribute("aria-expanded", "false");
+    aaButton.setAttribute("aria-expanded", "false");
+  };
+  const toggle = (panel: HTMLElement, button: HTMLElement, fill: () => void) => {
+    const open = panel.hidden;
+    closePanels();
+    if (!open) return;
+    fill();
+    panel.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+  };
+  const onOutside = (e: MouseEvent) => {
+    // The click's path as it was: a panel redrawn by the click no longer holds what was clicked.
+    const path = e.composedPath();
+    if ([contents, aa, contentsButton, aaButton].some(el => path.includes(el))) return;
+    closePanels();
+  };
+  document.addEventListener("click", onOutside);
+  contentsButton.addEventListener("click", () => toggle(contents, contentsButton, fillContents));
+  aaButton.addEventListener("click", () => toggle(aa, aaButton, () => void fillAa()));
 
-    const listeners: Partial<EpubNavigatorListeners> = {
-      frameLoaded: (wnd: Window) => {
-        wnd.addEventListener("keydown", onKey);
-        swipes(wnd.document.documentElement, turn);
-      },
-      positionChanged: (locator: Locator) => {
-        current = locator;
-        showPlace();
-        if (moved) scheduleUpload();
-      },
-      tap: e => clickTurn(e.x),
-      click: e => clickTurn(e.x),
-      // Links to other sites aren't followed from a book.
-      handleLocator: () => true,
-    };
-    const clickTurn = (x: number) => {
-      const width = (page.clientWidth || 1) * window.devicePixelRatio;
-      if (x < width / 3) turn(false);
-      else if (x > (width * 2) / 3) turn(true);
+  const fillContents = () => {
+    if (!book) return;
+    const flat = flatToc(book.toc);
+    const at = current ? currentEntry(flat, book.readingOrder, current.href) : -1;
+    const percent = `${Math.round((current?.locations.totalProgression ?? 0) * 100)}%`;
+    contents.replaceChildren(...(flat.length
+      ? flat.map(({ entry, depth }, i) => h("button", {
+          class: `item${i === at ? " cur" : i < at ? " read" : ""}`,
+          style: depth ? `padding-left: ${14 + depth * 20}px` : undefined,
+          onclick: () => { closePanels(); goTo(entry.href); },
+        }, entry.title || "Untitled", i === at ? h("span", {}, percent) : null))
+      : [h("div", { class: "item" }, "This book has no contents.")]));
+    contents.querySelector(".cur")?.scrollIntoView({ block: "center" });
+  };
+  const goTo = (href: string) => {
+    if (!book || !nav) return;
+    const [base, fragment] = href.split("#");
+    const entry = startPosition(book.positions, { href: base, locations: { progression: 0 } });
+    if (!entry) return tell("Couldn't find that chapter in this book.");
+    moved = true;
+    nav.go(new Locator({ href: entry.href, type: entry.type, locations: new LocatorLocations({ progression: 0, fragments: fragment ? [fragment] : [] }) }), false, () => undefined);
+  };
+
+  const fillAa = async () => {
+    const devices = await props.appearance.devices();
+    const groups = devices.map(d => h("div", { class: "group" },
+      h("div", { class: "label" }, d.device),
+      ...d.looks.map(look => {
+        const picked = choice != null && lookKey(choice.device, choice.look) === lookKey(d.device, look);
+        return h("button", {
+          class: `row${picked ? " sel" : ""}`,
+          onclick: () => { props.appearance.pick(d.device, look); void restyle(true); },
+        },
+        h("span", { class: "sw", style: `background:${hex(pageBackground(look))};color:${hex(pageText(look))}${isLight(look) ? ";border:1px solid currentColor" : ""}` }, "Aa"),
+        look.name,
+        picked ? h("span", { class: "tick" }, "✓") : null);
+      })));
+    const size = choice?.size ?? 1;
+    const own = choice?.look.fontSize ?? 1;
+    const percent = (v: number) => `${Math.round(v * 100)}%`;
+    const sizeRow = h("div", { class: "size" },
+      h("div", {}, h("div", { class: "label" }, "Text size"),
+        h("div", { class: "val" }, percent(size), Math.abs(size - own) > 1e-9 ? h("span", { class: "reset" }, ` · the look's is ${percent(own)}`) : null)),
+      h("div", { class: "ctl" },
+        h("button", { "aria-label": "Smaller text", disabled: !choice || size <= SIZE.min + 1e-9, onclick: () => resize(false) }, "−"),
+        h("button", { "aria-label": "Larger text", disabled: !choice || size >= SIZE.max - 1e-9, onclick: () => resize(true) }, "+")));
+    aa.replaceChildren(...(groups.length ? groups : [h("div", { class: "group" }, h("div", { class: "label" }, "No looks in Dropbox yet"))]), sizeRow);
+  };
+  const resize = (up: boolean) => {
+    if (!choice || !nav) return;
+    choice = { ...choice, size: stepSize(choice.size, up) };
+    props.appearance.setSize(choice, choice.size);
+    void fontFor(choice).then(font => nav?.submitPreferences(new EpubPreferences(prefsFor(font.family))));
+    void fillAa();
+  };
+
+  /** The page settings now: the chosen look, or (with no backups) the app's Night in Literata. */
+  const prefsFor = (family: string): IEpubPreferences =>
+    preferences(choice?.look ?? DEFAULT_LOOKS[1], family, choice?.size ?? 1);
+  const fontFor = (c: Choice | null) => {
+    const key = c ? `${c.device}|${c.look.font}` : "none";
+    let font = fonts.get(key);
+    if (!font) {
+      font = c ? props.appearance.font(c) : props.appearance.font({ device: "", look: { ...DEFAULT_LOOKS[1], font: "Serif" }, size: 1 });
+      fonts.set(key, font);
+    }
+    return font;
+  };
+
+  /** A look was picked: the page is set up again in it, at the same place. */
+  const restyle = async (fromPanel: boolean) => {
+    choice = await props.appearance.choice();
+    applyTheme(choice?.look ?? null);
+    if (fromPanel) void fillAa();
+    if (book) await mount(current);
+  };
+
+  // --- The book's pages ---
+
+  const listeners: Partial<EpubNavigatorListeners> = {
+    frameLoaded: (wnd: Window) => {
+      wnd.addEventListener("keydown", onKey);
+      swipes(wnd.document.documentElement, turn);
+    },
+    positionChanged: (locator: Locator) => {
+      current = locator;
+      showPlace();
+      if (moved) scheduleUpload();
+    },
+    tap: e => clickTurn(e.x),
+    click: e => clickTurn(e.x),
+    // Links to other sites aren't followed from a book.
+    handleLocator: () => true,
+  };
+  const clickTurn = (x: number) => {
+    // A click on the page with a panel open only closes the panel.
+    if (!contents.hidden || !aa.hidden) {
+      closePanels();
       return true;
-    };
+    }
+    const width = (page.clientWidth || 1) * window.devicePixelRatio;
+    if (x < width / 3) turn(false);
+    else if (x > (width * 2) / 3) turn(true);
+    return true;
+  };
 
+  /**
+   * Readium shown in the page, in the current look, at [at]: it opens at an entry of its page
+   * list (the chapter), and the exact spot follows, as Go there finds it. False when [at]'s
+   * chapter isn't in the book.
+   */
+  const mount = async (at: Locator | null): Promise<boolean> => {
+    if (!book) return false;
+    const font = await fontFor(choice);
+    if (nav) {
+      await nav.destroy();
+      page.replaceChildren();
+    }
+    const entry = at ? startPosition(book.positions, at) : null;
     nav = new EpubNavigator(page, book.publication, listeners as EpubNavigatorListeners, book.positions, entry ?? undefined, {
-      preferences: LOOK,
+      preferences: prefsFor(font.family),
       defaults: {},
       injectables: {
-        rules: [{ resources: [/.*/], prepend: [{ as: "link", rel: "stylesheet", blob: fonts, target: "head" }] }],
+        rules: [{ resources: [/.*/], prepend: [{ as: "link", rel: "stylesheet", blob: new Blob([font.css], { type: "text/css" }), target: "head" }] }],
         allowedDomains: [],
       },
     });
     await nav.load();
-    if (saved && entry) {
-      const there = new Locator({ href: entry.href, type: saved.type, title: saved.title, locations: saved.locations, text: saved.text });
+    if (at && entry) {
+      const there = new Locator({ href: entry.href, type: at.type, title: at.title, locations: at.locations, text: at.text });
       await new Promise<void>(done => nav!.go(there, false, () => done()));
-    } else if (saved) {
-      tell("Couldn't find your place in this book.");
     }
+    return !at || entry != null;
+  };
+
+  // --- Opening ---
+
+  try {
+    const [file, syncFile, chosen] = await Promise.all([dropbox.download(props.path), readSyncFile(), props.appearance.choice()]);
+    if (!file) throw new Error("This book is no longer in Dropbox.");
+    choice = chosen;
+    applyTheme(choice?.look ?? null);
+    book = await openBook(file.bytes);
+    const plan = openingPlan(syncFile, null);
+    const saved = plan.start ? Locator.deserialize(plan.start.locator) ?? null : null;
+    if (!(await mount(saved))) tell("Couldn't find your place in this book.");
     if (plan.ask) ask(plan.ask);
   } catch (e) {
     showStatus(e instanceof Error ? e.message : String(e));

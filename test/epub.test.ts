@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entryName, mediaTypeOf, nameBlocks, PAGE_LENGTH, positionsOf, resolveHref, startPosition } from "../src/epub";
+import { currentEntry, entryName, flatToc, mediaTypeOf, nameBlocks, PAGE_LENGTH, positionsOf, resolveHref, startPosition } from "../src/epub";
 
 describe("paths in the book", () => {
   it("resolve like the app's hrefs, staying URL-encoded", () => {
@@ -69,5 +69,30 @@ describe("opening at a place from the phones", () => {
 
   it("is nothing for a chapter this book doesn't have", () => {
     expect(startPosition(positions, { href: "OEBPS/Text/missing.xhtml", locations: { progression: 0.2 } })).toBeNull();
+  });
+});
+
+describe("Contents", () => {
+  const toc = [
+    { title: "Cover", href: "OEBPS/cover.xhtml", children: [] },
+    { title: "Chapter 1", href: "OEBPS/ch1.xhtml", children: [] },
+    { title: "Interlude", href: "OEBPS/ch2.xhtml", children: [
+      { title: "Nokomi", href: "OEBPS/ch2.xhtml#nokomi", children: [] },
+      { title: "Gith", href: "OEBPS/ch3.xhtml", children: [] },
+    ] },
+    { title: "Chapter 4", href: "OEBPS/ch5.xhtml", children: [] },
+  ];
+  const order = ["OEBPS/cover.xhtml", "OEBPS/ch1.xhtml", "OEBPS/ch2.xhtml", "OEBPS/ch3.xhtml", "OEBPS/ch4.xhtml", "OEBPS/ch5.xhtml"];
+  const flat = flatToc(toc);
+
+  it("lists sections under their chapter", () => {
+    expect(flat.map(f => `${"  ".repeat(f.depth)}${f.entry.title}`)).toEqual(["Cover", "Chapter 1", "Interlude", "  Nokomi", "  Gith", "Chapter 4"]);
+  });
+
+  it("marks the chapter being read, or the last one before it", () => {
+    expect(currentEntry(flat, order, "OEBPS/ch2.xhtml")).toBe(2);
+    expect(currentEntry(flat, order, "OEBPS/ch3.xhtml")).toBe(4);
+    expect(currentEntry(flat, order, "OEBPS/ch4.xhtml")).toBe(4);
+    expect(currentEntry(flat, order, "OEBPS/ch5.xhtml")).toBe(5);
   });
 });

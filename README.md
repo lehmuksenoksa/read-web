@@ -12,6 +12,9 @@ place goes back to the phones through the same sync files they use.
   is further on; a book never read here opens at the furthest place.
 - Turns pages with the arrow keys, Page Up/Down, Space, a click on either side, or a swipe.
 - Saves the place a few seconds after the last page turn, to the book's own sync file only.
+- **Aa**: the looks from the phones' setup backups (`/Apps/Read/Sync/devices/`), with Bookerly
+  (`/Apps/Read/Fonts/`) and the phones' own fonts read from Dropbox into memory; a text size per
+  look. **Contents** goes to a chapter.
 
 ## Security and privacy
 - No secrets in the code or the build: Dropbox's browser sign-in (PKCE) is made for public code.
@@ -21,7 +24,8 @@ place goes back to the phones through the same sync files they use.
 - Writes only a book's sync file in `/Apps/Read/Sync/`; never anything in `/Books/` or elsewhere
   (`src/paths.ts`, checked by `test/paths.test.ts`).
 - The sign-in lasts until the tab or browser is closed; Sign out revokes it at Dropbox.
-- Books are read into the page's memory, never stored by the browser (`cache: no-store`).
+- Books, covers and fonts are read into the page's memory, never stored by the browser
+  (`cache: no-store`). The browser remembers only the picked look and its text size.
 - Book pages can't run their own scripts: scripts and script attributes are removed before a page
   is shown.
 

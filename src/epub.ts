@@ -79,6 +79,10 @@ export interface Book {
   positions: Locator[];
   /** Chapter titles by href, from the table of contents (for the prompt). */
   titles: Map<string, string>;
+  /** The book's contents. */
+  toc: TocEntry[];
+  /** The chapters' hrefs, in reading order. */
+  readingOrder: string[];
   close(): void;
 }
 
@@ -112,7 +116,7 @@ export async function openBook(bytes: Uint8Array): Promise<Book> {
   const meta = (name: string) => opf.getElementsByTagNameNS("*", name)[0]?.textContent?.trim();
   const direction = spine?.getAttribute("page-progression-direction");
   const layout = Array.from(opf.getElementsByTagNameNS("*", "meta")).find(m => m.getAttribute("property") === "rendition:layout")?.textContent?.trim();
-  const titles = await tableOfContents(zip, items, opfPath, spine?.getAttribute("toc") ?? null);
+  const { toc, titles } = await tableOfContents(zip, items, spine?.getAttribute("toc") ?? null);
 
   const manifestJson = {
     metadata: {
@@ -135,7 +139,7 @@ export async function openBook(bytes: Uint8Array): Promise<Book> {
   const positions = positionsOf(readingOrder.map(r => ({ ...r, title: titles.get(r.href) })), lengths)
     .map(p => Locator.deserialize(p)!)
     .filter(Boolean);
-  return { publication, positions, titles, close: () => fetcher.close() };
+  return { publication, positions, titles, toc, readingOrder: readingOrder.map(r => r.href), close: () => fetcher.close() };
 }
 
 function parseXml(text: string): Document {
@@ -144,34 +148,87 @@ function parseXml(text: string): Document {
   return doc;
 }
 
-/** Chapter titles by href (without fragments), from the EPUB 3 nav or the EPUB 2 NCX. */
-async function tableOfContents(zip: Zip, items: Map<string, { href: string; type: string; properties: string }>, opfPath: string, ncxId: string | null): Promise<Map<string, string>> {
-  const titles = new Map<string, string>();
-  const add = (href: string, title: string | null | undefined) => {
-    const key = href.split("#")[0];
-    const clean = title?.replace(/\s+/g, " ").trim();
-    if (clean && !titles.has(key)) titles.set(key, clean);
-  };
+/** One line of the book's contents: its title, where it goes (href, maybe with a fragment) and its sections. */
+export interface TocEntry {
+  title: string;
+  href: string;
+  children: TocEntry[];
+}
+
+const OPS = "http://www.idpf.org/2007/ops";
+
+/** The book's contents from the EPUB 3 nav or the EPUB 2 NCX, and chapter titles by href (without fragments). */
+async function tableOfContents(zip: Zip, items: Map<string, { href: string; type: string; properties: string }>, ncxId: string | null): Promise<{ toc: TocEntry[]; titles: Map<string, string> }> {
+  const clean = (text: string | null | undefined) => text?.replace(/\s+/g, " ").trim() ?? "";
+  let toc: TocEntry[] = [];
   try {
     const nav = [...items.values()].find(i => i.properties.split(/\s+/).includes("nav"));
     if (nav) {
       const doc = new DOMParser().parseFromString(await zip.text(entryName(nav.href)), XHTML);
-      for (const a of Array.from(doc.querySelectorAll("nav a[href]"))) add(resolveHref(nav.href, a.getAttribute("href")!), a.textContent);
+      const navs = Array.from(doc.getElementsByTagName("nav"));
+      const tocNav = navs.find(n => (n.getAttributeNS(OPS, "type") ?? n.getAttribute("epub:type") ?? "").split(/\s+/).includes("toc")) ?? navs[0];
+      const list = (ol: Element | null): TocEntry[] => Array.from(ol?.children ?? []).filter(li => li.localName === "li").flatMap(li => {
+        const label = Array.from(li.children).find(c => c.localName === "a" || c.localName === "span");
+        const sub = Array.from(li.children).find(c => c.localName === "ol") ?? null;
+        const ref = label?.getAttribute("href");
+        const children = list(sub);
+        if (!ref) return children.length ? [{ title: clean(label?.textContent), href: children[0].href, children }] : [];
+        return [{ title: clean(label?.textContent), href: resolveHrefKeepingFragment(nav.href, ref), children }];
+      });
+      toc = list(Array.from(tocNav?.children ?? []).find(c => c.localName === "ol") ?? null);
     }
     const ncx = (ncxId && items.get(ncxId)) || [...items.values()].find(i => i.type === "application/x-dtbncx+xml");
-    if (!titles.size && ncx) {
+    if (!toc.length && ncx) {
       const doc = parseXml(await zip.text(entryName(ncx.href)));
-      for (const point of Array.from(doc.getElementsByTagNameNS("*", "navPoint"))) {
-        const src = point.getElementsByTagNameNS("*", "content")[0]?.getAttribute("src");
-        const label = point.getElementsByTagNameNS("*", "text")[0]?.textContent;
-        if (src) add(resolveHref(ncx.href, src), label);
-      }
+      const points = (parent: Element): TocEntry[] => Array.from(parent.children).filter(c => c.localName === "navPoint").flatMap(point => {
+        const src = Array.from(point.children).find(c => c.localName === "content")?.getAttribute("src");
+        const label = Array.from(point.children).find(c => c.localName === "navLabel");
+        if (!src) return points(point);
+        return [{ title: clean(label?.textContent), href: resolveHrefKeepingFragment(ncx.href, src), children: points(point) }];
+      });
+      const map = doc.getElementsByTagNameNS("*", "navMap")[0];
+      if (map) toc = points(map);
     }
   } catch {
-    // No contents: the prompt shows the percentage only.
+    // No contents: the prompt shows the percentage only, Contents lists the chapters by name.
   }
-  void opfPath;
-  return titles;
+  const titles = new Map<string, string>();
+  const walk = (entries: TocEntry[]) => entries.forEach(e => {
+    const key = e.href.split("#")[0];
+    if (e.title && !titles.has(key)) titles.set(key, e.title);
+    walk(e.children);
+  });
+  walk(toc);
+  return { toc, titles };
+}
+
+/** [resolveHref], keeping a `#fragment` (a section inside a chapter). */
+function resolveHrefKeepingFragment(from: string, href: string): string {
+  const hash = href.indexOf("#");
+  return resolveHref(from, href) + (hash >= 0 ? href.slice(hash) : "");
+}
+
+/** The entries in reading order, flattened. */
+export function flatToc(toc: TocEntry[], depth = 0): { entry: TocEntry; depth: number }[] {
+  return toc.flatMap(entry => [{ entry, depth }, ...flatToc(entry.children, depth + 1)]);
+}
+
+/**
+ * Which entry of the contents the reader is in: the first one for [href]'s chapter, else the
+ * last one before it in reading order. -1 before the first.
+ */
+export function currentEntry(flat: { entry: TocEntry }[], readingOrder: string[], href: string): number {
+  const base = (h: string) => entryName(h.split("#")[0]);
+  const here = base(href);
+  const exact = flat.findIndex(f => base(f.entry.href) === here);
+  if (exact >= 0) return exact;
+  const index = readingOrder.findIndex(h => base(h) === here);
+  let found = -1;
+  flat.forEach((f, i) => {
+    const at = readingOrder.findIndex(h => base(h) === base(f.entry.href));
+    if (at >= 0 && at <= index) found = i;
+  });
+  return found;
 }
 
 /** Elements that hold a paragraph's text: the app's PageDress.TEXT_BLOCKS. */
