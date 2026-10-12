@@ -1,0 +1,71 @@
+@font-face { font-family: Figtree; src: url(/fonts/figtree_400.ttf); font-weight: 400; }
+@font-face { font-family: Figtree; src: url(/fonts/figtree_500.ttf); font-weight: 500; }
+@font-face { font-family: Figtree; src: url(/fonts/figtree_600.ttf); font-weight: 600; }
+@font-face { font-family: Literata; src: url(/fonts/literata_400.ttf); font-weight: 400; }
+@font-face { font-family: Literata; src: url(/fonts/literata_400_italic.ttf); font-weight: 400; font-style: italic; }
+@font-face { font-family: Literata; src: url(/fonts/literata_600.ttf); font-weight: 600; }
+
+/* The app's Night look: no pure white anywhere (DESIGN.md). */
+:root {
+  --ground: #000; --ink: #C9B27C; --ink66: rgba(201,178,124,.66); --ink42: rgba(201,178,124,.42);
+  --rule: rgba(201,178,124,.14); --raised: #1b170f; --well: #231e14; --accent: #B4572E;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body { background: var(--ground); color: var(--ink); font-family: Figtree, sans-serif; overflow-x: hidden; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+.link { color: var(--ink66); font-size: 16px; }
+.link:hover, .link:focus-visible { color: var(--ink); }
+.accent { color: var(--accent); font-weight: 600; }
+.btn { background: var(--well); color: var(--ink); border-radius: 14px; padding: 12px 22px; font-weight: 500; font-size: 17px; }
+.note { color: var(--ink66); font-size: 16px; padding: 12px 48px; }
+
+/* Sign-in */
+.signin { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 16px; }
+.signin .word { font-family: Literata, serif; font-weight: 600; font-size: clamp(72px, 12vw, 120px); }
+.signin .sub { font-size: 19px; color: var(--ink66); margin-bottom: 18px; text-align: center; }
+.signin .note { padding: 0; }
+.foot { position: fixed; bottom: 28px; left: 0; right: 0; text-align: center; font-size: 14px; color: var(--ink42); pointer-events: none; }
+
+/* Library */
+.bar { height: 72px; display: flex; align-items: center; gap: 28px; padding: 0 48px; border-bottom: 1px solid var(--rule); font-size: 17px; color: var(--ink66); }
+.bar .mark { font-family: Literata, serif; font-weight: 600; font-size: 30px; color: var(--ink); margin-right: auto; }
+.sort { background: var(--ground); color: var(--ink); border: 0; font: inherit; }
+.top { padding: 34px 48px 10px; display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; }
+.top h1 { font-family: Literata, serif; font-weight: 600; font-size: 44px; margin-right: auto; }
+.search { background: var(--raised); border: 0; border-radius: 12px; padding: 11px 18px; width: 320px; max-width: 100%; color: var(--ink); font: inherit; font-size: 16px; }
+.search::placeholder { color: var(--ink42); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 34px 30px; padding: 26px 48px 60px; }
+.book { text-align: left; display: block; }
+.coverbox { position: relative; }
+.cover { display: block; width: 100%; aspect-ratio: 2/3; border-radius: 6px; object-fit: cover; }
+.cover.blank { background: var(--well); display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; padding: 14px; font-family: Literata, serif; font-weight: 600; font-size: 18px; }
+.cover small { font-family: Figtree, sans-serif; font-weight: 500; font-size: 12px; color: var(--ink66); }
+.tag { position: absolute; top: 10px; right: 10px; font-size: 11px; letter-spacing: .1em; background: rgba(0,0,0,.6); padding: 4px 8px; border-radius: 6px; font-weight: 600; }
+.t { margin-top: 10px; font-weight: 600; font-size: 16px; }
+.a { font-family: Literata, serif; font-size: 14px; color: var(--ink66); margin-top: 2px; }
+.prog { height: 3px; background: var(--rule); margin-top: 8px; border-radius: 2px; }
+.prog i { display: block; height: 3px; width: 0; background: var(--accent); border-radius: 2px; }
+
+/* Reader */
+.rbar { height: 64px; display: flex; align-items: center; gap: 30px; padding: 0 40px; }
+.rbar .title { font-family: Literata, serif; font-weight: 600; font-size: 19px; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage { position: relative; height: calc(100vh - 64px - 72px); display: flex; justify-content: center; }
+.page { width: min(760px, 100%); height: 100%; position: relative; }
+/* Readium's page frames fill the page; no frame border (no white on the dark look). */
+.page iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--ground); }
+.side { flex: 1; font-size: 30px; color: var(--ink42); }
+.side:hover { color: var(--ink66); }
+.side.left { text-align: right; padding-right: 32px; }
+.side.right { text-align: left; padding-left: 32px; }
+.msg { position: fixed; bottom: 74px; left: 50%; transform: translateX(-50%); background: var(--raised); border-radius: 16px; padding: 16px 22px; display: flex; gap: 28px; align-items: center; font-size: 17px; width: min(640px, calc(100% - 32px)); }
+.msg[hidden] { display: none; }
+.msg span { margin-right: auto; }
+
+@media (max-width: 700px) {
+  .bar, .top, .grid, .note { padding-left: 16px; padding-right: 16px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 24px 16px; }
+  .rbar { padding: 0 16px; }
+  .side { flex: 0 0 24px; padding: 0 !important; }
+}
