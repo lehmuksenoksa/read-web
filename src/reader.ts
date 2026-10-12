@@ -8,8 +8,8 @@ import { applyLook, type Appearance, type FontChoice, type PageFont } from "./ap
 import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
 import {
-  argb, cantRemove, edit, hex, isChanged, textWidth, pageBackground, pageText, preferences, removeLook, restoreLook, saveAsNew,
-  shown, step, stepOptional, STEPS, stepWeight, useLook, weightName, type Look, type Setup, type Steps,
+  argb, cantRemove, edit, hex, isChanged, besideText, textWidth, pageBackground, pageText, preferences, removeLook, restoreLook, saveAsNew,
+  shown, step, stepOptional, STEPS, stepWeight, useLook, weightName, type Look, type Setup, type TextPosition, type Steps,
 } from "./looks";
 import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
@@ -66,6 +66,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   let setup: Setup = await appearance.setup();
   let mountedFont: string | null = null;
   let mountedColumns = 1;
+  /** The chapter Readium shows scrolls (the look's Page: Scroll) instead of turning pages. */
+  let mountedScroll = false;
   let aaTab: AaTab = "Text";
   let fontChoices: { ready: FontChoice[]; toDownload: string[] } | null = null;
   /** Fonts being downloaded now. */
@@ -129,11 +131,44 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (forward) nav.goForward(false, () => undefined);
     else nav.goBackward(false, () => undefined);
   };
+  /** Scrolling: a moved place is saved, as after a page turn. */
+  const userScrolled = () => {
+    if (!mountedScroll) return;
+    moved = true;
+    anchor = null;
+  };
+  /** Scrolling: a screen down or up; past the chapter's end or start, the next or previous chapter. */
+  const scrollScreen = (forward: boolean) => {
+    const wnd = frameWindow();
+    const el = wnd?.document.scrollingElement;
+    if (!wnd || !el) return turn(forward);
+    const atEnd = forward ? el.scrollTop + wnd.innerHeight >= el.scrollHeight - 2 : el.scrollTop <= 0;
+    if (atEnd) return turn(forward);
+    userScrolled();
+    el.scrollBy({ top: (forward ? 0.9 : -0.9) * wnd.innerHeight, behavior: "instant" });
+  };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") return closePanels();
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+    if (mountedScroll) {
+      switch (e.key) {
+        case "ArrowDown": case "PageDown": case " ":
+          e.preventDefault();
+          scrollScreen(!(e.key === " " && e.shiftKey));
+          break;
+        case "ArrowUp": case "PageUp":
+          e.preventDefault();
+          scrollScreen(false);
+          break;
+        case "ArrowRight": case "ArrowLeft":
+          e.preventDefault();
+          turn(e.key === "ArrowRight");
+          break;
+      }
+      return;
+    }
     switch (e.key) {
       case "ArrowRight": case "ArrowDown": case "PageDown": case " ":
         e.preventDefault();
@@ -148,7 +183,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   window.addEventListener("keydown", onKey);
   left.addEventListener("click", () => turn(false));
   right.addEventListener("click", () => turn(true));
-  swipes(left.parentElement!, turn);
+  const swiped = (forward: boolean) => { if (!mountedScroll) turn(forward); };
+  swipes(left.parentElement!, swiped);
 
   // --- The place and the other devices ---
 
@@ -318,9 +354,18 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       }
       case "Layout":
         body = h("div", { class: "sec" },
-          choice("Columns", [1, 2].map(n => ({ name: String(n), on: look.columns === n, pick: () => change({ columns: n as 1 | 2 }) }))),
+          choice("Page", [
+            { name: "1 column", on: !look.scroll && look.columns === 1, pick: () => change({ columns: 1, scroll: false }) },
+            { name: "2 columns", on: !look.scroll && look.columns === 2, pick: () => change({ columns: 2, scroll: false }) },
+            { name: "Scroll", on: look.scroll, pick: () => change({ scroll: true }) },
+          ]),
           stepped("Line spacing", "lineHeight", v => v.toFixed(1)),
           stepped("Margins", "margins", fixed),
+          choice("Position", (["left", "centre", "right"] as TextPosition[]).map(p => ({
+            name: p === "left" ? "Left" : p === "centre" ? "Centre" : "Right",
+            on: look.position === p,
+            pick: () => change({ position: p }),
+          }))),
           choice("Alignment", [
             { name: "Justified", on: look.justify, pick: () => change({ justify: true }) },
             { name: "Left", on: !look.justify, pick: () => change({ justify: false }) },
@@ -394,7 +439,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const listeners: Partial<EpubNavigatorListeners> = {
     frameLoaded: (wnd: Window) => {
       wnd.addEventListener("keydown", onKey);
-      swipes(wnd.document.documentElement, turn);
+      wnd.addEventListener("wheel", userScrolled, { passive: true });
+      wnd.addEventListener("touchmove", userScrolled, { passive: true });
+      swipes(wnd.document.documentElement, swiped);
     },
     positionChanged: (locator: Locator) => {
       current = locator;
@@ -410,18 +457,23 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   /** The words at the top of the page in view (null if it can't be read: the place keeps its progress only). */
   const readPageTop = (): PageTop | null => {
     try {
-      const frame = nav?._cframes.find(f => f != null) as { window?: Window } | undefined;
-      return frame?.window ? pageTop(frame.window) : null;
+      const wnd = frameWindow();
+      return wnd ? pageTop(wnd) : null;
     } catch {
       return null;
     }
   };
+  const frameWindow = (): Window | null => {
+    const frame = nav?._cframes.find(f => f != null) as { window?: Window } | undefined;
+    return frame?.window ?? null;
+  };
   const clickTurn = (x: number) => {
-    // A click on the page with a panel open only closes the panel.
+    // A click on the page with a panel open only closes the panel; a scrolling page isn't turned by clicks.
     if (!contents.hidden || !aa.hidden) {
       closePanels();
       return true;
     }
+    if (mountedScroll) return true;
     const width = (page.clientWidth || 1) * window.devicePixelRatio;
     if (x < width / 3) turn(false);
     else if (x > (width * 2) / 3) turn(true);
@@ -430,8 +482,13 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
 
   /** The page around the book takes the look's colours too; the text takes the pane's width less the margins. */
   const fitPage = (look: Look) => {
-    // Readium sizes the page from its parent: the box is the width the margins leave.
+    // Readium sizes the page from its parent: the box is the width the margins leave, placed by the look's position.
     (page.parentElement as HTMLElement).style.width = `${textWidth(stage.clientWidth, look.margins)}px`;
+    const beside = besideText(stage.clientWidth, look.margins, look.position);
+    for (const [arrow, width] of [[left, beside.left], [right, beside.right]] as const) {
+      arrow.style.flex = `0 0 ${width}px`;
+      arrow.style.minWidth = "0";
+    }
     applyLook(look);
   };
   const stage = left.parentElement!;
@@ -467,6 +524,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     fitPage(look);
     mountedFont = look.font;
     mountedColumns = look.columns;
+    mountedScroll = look.scroll;
     const entry = at ? startPosition(book.positions, at) : null;
     nav = new EpubNavigator(page, book.publication, listeners as EpubNavigatorListeners, book.positions, entry ?? undefined, {
       preferences: preferences(look, font.family),
@@ -494,7 +552,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       if (!aa.hidden) await fillAa();
       if (!book || !nav) return;
       const look = shown(setup);
-      if (look.font !== mountedFont || look.columns !== mountedColumns) {
+      if (look.font !== mountedFont || look.columns !== mountedColumns || look.scroll !== mountedScroll) {
         anchor ??= current;
         await mount(anchor);
       } else {

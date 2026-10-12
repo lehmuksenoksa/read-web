@@ -55,7 +55,7 @@ export function pageTop(wnd: Window): PageTop | null {
   for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
     range.selectNodeContents(node);
     if (!Array.from(range.getClientRects()).some(shows)) continue;
-    // The first character on this page: characters run left to right across the pages.
+    // The first character in view: characters run left to right across the pages, and top to bottom when scrolling.
     let lo = 0;
     let hi = node.length - 1;
     while (lo < hi) {
@@ -64,7 +64,7 @@ export function pageTop(wnd: Window): PageTop | null {
       range.setEnd(node, mid + 1);
       const r = range.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) { lo = mid + 1; continue; }
-      if (r.right <= 0) lo = mid + 1;
+      if (r.right <= 0 || r.bottom <= 0) lo = mid + 1;
       else hi = mid;
     }
     let block: Element | null = node.parentElement;

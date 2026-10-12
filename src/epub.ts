@@ -120,6 +120,8 @@ export async function openBook(bytes: Uint8Array): Promise<Book> {
 
   const manifestJson = {
     metadata: {
+      // An EPUB: Readium then knows its layout (reflowable unless pre-paginated), which scrolling needs.
+      conformsTo: ["https://readium.org/webpub-manifest/profiles/epub"],
       title: meta("title") ?? "Book",
       identifier: meta("identifier"),
       language: meta("language") ?? "en",

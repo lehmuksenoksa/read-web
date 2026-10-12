@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   argb, cantRemove, decodeSetup, DEFAULT_SETUP, edit, faceOfFile, fileSafe, hex, isChanged, isLight, pageText, preferences,
-  removeLook, restoreLook, saveAsNew, saveName, shown, sidebarWidth, step, stepOptional, STEPS, stepWeight, textWidth, useLook, weightsOf, WEB_LOOKS,
+  removeLook, restoreLook, saveAsNew, saveName, shown, besideText, sidebarWidth, step, stepOptional, STEPS, stepWeight, textWidth, useLook, weightsOf, WEB_LOOKS,
 } from "../src/looks";
 
 describe("Web's setup", () => {
@@ -140,5 +140,31 @@ describe("widths", () => {
     expect(sidebarWidth(NaN)).toBe(320);
     expect(decodeSetup(null).sidebarWidth).toBe(320);
     expect(decodeSetup(JSON.stringify({ looks: [{ id: "a" }], sidebarWidth: 9999 })).sidebarWidth).toBe(520);
+  });
+
+  it("beside the text: even in the centre; at a side, only the arrow's space there", () => {
+    // 1040 wide at 1.0: the text is 794, leaving 246.
+    expect(besideText(1040, 1, "centre")).toEqual({ left: 123, right: 123 });
+    expect(besideText(1040, 1, "left")).toEqual({ left: 40, right: 206 });
+    expect(besideText(1040, 1, "right")).toEqual({ left: 206, right: 40 });
+    // At 0 the arrows' space is all there is.
+    expect(besideText(1040, 0, "left")).toEqual({ left: 40, right: 40 });
+    // A pane too narrow for the text: nothing beside it.
+    expect(besideText(180, 3, "left")).toEqual({ left: 0, right: 0 });
+  });
+});
+
+describe("page and position", () => {
+  it("are centre and turning pages for looks saved before them", () => {
+    const setup = decodeSetup(JSON.stringify({ looks: [{ id: "a", columns: 2 }], lookId: "a" }));
+    expect(shown(setup)).toMatchObject({ columns: 2, scroll: false, position: "centre" });
+    expect(isChanged(setup)).toBe(false);
+  });
+
+  it("scroll in one column, keeping the look's columns for when it turns pages again", () => {
+    const look = shown(edit(DEFAULT_SETUP, { columns: 2, scroll: true, position: "left" }));
+    expect(preferences(look, "Bookerly")).toMatchObject({ scroll: true, columnCount: 1 });
+    expect(look.columns).toBe(2);
+    expect(preferences({ ...look, scroll: false }, "Bookerly")).toMatchObject({ scroll: false, columnCount: 2 });
   });
 });

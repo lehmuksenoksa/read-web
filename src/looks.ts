@@ -30,7 +30,13 @@ export interface Look {
   hyphens: boolean;
   /** Pages side by side (the web's own setting). */
   columns: 1 | 2;
+  /** The chapter scrolls instead of turning pages (the web's own; one column). */
+  scroll: boolean;
+  /** Where the text sits when the margins leave space beside it (the web's own). */
+  position: TextPosition;
 }
+
+export type TextPosition = "left" | "centre" | "right";
 
 const BLACK = 0xff000000 | 0;
 const WHITE = 0xffffffff | 0;
@@ -41,6 +47,7 @@ const DEFAULT: Omit<Look, "id" | "name"> = {
   background: "Oled", backgroundColor: BLACK, textColor: 0xffe6d8b0 | 0, font: "Bookerly", fontWeight: 400,
   fontSize: 1.0, lineHeight: 1.5, margins: 1.0, letterSpacing: 0, wordSpacing: 0,
   paragraphSpacing: null, paragraphIndent: null, justify: true, hyphens: true, columns: 1,
+  scroll: false, position: "centre",
 };
 
 /** Web's looks to start with: quiet, for an office. */
@@ -108,6 +115,18 @@ export const ARROW_SPACE = 40;
 export function textWidth(paneWidth: number, margins: number): number {
   const side = ARROW_SPACE + margins * 0.08 * paneWidth;
   return Math.max(200, Math.round(paneWidth - 2 * side));
+}
+
+/**
+ * The space left and right of the text (with the arrows in it): even in the centre; at the left
+ * or right, the arrow's space on that side and all the rest on the other (2026-10-12).
+ */
+export function besideText(paneWidth: number, margins: number, position: TextPosition): { left: number; right: number } {
+  const spare = Math.max(0, paneWidth - textWidth(paneWidth, margins));
+  const edge = Math.min(ARROW_SPACE, spare / 2);
+  if (position === "left") return { left: edge, right: spare - edge };
+  if (position === "right") return { left: spare - edge, right: edge };
+  return { left: spare / 2, right: spare / 2 };
 }
 
 export function savedLook(setup: Setup): Look {
@@ -285,7 +304,8 @@ export function preferences(look: Look, fontFamily: string): IEpubPreferences {
     paragraphIndent: look.paragraphIndent,
     textAlign: look.justify ? TextAlignment.justify : TextAlignment.left,
     hyphens: look.hyphens,
-    columnCount: look.columns,
+    columnCount: look.scroll ? 1 : look.columns,
+    scroll: look.scroll,
     // No line-length limit: the page's width (the margins) decides it.
     optimalLineLength: 40,
     minimalLineLength: 20,
