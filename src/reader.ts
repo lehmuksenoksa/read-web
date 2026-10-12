@@ -28,16 +28,15 @@ export interface ReaderProps {
   path: string;
   /** For the browser tab only ("Read: Mage Tank 5"); the page itself shows no title. */
   title: string;
-  onClose: () => void;
 }
 
+/** The book in [root] (the pane beside the Library); returns how to close it, its place saved first. */
 export async function showReader(root: HTMLElement, props: ReaderProps): Promise<() => Promise<void>> {
   const { dropbox, id, appearance } = props;
   document.title = `Read: ${props.title}`;
   const status = h("div", { class: "foot" }, "Opening…");
   const prompt = h("div", { class: "msg", hidden: true });
   const page = h("div", { class: "page", id: "page" });
-  const back = h("button", { class: "link back", onclick: () => close().then(props.onClose) }, "‹ Library");
   const left = h("button", { class: "side left", "aria-label": "Previous page" }, "‹");
   const right = h("button", { class: "side right", "aria-label": "Next page" }, "›");
   const contentsButton = h("button", { class: "link", "aria-expanded": "false" }, "Contents");
@@ -45,7 +44,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const contents = h("div", { class: "toc", hidden: true });
   const aa = h("div", { class: "panel", hidden: true });
   root.replaceChildren(
-    h("div", { class: "rbar" }, back, contentsButton, aaButton),
+    h("div", { class: "rbar" }, h("span", { class: "spacer" }), contentsButton, aaButton),
     h("div", { class: "stage" }, left, page, right),
     contents,
     aa,

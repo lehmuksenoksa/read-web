@@ -55,7 +55,7 @@ button:disabled { opacity: .35; cursor: default; }
 
 /* Reader */
 .rbar { height: 48px; display: flex; align-items: center; gap: 26px; padding: 0 32px; }
-.rbar .back { margin-right: auto; }
+.rbar .spacer { margin-right: auto; }
 .stage { position: relative; height: calc(100vh - 48px - 40px); display: flex; justify-content: center; }
 .page { width: min(760px, 100%); height: 100%; position: relative; }
 .page.two { width: min(1480px, calc(100% - 96px)); }
@@ -63,15 +63,15 @@ button:disabled { opacity: .35; cursor: default; }
 .page iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .side { flex: 1; font-size: 24px; color: var(--ink3); text-align: center; }
 .side:hover { color: var(--ink2); }
-.foot { position: fixed; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--ink3); pointer-events: none; }
-.msg { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); padding: 10px 16px; display: flex; gap: 22px; align-items: center; width: min(560px, calc(100% - 32px)); z-index: 6; }
+.foot { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--ink3); pointer-events: none; }
+.msg { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); padding: 10px 16px; display: flex; gap: 22px; align-items: center; width: min(560px, calc(100% - 32px)); z-index: 6; }
 .msg[hidden] { display: none; }
 .msg span { margin-right: auto; }
 
 /* Panels: Aa, Contents, Settings */
-.panel, .toc { position: fixed; top: 48px; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); max-height: calc(100vh - 72px); overflow-y: auto; z-index: 5; }
+.panel, .toc { position: absolute; top: 48px; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); max-height: calc(100vh - 72px); overflow-y: auto; z-index: 5; }
 .panel { right: 24px; width: min(400px, calc(100% - 32px)); padding-bottom: 16px; }
-.panel.settings { top: 56px; right: 110px; width: 300px; }
+.panel.menu { top: 48px; right: 12px; width: 240px; padding-bottom: 8px; }
 .toc { left: 24px; width: min(420px, calc(100% - 32px)); padding: 8px; display: flex; flex-direction: column; }
 .panel[hidden], .toc[hidden] { display: none; }
 .tabs { display: flex; border-bottom: 1px solid var(--rule); padding: 0 12px; position: sticky; top: 0; background: var(--raised); }
@@ -111,3 +111,31 @@ button.r:hover, .r .use:hover { background: var(--sel); }
   .rbar { padding: 0 16px; }
   .side { flex: 0 0 24px; }
 }
+
+/* The Library as a sidebar beside the reader, like a chat list. */
+.app { display: flex; height: 100vh; overflow: hidden; }
+.sidebar { width: 320px; flex: none; position: relative; display: flex; flex-direction: column; border-right: 1px solid var(--rule); background: color-mix(in srgb, var(--tx) 3%, var(--bg)); }
+.shead { height: 52px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 20px; }
+.shead h1 { font-size: 18px; font-weight: 600; margin-right: auto; }
+.icon { width: 30px; height: 30px; border-radius: 6px; color: var(--ink2); font-size: 16px; text-align: center; }
+.icon:hover, .icon[aria-expanded="true"] { background: var(--sel); color: var(--ink); }
+.sfilter { display: flex; gap: 8px; padding: 0 12px 10px 20px; flex: none; }
+.sfilter .search { flex: 1; width: auto; max-width: none; font-size: 13px; padding: 6px 10px; }
+.sfilter .sel { font-size: 13px; }
+.sidebar .list { columns: auto; display: block; flex: 1; overflow-y: auto; padding: 0 8px 24px; }
+.sidebar .row { padding: 7px 12px 8px; border-radius: 6px; }
+.sidebar .row .t { font-size: 14px; }
+.sidebar .row .a { font-size: 12px; }
+.sidebar .row .p { font-size: 12px; padding-left: 10px; }
+.sidebar .row .line { margin-top: 6px; }
+.sidebar .row.child { padding-left: 28px; }
+.sidebar .row.cur { background: var(--sel); }
+.sidebar .note { padding: 12px 20px; }
+.mainwrap { flex: 1; min-width: 0; position: relative; }
+.main { position: relative; height: 100%; }
+.main .empty { position: absolute; top: 45%; width: 100%; text-align: center; }
+.showside { display: none; position: absolute; top: 14px; left: 24px; z-index: 4; }
+.app.noside .sidebar { display: none; }
+.app.noside .showside { display: block; }
+/* A narrow window: the Library opens over the page. */
+.app.narrow .sidebar { position: absolute; z-index: 7; top: 0; bottom: 0; left: 0; box-shadow: var(--shadow); max-width: 85vw; }

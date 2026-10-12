@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry } from "../src/dropbox";
-import { furthest, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem } from "../src/library";
+import { furthest, lastReadBook, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem } from "../src/library";
 
 const hash = (c: string) => c.repeat(64);
 const file = (name: string, id: string, folder = "/Books"): FileEntry => ({ path: `${folder}/${name}`, pathLower: `${folder}/${name}`.toLowerCase(), name, contentHash: id, size: 1, modified: "2026-10-01T10:00:00Z" });
@@ -71,5 +71,18 @@ describe("series in the Library", () => {
 
   it("are left apart when grouping is off", () => {
     expect(libraryItems(books, "recent", "", false).map(i => i.kind)).toEqual(["book", "book", "book", "book", "book"]);
+  });
+});
+
+describe("the start", () => {
+  const b = (id: string, lastRead: string | null): LibraryBook => ({ id, path: `/Books/${id}.epub`, title: id, author: null, series: null, seriesIndex: null, read: false, cover: null, lastRead, hasSyncFile: !!lastRead });
+
+  it("opens the book read last on any device", () => {
+    expect(lastReadBook([b("a", "2026-10-01T10:00:00Z"), b("b", "2026-10-12T09:00:00Z"), b("c", null)])!.id).toBe("b");
+  });
+
+  it("opens nothing before any reading", () => {
+    expect(lastReadBook([b("a", null)])).toBeNull();
+    expect(lastReadBook([])).toBeNull();
   });
 });

@@ -156,3 +156,8 @@ export function libraryItems(books: LibraryBook[], by: SortBy, query: string, gr
     }
   });
 }
+
+/** The book read last on any device (its sync file changed last), to open at the start; null before any reading. */
+export function lastReadBook(books: LibraryBook[]): LibraryBook | null {
+  return books.filter(b => b.lastRead).sort((a, b) => b.lastRead!.localeCompare(a.lastRead!))[0] ?? null;
+}

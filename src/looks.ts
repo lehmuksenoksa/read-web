@@ -61,10 +61,12 @@ export interface Setup {
   page: Look | null;
   /** Series of two or more books are one row in the Library. */
   groupSeries: boolean;
+  /** The Library shows as a sidebar beside the reader (false: hidden). */
+  sidebar: boolean;
   version: 1;
 }
 
-export const DEFAULT_SETUP: Setup = { looks: WEB_LOOKS, lookId: "office", page: null, groupSeries: true, version: 1 };
+export const DEFAULT_SETUP: Setup = { looks: WEB_LOOKS, lookId: "office", page: null, groupSeries: true, sidebar: true, version: 1 };
 
 /** The setup file's text, read leniently: anything missing or unreadable is the default. */
 export function decodeSetup(text: string | null): Setup {
@@ -77,6 +79,7 @@ export function decodeSetup(text: string | null): Setup {
       lookId: looks.some(l => l.id === raw.lookId) ? raw.lookId! : looks[0].id,
       page: raw.page && typeof raw.page.id === "string" ? withDefaults(raw.page) : null,
       groupSeries: raw.groupSeries !== false,
+      sidebar: raw.sidebar !== false,
       version: 1,
     };
   } catch {

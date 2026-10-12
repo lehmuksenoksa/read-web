@@ -2,27 +2,27 @@ import "./style.css";
 import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
 import { Dropbox } from "./dropbox";
-import { furthest, libraryBooks, libraryItems, type IndexEntry, type LibraryBook, type LibraryItem, type SortBy } from "./library";
-import { shown } from "./looks";
+import { furthest, lastReadBook, libraryBooks, libraryItems, type IndexEntry, type LibraryBook, type LibraryItem, type SortBy } from "./library";
+import { shown, type Setup } from "./looks";
 import { BOOKS_FOLDER, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { showReader } from "./reader";
 import { h } from "./ui";
 
 const root = document.getElementById("app")!;
-let closeReader: (() => Promise<void>) | null = null;
 /** Web's setup and the fonts, read once per visit. */
 let appearance: Appearance | null = null;
+/** Closes the book open in the reader (its place saved first). */
+let closeReader: (() => Promise<void>) | null = null;
+/** Stops the page following setup changes. */
+let stopFollowing: (() => void) | null = null;
 
 // The browser tab says "Library"; a book's says "Read: <title>" (small enough to go unnoticed).
 document.title = "Library";
 
-/** Stops the Library following setup changes (set while the Library shows). */
-let closeLibrary: (() => void) | null = null;
-
-/** Closes the Library's Settings panel on a click outside it or Esc (set while the Library shows). */
-let closeLibraryPanel: ((e?: Event) => void) | null = null;
-document.addEventListener("click", e => closeLibraryPanel?.(e));
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeLibraryPanel?.(); });
+/** Closes the sidebar's ⋯ menu on a click outside it or Esc (set while it can be open). */
+let closeMenu: ((e?: Event) => void) | null = null;
+document.addEventListener("click", e => closeMenu?.(e));
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu?.(); });
 
 function dropbox(): Dropbox | null {
   const token = currentToken();
@@ -32,13 +32,14 @@ function dropbox(): Dropbox | null {
 // --- Sign-in ---
 
 function showSignIn(message?: string) {
-  closeLibraryPanel = null;
-  closeLibrary?.();
-  closeLibrary = null;
+  closeMenu = null;
+  stopFollowing?.();
+  stopFollowing = null;
   document.documentElement.style.removeProperty("--bg");
   document.documentElement.style.removeProperty("--tx");
   appearance?.close();
   appearance = null;
+  root.className = "";
   root.replaceChildren(
     h("main", { class: "signin" },
       h("h1", {}, "Library"),
@@ -60,72 +61,84 @@ async function signOut(api: Dropbox) {
   showSignIn("Signed out.");
 }
 
-// --- Library ---
+// --- The Library beside the reader ---
 
 let sortBy: SortBy = "recent";
 let query = "";
 
-async function showLibrary() {
+/** A window this narrow (page pixels) shows the Library over the page, not beside it. */
+const NARROW = window.matchMedia("(max-width: 900px)");
+
+async function showApp() {
   const api = dropbox();
   if (!api) return showSignIn();
   appearance ??= new Appearance(api);
   const look = appearance;
+
   const list = h("div", { class: "list" });
   const note = h("p", { class: "note muted" }, "Loading your books…");
   const sort = h("select", { class: "sel", "aria-label": "Sort" },
     h("option", { value: "recent" }, "Recent"), h("option", { value: "title" }, "Title"), h("option", { value: "author" }, "Author"));
   sort.value = sortBy;
   const search = h("input", { class: "search", type: "search", placeholder: "Search", "aria-label": "Search title or author", value: query });
-  const settingsButton = h("button", { class: "link", "aria-expanded": "false" }, "Settings");
-  const settings = h("div", { class: "panel settings", hidden: true });
-  root.replaceChildren(
-    h("div", { class: "bar" },
-      h("h1", {}, "Library"),
-      search,
-      h("label", { class: "muted" }, "Sort ", sort),
-      settingsButton,
-      h("button", { class: "link", onclick: () => void signOut(api) }, "Sign out")),
-    settings,
+  const hideButton = h("button", { class: "icon", title: "Hide the Library", "aria-label": "Hide the Library" }, "⇤");
+  const menuButton = h("button", { class: "icon", title: "More", "aria-label": "More", "aria-expanded": "false" }, "⋯");
+  const menu = h("div", { class: "panel menu", hidden: true });
+  const side = h("aside", { class: "sidebar" },
+    h("div", { class: "shead" }, h("h1", {}, "Library"), hideButton, menuButton),
+    h("div", { class: "sfilter" }, search, sort),
+    menu,
     note,
-    list,
-  );
+    list);
+  const showButton = h("button", { class: "link showside" }, "☰ Library");
+  const pane = h("section", { class: "main" }, h("p", { class: "empty muted" }, ""));
+  root.replaceChildren(side, h("div", { class: "mainwrap" }, showButton, pane));
 
-  // Settings › Group series, kept in Web's setup.
-  const fillSettings = async () => {
-    const setup = await look.setup();
-    const on = setup.groupSeries;
-    settings.replaceChildren(h("div", { class: "sec" },
-      h("div", { class: "lab" }, "Library"),
-      h("button", {
-        class: `r${on ? " sel" : ""}`,
-        "aria-pressed": String(on),
-        onclick: () => {
-          look.update({ ...setup, groupSeries: !on });
-          void fillSettings();
-          render();
-        },
-      }, "Group series", h("span", { class: "v" }, on ? "On" : "Off"))));
+  let setup: Setup = await look.setup();
+  /** On a narrow window the Library opens over the page now and then; it isn't saved. */
+  let overlayOpen = false;
+  const layout = () => {
+    const visible = NARROW.matches ? overlayOpen : setup.sidebar;
+    root.className = `app${visible ? "" : " noside"}${NARROW.matches ? " narrow" : ""}`;
   };
-  const closeSettings = () => {
-    settings.hidden = true;
-    settingsButton.setAttribute("aria-expanded", "false");
+  const setSidebar = (visible: boolean) => {
+    if (NARROW.matches) overlayOpen = visible;
+    else look.update({ ...setup, sidebar: visible });
+    layout();
   };
-  settingsButton.addEventListener("click", () => {
-    if (!settings.hidden) return closeSettings();
-    void fillSettings().then(() => {
-      settings.hidden = false;
-      settingsButton.setAttribute("aria-expanded", "true");
-    });
-  });
-  closeLibraryPanel = (e?: Event) => {
-    if (!e || !e.composedPath().some(el => el === settings || el === settingsButton)) closeSettings();
-  };
-
-  // The page takes the colours of the look in use.
-  let setup = await look.setup();
+  hideButton.addEventListener("click", () => setSidebar(false));
+  showButton.addEventListener("click", () => setSidebar(true));
+  NARROW.addEventListener("change", layout);
   applyLook(shown(setup));
-  const stop = look.onChange(next => { setup = next; applyLook(shown(next)); });
-  closeLibrary = stop;
+  layout();
+  stopFollowing?.();
+  stopFollowing = look.onChange(next => { setup = next; applyLook(shown(next)); layout(); });
+
+  // ⋯: Group series and Sign out.
+  const fillMenu = () => {
+    const on = setup.groupSeries;
+    menu.replaceChildren(h("div", { class: "sec" },
+      h("button", {
+        class: "r", "aria-pressed": String(on),
+        onclick: () => { look.update({ ...setup, groupSeries: !on }); fillMenu(); render(); },
+      }, "Group series", h("span", { class: "v" }, on ? "On" : "Off")),
+      h("button", { class: "r", onclick: () => void signOut(api) }, "Sign out")));
+  };
+  const closeTheMenu = () => {
+    menu.hidden = true;
+    menuButton.setAttribute("aria-expanded", "false");
+  };
+  menuButton.addEventListener("click", () => {
+    if (!menu.hidden) return closeTheMenu();
+    fillMenu();
+    menu.hidden = false;
+    menuButton.setAttribute("aria-expanded", "true");
+  });
+  closeMenu = (e?: Event) => {
+    if (!e || !e.composedPath().some(el => el === menu || el === menuButton)) closeTheMenu();
+  };
+
+  // --- The books ---
 
   let books: LibraryBook[] = [];
   try {
@@ -166,16 +179,22 @@ async function showLibrary() {
         if (line) line.style.width = `${Math.round(p * 100)}%`;
       });
     }
-  });
+  }, { root: list });
   /** Series opened in this visit. */
   const open = new Set<string>();
+  /** The book in the reader. */
+  let currentId: string | null = null;
 
   const line = (fraction: number) => h("span", { class: "line" }, h("i", { style: `width: ${Math.round(fraction * 100)}%` }));
   const bookRow = (book: LibraryBook, inSeries: boolean) => {
     const byline = inSeries
       ? (book.seriesIndex != null ? `Book ${book.seriesIndex}` : book.author ?? "")
       : [book.author, book.series && `${book.series}${book.seriesIndex != null ? ` ${book.seriesIndex}` : ""}`].filter(Boolean).join(" · ");
-    return h("button", { class: `row${inSeries ? " child" : ""}`, "data-id": book.id, onclick: () => void openReader(api, book) },
+    return h("button", {
+      class: `row${inSeries ? " child" : ""}${book.id === currentId ? " cur" : ""}`, "data-id": book.id,
+      "aria-current": book.id === currentId ? "true" : undefined,
+      onclick: () => void openBook(book),
+    },
       h("span", { class: "t" }, book.title),
       h("span", { class: "a" }, byline),
       h("span", { class: "p" }, book.read ? "Read" : ""),
@@ -204,17 +223,30 @@ async function showLibrary() {
   };
   sort.addEventListener("change", () => { sortBy = sort.value as SortBy; render(); });
   search.addEventListener("input", () => { query = search.value; render(); });
-  render();
-}
 
-async function openReader(api: Dropbox, book: LibraryBook) {
-  closeLibraryPanel = null;
-  closeLibrary?.();
-  closeLibrary = null;
-  closeReader = await showReader(root, {
-    dropbox: api, appearance: appearance ?? new Appearance(api), id: book.id, path: book.path, title: book.title,
-    onClose: () => { closeReader = null; void showLibrary(); },
-  });
+  /** A book into the reader: the one open before saves its place and closes first. */
+  let opening = Promise.resolve();
+  const openBook = (book: LibraryBook) => {
+    if (book.id === currentId) return opening;
+    currentId = book.id;
+    // Its series open, so the highlighted row shows.
+    if (book.series) open.add(book.series.toLocaleLowerCase());
+    render();
+    if (NARROW.matches) { overlayOpen = false; layout(); }
+    opening = opening.then(async () => {
+      await closeReader?.();
+      closeReader = null;
+      if (currentId !== book.id) return;
+      closeReader = await showReader(pane, { dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title });
+    });
+    return opening;
+  };
+
+  render();
+  // At the start, the book read last on any device; opening it saves no place.
+  const last = lastReadBook(books);
+  if (last) await openBook(last);
+  else pane.replaceChildren(h("p", { class: "empty muted" }, "Choose a book from the Library."));
 }
 
 // --- Start ---
@@ -225,6 +257,6 @@ async function openReader(api: Dropbox, book: LibraryBook) {
   } catch {
     // A failed return from Dropbox: sign in again.
   }
-  if (currentToken()) await showLibrary();
+  if (currentToken()) await showApp();
   else showSignIn();
 })();
