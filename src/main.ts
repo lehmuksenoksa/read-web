@@ -6,7 +6,6 @@ import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, still
 import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
 import { BOOKS_FOLDER, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { showReader } from "./reader";
-import { parseMoonPlace } from "./moon";
 import { forgetAll, keepBook, keptBooks, keepValue, keptValue } from "./store";
 import { h } from "./ui";
 
@@ -181,15 +180,12 @@ async function showApp() {
 
   let progress = new Map<string, Promise<number>>();
   const progressOf = (book: LibraryBook) => {
-    if (!book.hasSyncFile && !book.moon) return Promise.resolve(0);
+    if (!book.hasSyncFile) return Promise.resolve(0);
     const was = stillKnown(known.get(book.id), book);
     if (was != null) return Promise.resolve(was);
     let p = progress.get(book.id);
     if (!p) {
-      const devices = book.hasSyncFile ? api.readText(syncFilePath(book.id)).then(r => (r ? furthest(JSON.parse(r.text)) : 0)).catch(() => 0) : Promise.resolve(0);
-      // Moon+ Reader's own percentage counts too (read only).
-      const moon = book.moon ? api.readText(book.moon.path).then(r => (parseMoonPlace(r?.text ?? "")?.percent ?? 0) / 100).catch(() => 0) : Promise.resolve(0);
-      p = Promise.all([devices, moon]).then(([a, b]) => Math.max(a, b));
+      p = api.readText(syncFilePath(book.id)).then(r => (r ? furthest(JSON.parse(r.text)) : 0)).catch(() => 0);
       progress.set(book.id, p);
       void p.then(value => { known.set(book.id, { at: book.lastRead, p: value }); saveLibrary(); });
     }
@@ -271,7 +267,7 @@ async function showApp() {
       await closeReader?.();
       closeReader = null;
       if (currentId !== book.id) return;
-      closeReader = await showReader(pane, { dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title, moon: book.moon });
+      closeReader = await showReader(pane, { dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title });
     }).catch(() => undefined); // One book that fails to open doesn't stop the next.
     return opening;
   };

@@ -1,7 +1,6 @@
 // The Library: the books in Dropbox's /Books/, shown with what the phones put in library.json.
 
 import type { FileEntry } from "./dropbox";
-import { isMoonPlacePath, moonBookName } from "./moon";
 import { SYNC_FOLDER } from "./paths";
 
 /** One entry of `/Apps/Read/Sync/library.json`, as the S23 and the Boox write it. */
@@ -29,8 +28,6 @@ export interface LibraryBook {
   /** When any device last saved a place in it (its sync file), for Recent. */
   lastRead: string | null;
   hasSyncFile: boolean;
-  /** Moon+ Reader's sync file for this book and when Moon+ saved it (WEB.md → Moon+); null when there's none. */
-  moon: { path: string; modified: string } | null;
 }
 
 export type SortBy = "recent" | "title" | "author";
@@ -43,8 +40,6 @@ export function titleFromFileName(name: string): string {
 /** The Library's books: EPUBs in /Books/, with the index's details; hidden books aren't shown. */
 export function libraryBooks(files: FileEntry[], index: Record<string, IndexEntry>, syncFiles: FileEntry[]): LibraryBook[] {
   const synced = new Map(syncFiles.map(f => [f.pathLower, f.modified]));
-  // Moon+ keeps its places inside /Books/, so the books listing has them.
-  const moon = new Map(files.filter(f => isMoonPlacePath(f.path)).map(f => [moonBookName(f.path), { path: f.path, modified: f.modified }]));
   const seen = new Set<string>();
   const books: LibraryBook[] = [];
   for (const file of files) {
@@ -62,18 +57,11 @@ export function libraryBooks(files: FileEntry[], index: Record<string, IndexEntr
       seriesIndex: entry?.seriesIndex ?? null,
       read: entry?.read ?? false,
       cover: entry?.cover ?? null,
-      lastRead: latest(synced.get(syncPath) ?? null, moon.get(file.name.toLowerCase())?.modified ?? null),
+      lastRead: synced.get(syncPath) ?? null,
       hasSyncFile: synced.has(syncPath),
-      moon: moon.get(file.name.toLowerCase()) ?? null,
     });
   }
   return books;
-}
-
-function latest(a: string | null, b: string | null): string | null {
-  if (!a) return b;
-  if (!b) return a;
-  return a > b ? a : b;
 }
 
 /** Sorting ignores a leading "The", "A" or "An", as the app does. */
