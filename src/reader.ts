@@ -13,6 +13,7 @@ import {
 } from "./looks";
 import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
+import { MOON_DEVICE_ID, moonPosition } from "./moon";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
 import { afterKeptOpening, openingPlan, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
 import { h } from "./ui";
@@ -31,6 +32,8 @@ export interface ReaderProps {
   path: string;
   /** For the browser tab only ("Read: Mage Tank 5"); the page itself shows no title. */
   title: string;
+  /** Moon+ Reader's sync file for this book, when it has one (WEB.md → Moon+). */
+  moon: { path: string; modified: string } | null;
 }
 
 /** The book in [root] (the pane beside the Library); returns how to close it, its place saved first. */
@@ -241,8 +244,16 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const onVisible = async () => {
     if (document.visibilityState !== "visible" || !nav || closed) return;
     const file = await readSyncFile().catch(() => null);
-    const plan = openingPlan(withCurrent(file), dismissedAt);
+    const plan = openingPlan(withMoon(withCurrent(file)), dismissedAt);
     if (plan.ask) ask(plan.ask);
+  };
+  /** Moon+'s place in this book, read when it opened. */
+  let moonPlace: Position | null = null;
+  /** The sync file with Moon+'s place as one more device (only here: it's never written). */
+  const withMoon = (file: SyncFile | null): SyncFile | null => {
+    if (!moonPlace) return file;
+    const base = file ?? { bookId: id, positions: {} };
+    return { ...base, positions: { ...base.positions, [MOON_DEVICE_ID]: moonPlace } };
   };
   /** The sync file with Web's place as it is on screen now (not yet uploaded). */
   const withCurrent = (file: SyncFile | null): SyncFile | null => {
@@ -575,18 +586,24 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     // kept it, at once, with Dropbox's read alongside (WEB.md → Kept in this browser); else Dropbox's.
     const syncRead = readSyncFile();
     syncRead.catch(() => undefined);
+    const moonLine = props.moon ? dropbox.readText(props.moon.path).then(r => r?.text ?? null).catch(() => null) : Promise.resolve(null);
     const [bytes, kept] = await Promise.all([bookFile(dropbox, id, props.path), keptValue<Position>(`place:${id}`)]);
     book = await openBook(bytes);
+    // Moon+'s place: one more device, never written anywhere.
+    const opened = book;
+    const moonRead = moonLine.then(line => (line && props.moon ? moonPosition(opened, line, props.moon.modified) : null)).catch(() => null)
+      .then(place => (moonPlace = place));
     if (kept) {
       if (!(await mount(Locator.deserialize(kept.locator) ?? null))) tell("Couldn't find your place in this book.");
-      void syncRead.then(file => {
+      void Promise.all([syncRead, moonRead]).then(([file]) => {
         if (closed) return;
-        const next = afterKeptOpening(withCurrent(file), id, kept, moved, dismissedAt);
+        const next = afterKeptOpening(withMoon(withCurrent(file)), id, kept, moved, dismissedAt);
         if (next.moveTo) goThere(next.moveTo, true);
         if (next.ask) ask(next.ask);
       }).catch(() => undefined);
     } else {
-      const plan = openingPlan(await syncRead, null);
+      const [file] = await Promise.all([syncRead, moonRead]);
+      const plan = openingPlan(withMoon(file), null);
       if (plan.start) void keepValue(`place:${id}`, plan.start);
       const saved = plan.start ? Locator.deserialize(plan.start.locator) ?? null : null;
       if (!(await mount(saved))) tell("Couldn't find your place in this book.");

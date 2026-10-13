@@ -83,6 +83,8 @@ export interface Book {
   toc: TocEntry[];
   /** The chapters' hrefs, in reading order. */
   readingOrder: string[];
+  /** A file's own text, straight from the zip (not as the pages are shown): for Moon+'s counting. */
+  text(href: string): Promise<string | null>;
   close(): void;
 }
 
@@ -141,7 +143,11 @@ export async function openBook(bytes: Uint8Array): Promise<Book> {
   const positions = positionsOf(readingOrder.map(r => ({ ...r, title: titles.get(r.href) })), lengths)
     .map(p => Locator.deserialize(p)!)
     .filter(Boolean);
-  return { publication, positions, titles, toc, readingOrder: readingOrder.map(r => r.href), close: () => fetcher.close() };
+  return {
+    publication, positions, titles, toc, readingOrder: readingOrder.map(r => r.href),
+    text: href => zip.text(entryName(href)).catch(() => null),
+    close: () => fetcher.close(),
+  };
 }
 
 function parseXml(text: string): Document {

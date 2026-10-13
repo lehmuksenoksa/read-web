@@ -40,7 +40,7 @@ describe("the Library", () => {
 
 describe("series in the Library", () => {
   const book = (id: string, title: string, series: string | null, n: number | null, lastRead: string | null, read = false): LibraryBook => ({
-    id, path: `/Books/${title}.epub`, title, author: "Cornman", series, seriesIndex: n, read, cover: null, lastRead, hasSyncFile: !!lastRead,
+    id, path: `/Books/${title}.epub`, title, author: "Cornman", series, seriesIndex: n, read, cover: null, lastRead, hasSyncFile: !!lastRead, moon: null,
   });
   const books = [
     book("1", "Mage Tank 1", "Mage Tank", 1, "2026-09-01", true),
@@ -75,7 +75,7 @@ describe("series in the Library", () => {
 });
 
 describe("the start", () => {
-  const b = (id: string, lastRead: string | null): LibraryBook => ({ id, path: `/Books/${id}.epub`, title: id, author: null, series: null, seriesIndex: null, read: false, cover: null, lastRead, hasSyncFile: !!lastRead });
+  const b = (id: string, lastRead: string | null): LibraryBook => ({ id, path: `/Books/${id}.epub`, title: id, author: null, series: null, seriesIndex: null, read: false, cover: null, lastRead, hasSyncFile: !!lastRead, moon: null });
 
   it("opens the book read last on any device", () => {
     expect(lastReadBook([b("a", "2026-10-01T10:00:00Z"), b("b", "2026-10-12T09:00:00Z"), b("c", null)])!.id).toBe("b");
@@ -88,7 +88,7 @@ describe("the start", () => {
 });
 
 describe("progress kept in this browser", () => {
-  const book = { id: "a", path: "/Books/a.epub", title: "A", author: null, series: null, seriesIndex: null, read: false, cover: null, lastRead: "2026-10-12T10:00:00Z", hasSyncFile: true };
+  const book = { id: "a", path: "/Books/a.epub", title: "A", author: null, series: null, seriesIndex: null, read: false, cover: null, lastRead: "2026-10-12T10:00:00Z", hasSyncFile: true, moon: null };
 
   it("is used while the book's sync file is unchanged", () => {
     expect(stillKnown({ at: "2026-10-12T10:00:00Z", p: 0.4 }, book)).toBe(0.4);
@@ -101,7 +101,7 @@ describe("progress kept in this browser", () => {
 });
 
 describe("books fetched in the background", () => {
-  const at = (id: string, lastRead: string | null) => ({ id, path: `/Books/${id}.epub`, title: id, author: null, series: null, seriesIndex: null, read: false, cover: null, lastRead, hasSyncFile: lastRead != null });
+  const at = (id: string, lastRead: string | null) => ({ id, path: `/Books/${id}.epub`, title: id, author: null, series: null, seriesIndex: null, read: false, cover: null, lastRead, hasSyncFile: lastRead != null, moon: null });
   const books = [at("a", "2026-10-10"), at("b", "2026-10-12"), at("c", null), at("d", "2026-10-11"), at("e", "2026-10-09")];
 
   it("are the three read last on any device that this browser doesn't have", () => {
