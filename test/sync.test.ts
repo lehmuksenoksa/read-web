@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterKeptOpening, decide, openingPlan, otherToCompare, positionFromLocator, samePosition, snippet, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "../src/sync";
+import { afterKeptOpening, afterReset, decide, openingPlan, otherToCompare, positionFromLocator, samePosition, snippet, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "../src/sync";
 
 function position(p: Partial<Position> = {}): Position {
   const href = p.href ?? "chapter12.xhtml";
@@ -124,8 +124,8 @@ describe("opening at the place this browser kept, before Dropbox answers", () =>
   const kept = position({ deviceName: "Web", progression: 0.3, totalProgression: 0.3, timestamp: 5000 });
 
   it("stays when Dropbox has the same or nothing newer", () => {
-    expect(afterKeptOpening(file({ [WEB_DEVICE_ID]: kept }), "b", kept, false)).toEqual({ moveTo: null, ask: null });
-    expect(afterKeptOpening(null, "b", kept, false)).toEqual({ moveTo: null, ask: null });
+    expect(afterKeptOpening(file({ [WEB_DEVICE_ID]: kept }), "b", kept, false)).toEqual({ moveTo: null, ask: null, restart: false });
+    expect(afterKeptOpening(null, "b", kept, false)).toEqual({ moveTo: null, ask: null, restart: false });
   });
 
   it("moves to Web's place from another browser while no page was turned", () => {
@@ -145,6 +145,29 @@ describe("opening at the place this browser kept, before Dropbox answers", () =>
     const old = position({ deviceName: "Web", href: "chapter3.xhtml", progression: 0.1, totalProgression: 0.1, timestamp: 1000 });
     const further = position({ deviceName: "Web", href: "chapter30.xhtml", progression: 0.5, totalProgression: 0.9, timestamp: 6000 });
     const boox = position({ deviceName: "Boox", href: "chapter20.xhtml", progression: 0.2, totalProgression: 0.7, timestamp: 4000 });
-    expect(afterKeptOpening(file({ [WEB_DEVICE_ID]: old, "boox-id": boox }), "b", further, false)).toEqual({ moveTo: null, ask: null });
+    expect(afterKeptOpening(file({ [WEB_DEVICE_ID]: old, "boox-id": boox }), "b", further, false)).toEqual({ moveTo: null, ask: null, restart: false });
+  });
+});
+
+describe("a book started over on a phone (Mark as unread, 2026-10-13)", () => {
+  const kept = position({ deviceName: "Web", progression: 0.3, totalProgression: 0.3, timestamp: 5000 });
+  const boox = position({ deviceName: "Boox", href: "chapter20.xhtml", totalProgression: 0.7, timestamp: 4000 });
+  const reset = (positions: Record<string, Position>, at: number): SyncFile => ({ bookId: "b", positions, reset: { at } });
+
+  it("leaves out every place from before it", () => {
+    expect(afterReset(reset({ [WEB_DEVICE_ID]: kept, "boox-id": boox }, 6000))!.positions).toEqual({});
+    expect(afterReset(reset({ [WEB_DEVICE_ID]: kept, "boox-id": boox }, 4500))!.positions).toEqual({ [WEB_DEVICE_ID]: kept });
+    expect(openingPlan(reset({ [WEB_DEVICE_ID]: kept, "boox-id": boox }, 6000))).toEqual({ start: null, ask: null });
+  });
+
+  it("opens at the start instead of the place this browser kept", () => {
+    expect(afterKeptOpening(reset({ [WEB_DEVICE_ID]: kept, "boox-id": boox }, 6000), "b", kept, false)).toEqual({ moveTo: null, ask: null, restart: true });
+    // A page turned here since: nothing moves.
+    expect(afterKeptOpening(reset({ "boox-id": boox }, 6000), "b", kept, true).restart).toBe(false);
+  });
+
+  it("goes to where another device read after it", () => {
+    const later = position({ deviceName: "Boox", href: "chapter2.xhtml", totalProgression: 0.05, timestamp: 7000 });
+    expect(afterKeptOpening(reset({ "boox-id": later }, 6000), "b", kept, false)).toEqual({ moveTo: later, ask: null, restart: false });
   });
 });

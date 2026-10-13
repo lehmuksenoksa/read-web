@@ -24,6 +24,19 @@ export interface SyncFile {
   [other: string]: unknown;
 }
 
+/** When the book was started over (Mark as unread on a phone, 2026-10-13); 0 if never. */
+export function resetAt(file: object | null): number {
+  const at = ((file as { reset?: { at?: unknown } } | null)?.reset)?.at;
+  return typeof at === "number" ? at : 0;
+}
+
+/** Without the places saved before the book was started over: they don't count on any device. */
+export function afterReset<T extends { positions?: Record<string, { timestamp?: number }> }>(file: T | null): T | null {
+  const at = resetAt(file);
+  if (!file || !at || !file.positions) return file;
+  return { ...file, positions: Object.fromEntries(Object.entries(file.positions).filter(([, p]) => (p.timestamp ?? 0) > at)) };
+}
+
 /** The web's entry in the sync files: one device, "Web", whichever browser it is. */
 export const WEB_DEVICE_ID = "web";
 export const WEB_DEVICE_NAME = "Web";
@@ -83,7 +96,8 @@ export interface OpeningPlan {
  * Opening a book on the web: at Web's own place; a book never read here opens at the furthest
  * place another device reached; when another device is further on, it asks.
  */
-export function openingPlan(file: SyncFile | null, dismissedAt: number | null = null): OpeningPlan {
+export function openingPlan(whole: SyncFile | null, dismissedAt: number | null = null): OpeningPlan {
+  const file = afterReset(whole);
   const positions = file?.positions ?? {};
   const mine = positions[WEB_DEVICE_ID] ?? null;
   const others = Object.entries(positions).filter(([id]) => id !== WEB_DEVICE_ID).map(([, p]) => p);
@@ -111,11 +125,17 @@ export function withKeptPlace(file: SyncFile | null, bookId: string, kept: Posit
  * page if no page was turned yet; another device further on is asked about, as at any opening.
  */
 export function afterKeptOpening(
-  file: SyncFile | null, bookId: string, kept: Position, moved: boolean, dismissedAt: number | null = null,
-): { moveTo: Position | null; ask: Position | null } {
+  whole: SyncFile | null, bookId: string, kept: Position, moved: boolean, dismissedAt: number | null = null,
+): { moveTo: Position | null; ask: Position | null; restart: boolean } {
+  const file = afterReset(whole);
+  // Started over on a phone since this browser kept its place: as if it had none.
+  if (kept.timestamp <= resetAt(whole)) {
+    const plan = openingPlan(file, dismissedAt);
+    return { moveTo: moved ? null : plan.start, ask: plan.ask, restart: !moved && !plan.start };
+  }
   const theirs = file?.positions[WEB_DEVICE_ID] ?? null;
   const moveTo = !moved && theirs && theirs.timestamp > kept.timestamp && !samePosition(theirs, kept) ? theirs : null;
-  return { moveTo, ask: openingPlan(withKeptPlace(file, bookId, moveTo ?? kept), dismissedAt).ask };
+  return { moveTo, ask: openingPlan(withKeptPlace(file, bookId, moveTo ?? kept), dismissedAt).ask, restart: false };
 }
 
 /** The first words, cut at a word boundary. */

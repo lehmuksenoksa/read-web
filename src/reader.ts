@@ -618,6 +618,11 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
         if (closed) return;
         const next = afterKeptOpening(withCurrent(file), id, kept, moved, dismissedAt);
         if (next.moveTo) goThere(next.moveTo, true);
+        // Started over on a phone (Mark as unread): back to the start, and this browser forgets its place.
+        if (next.restart && book) {
+          void keepValue(`place:${id}`, null);
+          goTo(book.publication.readingOrder.items[0]?.href ?? "");
+        }
         if (next.ask) ask(next.ask);
       }).catch(() => undefined);
     } else {

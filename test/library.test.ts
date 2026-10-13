@@ -123,3 +123,12 @@ describe("the Library after another device read", () => {
     expect(withSyncTimes(books, [sync(hash("a"), "2026-10-09T08:00:00Z")])).toBeNull();
   });
 });
+
+describe("progress after a book was started over", () => {
+  it("counts only places from after the reset", () => {
+    const positions = { boox: { totalProgression: 0.6, timestamp: 100 }, s23: { totalProgression: 0.05, timestamp: 300 } };
+    expect(furthest({ positions })).toBe(0.6);
+    expect(furthest({ positions, reset: { at: 200 } })).toBe(0.05);
+    expect(furthest({ positions, reset: { at: 400 } })).toBe(0);
+  });
+});

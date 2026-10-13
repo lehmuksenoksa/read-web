@@ -2,6 +2,7 @@
 
 import type { FileEntry } from "./dropbox";
 import { SYNC_FOLDER } from "./paths";
+import { afterReset } from "./sync";
 
 /** One entry of `/Apps/Read/Sync/library.json`, as the S23 and the Boox write it. */
 export interface IndexEntry {
@@ -118,8 +119,9 @@ export function searchBooks(books: LibraryBook[], query: string): LibraryBook[] 
 }
 
 /** The furthest point any device has reached in a book, from its sync file. */
-export function furthest(syncFile: { positions?: Record<string, { totalProgression?: number }> } | null): number {
-  return Math.max(0, ...Object.values(syncFile?.positions ?? {}).map(p => p.totalProgression ?? 0));
+export function furthest(syncFile: { positions?: Record<string, { totalProgression?: number; timestamp?: number }>; reset?: unknown } | null): number {
+  // Places from before the book was started over (Mark as unread) don't count.
+  return Math.max(0, ...Object.values(afterReset(syncFile)?.positions ?? {}).map(p => p.totalProgression ?? 0));
 }
 
 /** A Library row: a book, or a series of two or more books (grouped). */
