@@ -4,6 +4,7 @@
 
 import { EpubNavigator, EpubPreferences, type EpubNavigatorListeners } from "@readium/navigator";
 import { Locator, LocatorLocations } from "@readium/shared";
+import { ChapterEdge, touchOnward, type Ends } from "./chapterEdge";
 import { applyLook, type Appearance, type FontChoice, type PageFont } from "./appearance";
 import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
@@ -31,6 +32,8 @@ export interface ReaderProps {
   path: string;
   /** For the browser tab only ("Read: Mage Tank 5"); the page itself shows no title. */
   title: string;
+  /** The book's sync file as just uploaded with Web's place: the Library's progress follows. */
+  onSaved?: (syncText: string) => void;
 }
 
 /** The book in [root] (the pane beside the Library); returns how to close it, its place saved first. */
@@ -89,7 +92,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     for (let attempt = 0; attempt < 3; attempt++) {
       const remote = await dropbox.readText(syncFilePath(id));
       try {
-        await dropbox.writeText(syncFilePath(id), withWebPlace(remote?.text ?? null, id, place), remote?.rev ?? null);
+        const text = withWebPlace(remote?.text ?? null, id, place);
+        await dropbox.writeText(syncFilePath(id), text, remote?.rev ?? null);
+        props.onSaved?.(text);
         return;
       } catch (e) {
         if (!(e instanceof RevConflict)) throw e;
@@ -140,15 +145,47 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     moved = true;
     anchor = null;
   };
+  /** Scrolling: which ends of the chapter are in view; null when the page can't be read. */
+  const chapterEnds = (): Ends | null => {
+    const wnd = frameWindow();
+    const el = wnd?.document.scrollingElement;
+    if (!wnd || !el) return null;
+    return { top: el.scrollTop <= 0, bottom: el.scrollTop + wnd.innerHeight >= el.scrollHeight - 2 };
+  };
   /** Scrolling: a screen down or up; past the chapter's end or start, the next or previous chapter. */
   const scrollScreen = (forward: boolean) => {
     const wnd = frameWindow();
     const el = wnd?.document.scrollingElement;
-    if (!wnd || !el) return turn(forward);
-    const atEnd = forward ? el.scrollTop + wnd.innerHeight >= el.scrollHeight - 2 : el.scrollTop <= 0;
-    if (atEnd) return turn(forward);
+    const ends = chapterEnds();
+    if (!wnd || !el || !ends) return turn(forward);
+    if (forward ? ends.bottom : ends.top) return turn(forward);
     userScrolled();
     el.scrollBy({ top: (forward ? 0.9 : -0.9) * wnd.innerHeight, behavior: "instant" });
+  };
+  /** Scrolling with the wheel or touchpad: a new scroll past a chapter's end goes on into the next one. */
+  const edge = new ChapterEdge();
+  const onWheel = (e: WheelEvent) => {
+    userScrolled();
+    if (!mountedScroll) return;
+    const ends = chapterEnds();
+    if (!ends) return;
+    const px = e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? window.innerHeight : 1);
+    const onward = edge.wheel(px, ends, performance.now());
+    if (onward) turn(onward === "next");
+  };
+  /** The same with a finger on a touch screen. */
+  let touchBegan: { y: number; ends: Ends } | null = null;
+  const onTouchStart = (e: TouchEvent) => {
+    const ends = mountedScroll ? chapterEnds() : null;
+    touchBegan = ends && e.touches.length === 1 ? { y: e.touches[0].clientY, ends } : null;
+  };
+  const onTouchEnd = (e: TouchEvent) => {
+    const began = touchBegan;
+    touchBegan = null;
+    const ends = began ? chapterEnds() : null;
+    if (!began || !ends) return;
+    const onward = touchOnward(began.y - e.changedTouches[0].clientY, began.ends, ends);
+    if (onward) turn(onward === "next");
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") return closePanels();
@@ -443,8 +480,10 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const listeners: Partial<EpubNavigatorListeners> = {
     frameLoaded: (wnd: Window) => {
       wnd.addEventListener("keydown", onKey);
-      wnd.addEventListener("wheel", userScrolled, { passive: true });
+      wnd.addEventListener("wheel", onWheel, { passive: true });
       wnd.addEventListener("touchmove", userScrolled, { passive: true });
+      wnd.addEventListener("touchstart", onTouchStart, { passive: true });
+      wnd.addEventListener("touchend", onTouchEnd, { passive: true });
       swipes(wnd.document.documentElement, swiped);
     },
     positionChanged: (locator: Locator) => {
@@ -453,8 +492,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       showPlace();
       if (moved) scheduleUpload();
     },
-    tap: e => clickTurn(e.x),
-    click: e => clickTurn(e.x),
+    tap: () => pageClicked(),
+    click: () => pageClicked(),
     // Links to other sites aren't followed from a book.
     handleLocator: () => true,
   };
@@ -471,16 +510,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     const frame = nav?._cframes.find(f => f != null) as { window?: Window } | undefined;
     return frame?.window ?? null;
   };
-  const clickTurn = (x: number) => {
-    // A click on the page with a panel open only closes the panel; a scrolling page isn't turned by clicks.
-    if (!contents.hidden || !aa.hidden) {
-      closePanels();
-      return true;
-    }
-    if (mountedScroll) return true;
-    const width = (page.clientWidth || 1) * window.devicePixelRatio;
-    if (x < width / 3) turn(false);
-    else if (x > (width * 2) / 3) turn(true);
+  /** A click or tap on the text never turns the page: the ‹ › beside it do (2026-10-13). It closes an open panel. */
+  const pageClicked = () => {
+    if (!contents.hidden || !aa.hidden) closePanels();
     return true;
   };
 

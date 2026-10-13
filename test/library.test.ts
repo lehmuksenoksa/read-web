@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry } from "../src/dropbox";
-import { furthest, lastReadBook, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem, stillKnown, booksToFetch } from "../src/library";
+import { furthest, lastReadBook, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem, stillKnown, booksToFetch, withSyncTimes } from "../src/library";
 
 const hash = (c: string) => c.repeat(64);
 const file = (name: string, id: string, folder = "/Books"): FileEntry => ({ path: `${folder}/${name}`, pathLower: `${folder}/${name}`.toLowerCase(), name, contentHash: id, size: 1, modified: "2026-10-01T10:00:00Z" });
@@ -107,5 +107,19 @@ describe("books fetched in the background", () => {
   it("are the three read last on any device that this browser doesn't have", () => {
     expect(booksToFetch(books, new Set(), null).map(b => b.id)).toEqual(["b", "d", "a"]);
     expect(booksToFetch(books, new Set(["d"]), "b").map(b => b.id)).toEqual(["a"]);
+  });
+});
+
+describe("the Library after another device read", () => {
+  const files = [file("Emma.epub", hash("a")), file("Twig_1.epub", hash("b"))];
+  const books = libraryBooks(files, {}, [sync(hash("a"), "2026-10-09T08:00:00Z")]);
+
+  it("takes the new times of changed and new sync files", () => {
+    const next = withSyncTimes(books, [sync(hash("a"), "2026-10-13T08:00:00Z"), sync(hash("b"), "2026-10-13T09:00:00Z")]);
+    expect(next?.map(b => [b.lastRead, b.hasSyncFile])).toEqual([["2026-10-13T08:00:00Z", true], ["2026-10-13T09:00:00Z", true]]);
+  });
+
+  it("is null when nothing changed, keeping the rows as they are", () => {
+    expect(withSyncTimes(books, [sync(hash("a"), "2026-10-09T08:00:00Z")])).toBeNull();
   });
 });

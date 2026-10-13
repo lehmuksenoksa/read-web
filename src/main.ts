@@ -2,7 +2,7 @@ import "./style.css";
 import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
 import { Dropbox } from "./dropbox";
-import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, stillKnown, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
+import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, stillKnown, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
 import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
 import { BOOKS_FOLDER, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { showReader } from "./reader";
@@ -191,6 +191,20 @@ async function showApp() {
     }
     return p;
   };
+  /** A book's progress now known (Web just saved its place): its row shows it at once. */
+  const showProgress = (id: string, p: number) => {
+    const book = books.find(b => b.id === id);
+    if (!book) return;
+    known.set(id, { at: book.lastRead, p });
+    progress.set(id, Promise.resolve(p));
+    saveLibrary();
+    const row = list.querySelector<HTMLElement>(`.row[data-id="${id}"]`);
+    if (!row || book.read) return;
+    const cell = row.querySelector<HTMLElement>(".p");
+    const bar = row.querySelector<HTMLElement>(".line i");
+    if (cell) cell.textContent = p > 0 ? `${Math.round(p * 100)}%` : "";
+    if (bar) bar.style.width = `${Math.round(p * 100)}%`;
+  };
   // A row's progress is read when it comes into view: the line under it and "38%" (or "Read").
   const seen = new IntersectionObserver(entries => {
     for (const entry of entries) {
@@ -267,7 +281,10 @@ async function showApp() {
       await closeReader?.();
       closeReader = null;
       if (currentId !== book.id) return;
-      closeReader = await showReader(pane, { dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title });
+      closeReader = await showReader(pane, {
+        dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title,
+        onSaved: text => showProgress(book.id, furthest(JSON.parse(text))),
+      });
     }).catch(() => undefined); // One book that fails to open doesn't stop the next.
     return opening;
   };
@@ -302,6 +319,22 @@ async function showApp() {
   progress = new Map();
   saveLibrary();
   render();
+  // Back to this tab after a while: other devices may have read meanwhile, and their progress shows.
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState === "hidden") {
+      hiddenAt = Date.now();
+      return;
+    }
+    if (Date.now() - hiddenAt < RECHECK_AFTER_MS || !currentToken()) return;
+    const syncFiles = await api.listFolder(SYNC_FOLDER, false).catch(() => null);
+    const next = syncFiles && withSyncTimes(books, syncFiles);
+    if (!next) return;
+    books = next;
+    progress = new Map();
+    saveLibrary();
+    render();
+  });
   // Another device may have read another book since: the page starts with that one, unless a book was picked meanwhile.
   if (!currentId || startedWith) startWithLastRead();
   // Then, quietly, the books read last that this browser doesn't have yet, one at a time.
@@ -314,6 +347,9 @@ async function showApp() {
     }
   });
 }
+
+/** Back to the tab after this long away, the Library looks for other devices' reading. */
+const RECHECK_AFTER_MS = 60_000;
 
 /** The Library as this browser last saw it (WEB.md → Kept in this browser). */
 interface KeptLibrary {

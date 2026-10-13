@@ -64,6 +64,23 @@ export function libraryBooks(files: FileEntry[], index: Record<string, IndexEntr
   return books;
 }
 
+/**
+ * The books with their sync files' times from a new listing of the sync folder (another device read
+ * meanwhile); null when nothing changed.
+ */
+export function withSyncTimes(books: LibraryBook[], syncFiles: FileEntry[]): LibraryBook[] | null {
+  const synced = new Map(syncFiles.map(f => [f.pathLower, f.modified]));
+  let changed = false;
+  const next = books.map(book => {
+    const syncPath = `${SYNC_FOLDER}/${book.id}.json`.toLowerCase();
+    const lastRead = synced.get(syncPath) ?? null;
+    if (lastRead === book.lastRead && synced.has(syncPath) === book.hasSyncFile) return book;
+    changed = true;
+    return { ...book, lastRead, hasSyncFile: synced.has(syncPath) };
+  });
+  return changed ? next : null;
+}
+
 /** Sorting ignores a leading "The", "A" or "An", as the app does. */
 function sortKey(text: string | null): string {
   return (text ?? "").replace(/^(the|a|an)\s+/i, "").toLocaleLowerCase();
