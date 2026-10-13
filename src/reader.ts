@@ -166,8 +166,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
           scrollScreen(false);
           break;
         case "ArrowRight": case "ArrowLeft":
+          // Scrolling, ← → do nothing: they'd jump a whole chapter (2026-10-13).
           e.preventDefault();
-          turn(e.key === "ArrowRight");
           break;
       }
       return;
@@ -492,6 +492,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     for (const [arrow, width] of [[left, beside.left], [right, beside.right]] as const) {
       arrow.style.flex = `0 0 ${width}px`;
       arrow.style.minWidth = "0";
+      // Scrolling, ‹ › aren't there (they'd jump a whole chapter); their space stays, so the text doesn't move.
+      arrow.style.visibility = look.scroll ? "hidden" : "";
+      arrow.disabled = look.scroll;
     }
     applyLook(look);
   };
