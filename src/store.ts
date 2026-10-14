@@ -147,6 +147,19 @@ export async function keptFile(path: string, fetch: () => Promise<Uint8Array | n
   return bytes;
 }
 
+/** Drops this browser's copies of [paths]. */
+export async function forgetFiles(paths: string[]): Promise<void> {
+  try {
+    const d = await db();
+    if (!d) return;
+    const tx = d.transaction(FILES, "readwrite");
+    for (const path of new Set(paths)) tx.objectStore(FILES).delete(path.toLowerCase());
+    await new Promise<void>(resolve => { tx.oncomplete = tx.onerror = tx.onabort = () => resolve(); });
+  } catch {
+    // Unavailable: nothing kept to drop.
+  }
+}
+
 export function keptValue<T>(key: string): Promise<T | undefined> {
   return read<T>(VALUES, key);
 }

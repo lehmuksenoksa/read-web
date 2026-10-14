@@ -1,7 +1,7 @@
 // Web's own looks (WEB.md, 2026-10-12): kept in Dropbox in Web's setup file, in the app's format
 // (settings/Looks.kt) plus the web's column count, and turned into Readium's page settings the way
-// the app does (reader/ReaderPreferences.kt). Aa changes what you see; Looks saves and uses looks,
-// with the app's rules (SPEC → Display settings).
+// the app does (reader/ReaderPreferences.kt). Aa's changes make Custom, as on the phones: Looks
+// saves it under a name, puts it in a look's place, or removes it (SPEC → Display settings).
 
 import { TextAlignment, type IEpubPreferences } from "@readium/navigator";
 
@@ -60,12 +60,21 @@ export function withDefaults(look: Partial<Look> & { id: string }): Look {
   return { ...DEFAULT, name: look.id, ...look } as Look;
 }
 
-/** Web's setup (`/Apps/Read/Sync/devices/Web/setup.json`): its looks, the one in use, what you see, the Library's grouping. */
+/** Custom's id: Aa's changes, kept until saved, replaced or removed (the app's Looks.CUSTOM_ID). */
+export const CUSTOM_ID = "custom";
+export const CUSTOM_NAME = "Custom";
+
+/** Web's setup (`/Apps/Read/Sync/devices/Web/setup.json`): its looks, the one in use, Custom, the fonts, the Library's grouping. */
 export interface Setup {
   looks: Look[];
+  /** A saved look's id, or [CUSTOM_ID] while Custom is in use. */
   lookId: string;
-  /** What you see when it differs from the look in use (Aa's changes); null: the look itself. */
-  page: Look | null;
+  /** Aa's changes: one Custom at a time; changing another look makes a new one. */
+  custom: Look | null;
+  /** The look Custom was made from: where Custom › Remove goes back to. */
+  customFrom: string | null;
+  /** Downloaded fonts removed from this list (their files stay in Dropbox; Download brings them back). */
+  removedFonts: string[];
   /** Series of two or more books are one row in the Library. */
   groupSeries: boolean;
   /** The Library shows as a sidebar beside the reader (false: hidden). */
@@ -75,18 +84,38 @@ export interface Setup {
   version: 1;
 }
 
-export const DEFAULT_SETUP: Setup = { looks: WEB_LOOKS, lookId: "office", page: null, groupSeries: true, sidebar: true, sidebarWidth: 320, version: 1 };
+export const DEFAULT_SETUP: Setup = {
+  looks: WEB_LOOKS, lookId: "office", custom: null, customFrom: null, removedFonts: [], groupSeries: true, sidebar: true, sidebarWidth: 320, version: 1,
+};
+
+/** Setup as the file had it before Custom: Aa's changes were `page`. */
+type SetupFile = Partial<Setup> & { page?: Partial<Look> & { id: string } };
 
 /** The setup file's text, read leniently: anything missing or unreadable is the default. */
 export function decodeSetup(text: string | null): Setup {
   try {
-    const raw = JSON.parse(text ?? "") as Partial<Setup>;
-    const looks = (raw.looks ?? []).filter(l => l && typeof l.id === "string").map(withDefaults);
+    const raw = JSON.parse(text ?? "") as SetupFile;
+    const looks = (raw.looks ?? []).filter(l => l && typeof l.id === "string" && l.id !== CUSTOM_ID).map(withDefaults);
     if (!looks.length) return DEFAULT_SETUP;
+    const saved = looks.some(l => l.id === raw.lookId) ? raw.lookId! : looks[0].id;
+    let custom = raw.custom && typeof raw.custom === "object" ? asCustom(withDefaults({ ...raw.custom, id: CUSTOM_ID })) : null;
+    let customFrom = typeof raw.customFrom === "string" ? raw.customFrom : null;
+    let lookId = raw.lookId === CUSTOM_ID && custom ? CUSTOM_ID : saved;
+    // An older file's changes to the look in use are Custom now.
+    if (!custom && raw.page && typeof raw.page.id === "string") {
+      const page = withDefaults(raw.page);
+      if (differs(page, looks.find(l => l.id === saved)!)) {
+        custom = asCustom(page);
+        customFrom = saved;
+        lookId = CUSTOM_ID;
+      }
+    }
     return {
       looks,
-      lookId: looks.some(l => l.id === raw.lookId) ? raw.lookId! : looks[0].id,
-      page: raw.page && typeof raw.page.id === "string" ? withDefaults(raw.page) : null,
+      lookId,
+      custom,
+      customFrom,
+      removedFonts: Array.isArray(raw.removedFonts) ? raw.removedFonts.filter(f => typeof f === "string") : [],
       groupSeries: raw.groupSeries !== false,
       sidebar: raw.sidebar !== false,
       sidebarWidth: sidebarWidth(raw.sidebarWidth ?? SIDEBAR.normal),
@@ -129,45 +158,121 @@ export function besideText(paneWidth: number, margins: number, position: TextPos
   return { left: spare / 2, right: spare / 2 };
 }
 
-export function savedLook(setup: Setup): Look {
+const asCustom = (look: Look): Look => ({ ...look, id: CUSTOM_ID, name: CUSTOM_NAME });
+
+/** Two looks differ in more than their names. */
+function differs(a: Look, b: Look): boolean {
+  return JSON.stringify({ ...a, id: "", name: "" }) !== JSON.stringify({ ...b, id: "", name: "" });
+}
+
+export function customInUse(setup: Setup): boolean {
+  return setup.lookId === CUSTOM_ID && setup.custom != null;
+}
+
+/** What you see: Custom while it's in use, else the look in use. */
+export function shown(setup: Setup): Look {
+  if (customInUse(setup)) return setup.custom!;
   return setup.looks.find(l => l.id === setup.lookId) ?? setup.looks[0];
 }
 
-/** What you see: Aa's changes, else the look in use. */
-export function shown(setup: Setup): Look {
-  return setup.page ?? savedLook(setup);
+/** The look a new Custom comes from, or Custom's own: the name Save as… suggests. */
+function baseName(setup: Setup): string {
+  const from = customInUse(setup) ? setup.customFrom : setup.lookId;
+  return setup.looks.find(l => l.id === from)?.name ?? "Look";
 }
 
-/** What you see differs from the look in use (its name aside): the look shows "changed". */
-export function isChanged(setup: Setup): boolean {
-  if (!setup.page) return false;
-  const saved = savedLook(setup);
-  return JSON.stringify({ ...setup.page, id: saved.id, name: saved.name }) !== JSON.stringify(saved);
-}
-
-/** Aa: what you see changes; the saved look doesn't. */
+/**
+ * Aa: Custom changes; the saved looks don't. A change to a saved look makes Custom from it (the
+ * previous Custom goes); a change that leaves the look as it is makes nothing.
+ */
 export function edit(setup: Setup, change: Partial<Look>): Setup {
-  const page = { ...shown(setup), ...change };
-  return { ...setup, page: JSON.stringify(page) === JSON.stringify(savedLook(setup)) ? null : page };
+  const next = { ...shown(setup), ...change };
+  if (customInUse(setup)) return { ...setup, custom: asCustom(next) };
+  if (!differs(next, shown(setup))) return setup;
+  return { ...setup, custom: asCustom(next), customFrom: shown(setup).id, lookId: CUSTOM_ID };
 }
 
-/** Using a look: what you see becomes it. */
+/** Using a look (or Custom): what you see becomes it. Custom stays among the looks until changed again. */
 export function useLook(setup: Setup, id: string): Setup {
-  return setup.looks.some(l => l.id === id) ? { ...setup, lookId: id, page: null } : setup;
+  if (id === CUSTOM_ID) return setup.custom ? { ...setup, lookId: CUSTOM_ID } : setup;
+  return setup.looks.some(l => l.id === id) ? { ...setup, lookId: id } : setup;
 }
 
 /** "Office 2", "Office 3"… not taken by another look (the app's saveName). */
 export function saveName(base: string, looks: Look[]): string {
   const stem = base.replace(/ \d+$/, "").trim() || "Look";
-  for (let n = 2; ; n++) if (!looks.some(l => l.name === `${stem} ${n}`)) return `${stem} ${n}`;
+  for (let n = 2; ; n++) if (!looks.some(l => sameName(l.name, `${stem} ${n}`))) return `${stem} ${n}`;
 }
 
-/** + Save as new look: what you see, under a new name, in use. */
-export function saveAsNew(setup: Setup): Setup {
+/** Custom › Save as…'s suggestion: the look it came from, numbered. */
+export function suggestedName(setup: Setup): string {
+  return saveName(baseName(setup), setup.looks);
+}
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The look already called [name] (any case), which Save as… would replace. */
+export function lookNamed(setup: Setup, name: string): Look | null {
+  return setup.looks.find(l => sameName(l.name, name)) ?? null;
+}
+
+function newId(looks: Look[]): string {
   let n = 1;
-  while (setup.looks.some(l => l.id === `look${n}`)) n++;
-  const look = { ...shown(setup), id: `look${n}`, name: saveName(savedLook(setup).name, setup.looks) };
-  return { ...setup, looks: [...setup.looks, look], lookId: look.id, page: null };
+  while (looks.some(l => l.id === `look${n}`)) n++;
+  return `look${n}`;
+}
+
+/** Custom › Save as…: Custom becomes a look named [name] (a name taken replaces that look), in use. */
+export function saveCustomAs(setup: Setup, name: string): Setup {
+  const clean = name.trim();
+  if (!setup.custom || !canSaveAs(clean)) return setup;
+  const taken = lookNamed(setup, clean);
+  if (taken) return replaceWithCustom(setup, taken.id);
+  const look = { ...setup.custom, id: newId(setup.looks), name: clean };
+  return { ...setup, looks: [...setup.looks, look], lookId: look.id, custom: null, customFrom: null };
+}
+
+/** A look's Replace with Custom: the look takes Custom's settings (its name stays) and is used; Custom goes. */
+export function replaceWithCustom(setup: Setup, id: string): Setup {
+  const custom = setup.custom;
+  if (!custom || !setup.looks.some(l => l.id === id)) return setup;
+  const looks = setup.looks.map(l => l.id === id ? { ...custom, id: l.id, name: l.name } : l);
+  return { ...setup, looks, lookId: id, custom: null, customFrom: null };
+}
+
+export interface RemovedCustom { custom: Look; from: string | null; inUse: boolean }
+
+/** Custom › Remove: Custom goes; if it was in use, the look it came from is (or the first). */
+export function removeCustom(setup: Setup): { setup: Setup; removed: RemovedCustom } | null {
+  if (!setup.custom) return null;
+  const inUse = customInUse(setup);
+  const back = setup.looks.some(l => l.id === setup.customFrom) ? setup.customFrom! : setup.looks[0].id;
+  return {
+    setup: { ...setup, custom: null, customFrom: null, lookId: inUse ? back : setup.lookId },
+    removed: { custom: setup.custom, from: setup.customFrom, inUse },
+  };
+}
+
+/** Undo of Custom › Remove (a Custom made meanwhile is the newer one and stays). */
+export function restoreCustom(setup: Setup, removed: RemovedCustom): Setup {
+  if (setup.custom) return setup;
+  return { ...setup, custom: removed.custom, customFrom: removed.from, lookId: removed.inUse ? CUSTOM_ID : setup.lookId };
+}
+
+/** A name Save as… can use: not empty, not Custom's (a look's name replaces that look). */
+export function canSaveAs(name: string): boolean {
+  return name.trim() !== "" && !sameName(name, CUSTOM_NAME);
+}
+
+/** A look can take [name]: Save as…'s rule, and no other look has it. */
+export function canRename(setup: Setup, id: string, name: string): boolean {
+  const taken = lookNamed(setup, name);
+  return canSaveAs(name) && (!taken || taken.id === id);
+}
+
+export function renameLook(setup: Setup, id: string, name: string): Setup {
+  if (!canRename(setup, id, name)) return setup;
+  return { ...setup, looks: setup.looks.map(l => l.id === id ? { ...l, name: name.trim() } : l) };
 }
 
 /** Why a look can't be removed, or null: the look in use and the last one stay. */
@@ -186,15 +291,43 @@ export function removeLook(setup: Setup, id: string): { setup: Setup; removed: L
 
 /** Undo: the look back where it was (a look saved meanwhile with its id keeps it; this one gets a new one). */
 export function restoreLook(setup: Setup, removed: Look, index: number): Setup {
-  let look = removed;
-  if (setup.looks.some(l => l.id === look.id)) {
-    let n = 1;
-    while (setup.looks.some(l => l.id === `look${n}`)) n++;
-    look = { ...look, id: `look${n}` };
-  }
+  const look = setup.looks.some(l => l.id === removed.id) ? { ...removed, id: newId(setup.looks) } : removed;
   const looks = [...setup.looks];
   looks.splice(Math.min(index, looks.length), 0, look);
   return { ...setup, looks };
+}
+
+// --- Fonts kept in the list ---
+
+/** Bookerly and Literata are always there; the downloaded ones can be removed from the list. */
+export const BUILT_IN_FONTS = ["Bookerly", "Literata"];
+
+/** The sans fonts (the catalogue's kinds, FontCatalog.kt); everything else is listed under Serif. */
+export const SANS_FONTS = new Set(["Jost", "Atkinson Hyperlegible Next", "IBM Plex Sans", "Figtree"]);
+
+/**
+ * Remove: [family] goes from Text's list (its files stay in Dropbox); the looks and Custom that
+ * used it use Bookerly. Returns which did, for Undo.
+ */
+export function removeFont(setup: Setup, family: string): { setup: Setup; switched: string[] } | null {
+  if (BUILT_IN_FONTS.includes(family) || setup.removedFonts.includes(family)) return null;
+  const switched = [...setup.looks, ...(setup.custom ? [setup.custom] : [])].filter(l => l.font === family).map(l => l.id);
+  const swap = (l: Look) => l.font === family ? { ...l, font: "Bookerly" } : l;
+  return {
+    setup: { ...setup, looks: setup.looks.map(swap), custom: setup.custom && swap(setup.custom), removedFonts: [...setup.removedFonts, family] },
+    switched,
+  };
+}
+
+/** Undo of Remove, or Download of a removed font: back in the list (Undo: and in the looks that had it). */
+export function restoreFont(setup: Setup, family: string, switched: string[] = []): Setup {
+  const back = (l: Look) => switched.includes(l.id) && l.font === "Bookerly" ? { ...l, font: family } : l;
+  return {
+    ...setup,
+    looks: setup.looks.map(back),
+    custom: setup.custom && back(setup.custom),
+    removedFonts: setup.removedFonts.filter(f => f !== family),
+  };
 }
 
 // --- Steps (the app's DisplaySteps) ---
@@ -205,8 +338,8 @@ export const STEPS = {
   fontSize: { min: 0.6, max: 2.5, step: 0.1, def: 1.0 },
   margins: { min: 0, max: 3, step: 0.25, def: 1.0 },
   lineHeight: { min: 1, max: 2, step: 0.1, def: 1.5 },
-  letterSpacing: { min: 0, max: 0.5, step: 0.05, def: 0 },
-  wordSpacing: { min: 0, max: 1, step: 0.1, def: 0 },
+  letterSpacing: { min: 0, max: 0.2, step: 0.01, def: 0 },
+  wordSpacing: { min: 0, max: 0.5, step: 0.05, def: 0 },
   paragraphSpacing: { min: 0, max: 2, step: 0.25, def: 0.5 },
   paragraphIndent: { min: 0, max: 3, step: 0.5, def: 1.0 },
 } satisfies Record<string, Steps>;

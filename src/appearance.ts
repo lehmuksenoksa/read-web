@@ -6,16 +6,10 @@ import { RevConflict, type Dropbox } from "./dropbox";
 import { CATALOGUE, fontIndex, fontIndexName, googleCssUrl, parseGoogleCss, type FontIndex } from "./fonts";
 import { BOOKERLY_FILES, decodeSetup, DEFAULT_SETUP, hex, pageBackground, pageText, weightsOf, type FontFileFace, type Look, type Setup } from "./looks";
 import { FONTS_FOLDER, fontPath, WEB_SETUP_PATH } from "./paths";
-import { keepValue, keptFile, keptValue } from "./store";
+import { forgetFiles, keepValue, keptFile, keptValue } from "./store";
 
 /** Setup changes go to Dropbox this long after the last one. */
 const SAVE_DELAY_MS = 1500;
-
-export interface FontChoice {
-  family: string;
-  /** Where it comes from, when not the page's own (unused for now). */
-  from: string | null;
-}
 
 export interface PageFont {
   /** The family name declared for the page (Literata when the look's font isn't available). */
@@ -111,19 +105,23 @@ export class Appearance {
     }
   }
 
-  /** The fonts the page can use: Bookerly (when it's in Dropbox), Literata, those downloaded; and the catalogue's others. */
-  async fontChoices(): Promise<{ ready: FontChoice[]; toDownload: string[] }> {
+  /**
+   * The fonts the page can use: Bookerly (when it's in Dropbox), Literata, those downloaded and not
+   * [removed]; and the catalogue's others, to download.
+   */
+  async fontChoices(removed: string[]): Promise<{ ready: string[]; toDownload: string[] }> {
     const [bookerly, downloaded] = await Promise.all([this.bookerlyFiles(), this.downloaded()]);
-    const ready: FontChoice[] = [...(bookerly ? [{ family: "Bookerly", from: null }] : []), { family: "Literata", from: null }];
-    for (const family of downloaded.keys()) ready.push({ family, from: null });
-    return { ready, toDownload: CATALOGUE.filter(f => !downloaded.has(f)) };
+    const ready = [...(bookerly ? ["Bookerly"] : []), "Literata", ...[...downloaded.keys()].filter(f => !removed.includes(f))];
+    return { ready, toDownload: CATALOGUE.filter(f => !ready.includes(f)) };
   }
 
   /**
    * Download: [family]'s files from Google Fonts (the only time the page reaches Google), added to
-   * `/Apps/Read/Fonts/` with their list last, so a font is there only when it's whole.
+   * `/Apps/Read/Fonts/` with their list last, so a font is there only when it's whole. A font
+   * removed from the list is still there: nothing is fetched.
    */
   async download(family: string): Promise<void> {
+    if ((await this.downloaded()).has(family)) return;
     const css = await fetch(googleCssUrl(family), { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer" });
     if (!css.ok) throw new Error(`Google Fonts: ${css.status}`);
     const faces = parseGoogleCss(await css.text());
@@ -136,6 +134,13 @@ export class Appearance {
     }));
     await this.api.addFile(fontPath(fontIndexName(family)), new TextEncoder().encode(JSON.stringify(index)));
     this.downloadedLoad = null;
+  }
+
+  /** Remove: this browser's copies of [family]'s files go (Dropbox's stay). */
+  async forget(family: string): Promise<void> {
+    this.pageFonts.delete(family);
+    const index = (await this.downloaded()).get(family);
+    if (index) await forgetFiles(index.faces.map(f => fontPath(f.file)));
   }
 
   /** The look's font for the book's pages: `@font-face` rules pointing at in-memory copies. */

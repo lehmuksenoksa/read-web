@@ -5,12 +5,14 @@
 import { EpubNavigator, EpubPreferences, type EpubNavigatorListeners } from "@readium/navigator";
 import { Locator, LocatorLocations } from "@readium/shared";
 import { ChapterEdge, touchOnward, type Ends } from "./chapterEdge";
-import { applyLook, type Appearance, type FontChoice, type PageFont } from "./appearance";
+import { applyLook, type Appearance, type PageFont } from "./appearance";
 import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
+import { CATALOGUE } from "./fonts";
 import {
-  argb, cantRemove, edit, hex, isChanged, besideText, textWidth, pageBackground, pageText, preferences, removeLook, restoreLook, saveAsNew,
-  shown, step, stepOptional, STEPS, stepWeight, useLook, weightName, type Look, type Setup, type TextPosition, type Steps,
+  argb, BUILT_IN_FONTS, canRename, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, besideText, lookNamed, textWidth, pageBackground, pageText,
+  preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, SANS_FONTS,
+  saveCustomAs, shown, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightName, type Look, type Setup, type TextPosition, type Steps,
 } from "./looks";
 import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
@@ -51,12 +53,14 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const aaButton = h("button", { class: "icon tool aa", title: "Aa", "aria-label": "Aa", "aria-expanded": "false" }, "Aa");
   props.tools.replaceChildren(contentsButton, aaButton);
   const contents = h("div", { class: "toc", hidden: true });
-  const aa = h("div", { class: "panel", hidden: true });
+  const aa = h("div", { class: "panel aapanel", hidden: true });
+  const lookMenu = h("div", { class: "panel menu lookmenu", hidden: true });
   root.replaceChildren(
     h("div", { class: "rbar" }),
     h("div", { class: "stage" }, left, h("div", { class: "pagebox" }, page), right),
     contents,
     aa,
+    lookMenu,
     prompt,
     status,
   );
@@ -76,7 +80,6 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   /** The chapter Readium shows scrolls (the look's Page: Scroll) instead of turning pages. */
   let mountedScroll = false;
   let aaTab: AaTab = "Text";
-  let fontChoices: { ready: FontChoice[]; toDownload: string[] } | null = null;
   /** Fonts being downloaded now. */
   const downloading = new Set<string>();
   let undoTimer: number | undefined;
@@ -191,7 +194,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (onward) turn(onward === "next");
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") return closePanels();
+    if (e.key === "Escape") return lookMenu.hidden ? closePanels() : void (lookMenu.hidden = true);
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
@@ -296,6 +299,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   // --- Panels ---
 
   const closePanels = () => {
+    lookMenu.hidden = true;
     contents.hidden = true;
     aa.hidden = true;
     contentsButton.setAttribute("aria-expanded", "false");
@@ -312,7 +316,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const onOutside = (e: MouseEvent) => {
     // The click's path as it was: a panel redrawn by the click no longer holds what was clicked.
     const path = e.composedPath();
-    if ([contents, aa, contentsButton, aaButton, prompt].some(el => path.includes(el))) return;
+    if (!path.includes(lookMenu)) lookMenu.hidden = true;
+    if ([lookMenu, contents, aa, contentsButton, aaButton, prompt].some(el => path.includes(el))) return;
     closePanels();
   };
   document.addEventListener("click", onOutside);
@@ -347,14 +352,17 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
 
   const change = (patch: Partial<Look>) => appearance.update(edit(setup, patch));
 
+  const lab = (text: string) => h("div", { class: "lab" }, text);
   const stepper = (label: string, value: string, down: (() => void) | null, up: (() => void) | null) =>
     h("div", { class: "r" }, label, h("span", { class: "st" },
-      h("button", { "aria-label": `${label} down`, disabled: !down, onclick: () => down?.() }, "−"),
+      h("button", { "aria-label": `${label} down`, disabled: !down, onclick: () => down?.() }, icon(ICONS.minus)),
       h("i", {}, value),
-      h("button", { "aria-label": `${label} up`, disabled: !up, onclick: () => up?.() }, "+")));
-  const choice = (label: string, options: { name: string; on: boolean; pick: () => void }[]) =>
-    h("div", { class: "r" }, label, h("span", { class: "st" },
-      ...options.map(o => h("button", { class: `opt${o.on ? " on" : ""}`, "aria-pressed": String(o.on), onclick: o.pick }, o.name))));
+      h("button", { "aria-label": `${label} up`, disabled: !up, onclick: () => up?.() }, icon(ICONS.plus))));
+  const icons = (label: string, options: { name: string; icon: string; on: boolean; pick: () => void }[]) =>
+    h("div", { class: "r" }, label, h("span", { class: "seg", role: "group", "aria-label": label },
+      ...options.map(o => h("button", { class: o.on ? "on" : "", title: o.name, "aria-label": o.name, "aria-pressed": String(o.on), onclick: o.pick }, icon(o.icon)))));
+  const switchRow = (label: string, on: boolean, set: (on: boolean) => void) =>
+    h("div", { class: "r" }, label, h("button", { class: `switch${on ? " on" : ""}`, role: "switch", "aria-checked": String(on), "aria-label": label, onclick: () => set(!on) }));
   const stepped = (label: string, key: "fontSize" | "margins" | "lineHeight" | "letterSpacing" | "wordSpacing", format: (v: number) => string) => {
     const look = shown(setup);
     const steps: Steps = STEPS[key];
@@ -370,27 +378,59 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       value != null ? () => change({ [key]: stepOptional(steps, value, false) }) : null,
       value == null || value < steps.max - 1e-9 ? () => change({ [key]: stepOptional(steps, value, true) }) : null);
   };
+  const colourRow = (key: string, label: string, value: number, set: (color: number) => void) => {
+    const input = h("input", { type: "color", value: hex(value), "aria-label": label });
+    input.addEventListener("input", () => set(argb(input.value)));
+    return h("div", { class: "r" }, label,
+      h("label", { class: "colour", "data-colour": key }, h("span", { class: "hex" }, hex(value).toUpperCase()), h("span", { class: "dot", style: `background:${hex(value)}` }, input)));
+  };
+  const colours = (look: Look) => ({ background: pageBackground(look), text: pageText(look) });
+
+  const fontRow = (family: string, look: Look, ready: string[], toDownload: string[]) => {
+    if (ready.includes(family)) {
+      const inUse = family === look.font;
+      const removable = !inUse && !BUILT_IN_FONTS.includes(family);
+      return h("div", {
+        class: `r font${inUse ? " inuse" : ""}`, role: "button", tabindex: "0", "aria-pressed": String(inUse),
+        onclick: () => change({ font: family }),
+        onkeydown: (e: Event) => { if ((e as KeyboardEvent).key === "Enter") change({ font: family }); },
+      }, h("span", { class: "nm" }, family),
+      inUse ? h("span", { class: "ck" }, icon(ICONS.check))
+        : removable ? h("button", { class: "rm", onclick: (e: Event) => { e.stopPropagation(); removeFontNow(family); } }, "Remove") : null);
+    }
+    if (!toDownload.includes(family)) return null;
+    return h("div", { class: "r font off" }, h("span", { class: "nm" }, family), downloading.has(family)
+      ? h("span", { class: "dl busy" }, "Downloading…")
+      : h("button", { class: "dl", onclick: () => void download(family) }, "Download"));
+  };
 
   const fillAa = async () => {
     const look = shown(setup);
+    // Colour: changed where it is, so a colour picker being dragged stays open.
+    const colourShown = aaTab === "Colour" ? aa.querySelectorAll<HTMLElement>("[data-colour]") : null;
+    if (colourShown?.length) {
+      const now = colours(look);
+      for (const el of colourShown) {
+        const value = hex(now[el.dataset.colour as "background" | "text"]);
+        el.querySelector(".hex")!.textContent = value.toUpperCase();
+        (el.querySelector(".dot") as HTMLElement).style.background = value;
+        const input = el.querySelector("input")!;
+        if (document.activeElement !== input) input.value = value;
+      }
+      return;
+    }
     const tabs = h("div", { class: "tabs" }, ...(["Text", "Layout", "Colour", "Looks"] as AaTab[]).map(tab =>
-      h("button", { class: tab === aaTab ? "cur" : "", onclick: () => { aaTab = tab; void fillAa(); } }, tab)));
+      h("button", { class: tab === aaTab ? "cur" : "", onclick: () => { aaTab = tab; aa.replaceChildren(); void fillAa(); } }, tab)));
     let body: HTMLElement;
     switch (aaTab) {
       case "Text": {
-        const choices = fontChoices ??= await appearance.fontChoices();
-        const font = await appearance.font(look.font);
+        const [{ ready, toDownload }, font] = await Promise.all([appearance.fontChoices(setup.removedFonts), appearance.font(look.font)]);
+        const listed = [...BUILT_IN_FONTS, ...CATALOGUE, ...ready.filter(f => !BUILT_IN_FONTS.includes(f) && !CATALOGUE.includes(f))];
+        const rows = (sans: boolean) => listed.filter(f => SANS_FONTS.has(f) === sans).map(f => fontRow(f, look, ready, toDownload));
         body = h("div", { class: "sec" },
-          h("div", { class: "lab" }, "Font"),
-          ...choices.ready.map(f => h("button", {
-            class: `r${f.family === look.font ? " sel" : ""}`,
-            onclick: () => change({ font: f.family }),
-          }, f.family, f.family === look.font ? h("span", { class: "v" }, "✓") : null)),
-          ...(choices.toDownload.length ? [h("div", { class: "lab" }, "From Google Fonts")] : []),
-          ...choices.toDownload.map(family => h("div", { class: "r" }, family, downloading.has(family)
-            ? h("span", { class: "v small" }, "Downloading…")
-            : h("button", { class: "dl", onclick: () => void download(family) }, "Download"))),
-          h("div", { class: "lab" }, "Size and weight"),
+          lab("Serif"), ...rows(false),
+          lab("Sans"), ...rows(true),
+          lab("Size and weight"),
           stepped("Size", "fontSize", v => `${Math.round(v * 100)}%`),
           stepper("Weight", weightName(look.fontWeight),
             stepWeight(font.weights, look.fontWeight, false) !== look.fontWeight ? () => change({ fontWeight: stepWeight(font.weights, look.fontWeight, false) }) : null,
@@ -399,68 +439,63 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       }
       case "Layout":
         body = h("div", { class: "sec" },
-          choice("Page", [
-            { name: "1 column", on: !look.scroll && look.columns === 1, pick: () => change({ columns: 1, scroll: false }) },
-            { name: "2 columns", on: !look.scroll && look.columns === 2, pick: () => change({ columns: 2, scroll: false }) },
-            { name: "Scroll", on: look.scroll, pick: () => change({ scroll: true }) },
+          lab("Page"),
+          icons("Columns", [
+            { name: "1 column", icon: ICONS.columns1, on: !look.scroll && look.columns === 1, pick: () => change({ columns: 1, scroll: false }) },
+            { name: "2 columns", icon: ICONS.columns2, on: !look.scroll && look.columns === 2, pick: () => change({ columns: 2, scroll: false }) },
+            { name: "Scroll", icon: ICONS.scroll, on: look.scroll, pick: () => change({ scroll: true }) },
           ]),
+          icons("Position", ([["left", "Left", ICONS.posLeft], ["centre", "Centre", ICONS.posCentre], ["right", "Right", ICONS.posRight]] as [TextPosition, string, string][])
+            .map(([p, name, glyph]) => ({ name, icon: glyph, on: look.position === p, pick: () => change({ position: p }) }))),
           stepped("Line spacing", "lineHeight", v => v.toFixed(1)),
           stepped("Margins", "margins", fixed),
-          choice("Position", (["left", "centre", "right"] as TextPosition[]).map(p => ({
-            name: p === "left" ? "Left" : p === "centre" ? "Centre" : "Right",
-            on: look.position === p,
-            pick: () => change({ position: p }),
-          }))),
-          choice("Alignment", [
-            { name: "Justified", on: look.justify, pick: () => change({ justify: true }) },
-            { name: "Left", on: !look.justify, pick: () => change({ justify: false }) },
-          ]),
+          lab("Paragraphs"),
+          switchRow("Justify", look.justify, on => change({ justify: on })),
+          switchRow("Hyphenation", look.hyphens, on => change({ hyphens: on })),
           optional("Paragraph spacing", "paragraphSpacing"),
           optional("First-line indent", "paragraphIndent"),
-          choice("Hyphenation", [
-            { name: "On", on: look.hyphens, pick: () => change({ hyphens: true }) },
-            { name: "Off", on: !look.hyphens, pick: () => change({ hyphens: false }) },
-          ]),
+          lab("Spacing"),
           stepped("Letter spacing", "letterSpacing", v => v.toFixed(2)),
-          stepped("Word spacing", "wordSpacing", v => v.toFixed(1)));
+          stepped("Word spacing", "wordSpacing", v => v.toFixed(2)));
         break;
       case "Colour": {
-        const colourRow = (label: string, value: number, set: (color: number) => void) => {
-          const input = h("input", { type: "color", value: hex(value), "aria-label": label });
-          input.addEventListener("input", () => set(argb(input.value)));
-          return h("label", { class: "r" }, label, h("span", { class: "dotwrap" }, input));
-        };
+        const now = colours(look);
         body = h("div", { class: "sec" },
-          colourRow("Background", pageBackground(look), color => change({ background: "Custom", backgroundColor: color })),
-          colourRow("Text", pageText(look), color => change({ textColor: color })));
+          lab("Page"),
+          colourRow("background", "Background", now.background, color => change({ background: "Custom", backgroundColor: color })),
+          colourRow("text", "Text", now.text, color => change({ textColor: color })));
         break;
       }
       case "Looks": {
-        const changed = isChanged(setup);
+        const cards = [...setup.looks, ...(setup.custom ? [setup.custom] : [])];
         body = h("div", { class: "sec" },
-          h("div", { class: "lab" }, "Looks"),
-          ...setup.looks.map(l => {
-            const inUse = l.id === setup.lookId;
-            return h("div", { class: `r look${inUse ? " sel" : ""}` },
-              h("button", { class: "use", onclick: () => appearance.update(useLook(setup, l.id)) },
-                h("span", { class: "sw", style: `background:${hex(pageBackground(l))};color:${hex(pageText(l))}` }, "Aa"),
-                l.name,
-                inUse && changed ? h("span", { class: "from" }, "changed") : null),
-              inUse ? h("span", { class: "v" }, "✓") : h("button", { class: "remove", "aria-label": `Remove ${l.name}`, onclick: () => remove(l.id) }, "Remove"));
-          }),
-          h("div", { class: "btnrow" }, h("button", { class: "btn", onclick: () => appearance.update(saveAsNew(setup)) }, "+ Save as new look")));
+          h("div", { class: "lookhead" }, h("span", {}, "Click to use · right-click for options"),
+            setup.custom ? h("button", { class: "link strong", onclick: (e: Event) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); customMenu(r.right, r.bottom + 4, true); } }, "Save") : null),
+          h("div", { class: "cards" }, ...cards.map(l => h("button", {
+            class: `card${l.id === setup.lookId ? " inuse" : ""}`,
+            style: `background:${hex(pageBackground(l))};color:${hex(pageText(l))}`,
+            "aria-pressed": String(l.id === setup.lookId),
+            onclick: () => { hideMenu(); appearance.update(useLook(setup, l.id)); },
+            oncontextmenu: (e: Event) => {
+              e.preventDefault();
+              const at = e as MouseEvent;
+              if (l.id === CUSTOM_ID) customMenu(at.clientX, at.clientY);
+              else lookOptions(l.id, at.clientX, at.clientY);
+            },
+          }, h("span", { class: "s" }, "Aa"), h("span", { class: "n" }, l.name)))));
         break;
       }
     }
     aa.replaceChildren(tabs, body);
   };
-  /** Download: the font goes to Dropbox, then it's used. */
+
+  /** Download: the font goes to Dropbox (a removed one is still there), then it's used. */
   const download = async (family: string) => {
     downloading.add(family);
     void fillAa();
     try {
       await appearance.download(family);
-      fontChoices = null;
+      if (setup.removedFonts.includes(family)) appearance.update(restoreFont(setup, family));
       change({ font: family });
     } catch {
       tell(`Couldn't download ${family}. Try again later.`);
@@ -468,6 +503,74 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       downloading.delete(family);
       void fillAa();
     }
+  };
+
+  /** Remove: the font leaves the list and this browser; the looks using it use Bookerly. */
+  const removeFontNow = (family: string) => {
+    const done = removeFont(setup, family);
+    if (!done) return;
+    appearance.update(done.setup);
+    void appearance.forget(family);
+    tell(`Removed ${family}`, { label: "Undo", run: () => appearance.update(restoreFont(setup, family, done.switched)) });
+  };
+
+  // A look's options (right-click), and Custom's (right-click or Save): a small menu by the pointer.
+
+  const hideMenu = () => { lookMenu.hidden = true; };
+  const showMenu = (x: number, y: number, alignRight: boolean, ...children: (HTMLElement | null)[]) => {
+    lookMenu.replaceChildren(...children.filter((c): c is HTMLElement => c != null));
+    lookMenu.hidden = false;
+    const box = lookMenu.getBoundingClientRect();
+    const left = alignRight ? x - box.width : x;
+    lookMenu.style.left = `${Math.max(8, Math.min(left, window.innerWidth - box.width - 8))}px`;
+    lookMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - box.height - 8))}px`;
+  };
+  const item = (label: string, run: () => void) => h("button", { class: "r", onclick: run }, label);
+  /** A name to type: [label] on the button, or what [buttonLabel] says for the name typed; null when it can't be used. */
+  const nameForm = (title: string, name: string, buttonLabel: (name: string) => string | null, done: (name: string) => void, x: number, y: number) => {
+    const input = h("input", { value: name, "aria-label": title, spellcheck: "false" });
+    const button = h("button", { class: "btn primary" }, "");
+    const check = () => {
+      const label = buttonLabel(input.value);
+      button.textContent = label ?? buttonLabel(name) ?? "Save";
+      button.disabled = label == null;
+    };
+    const submit = () => { if (!button.disabled) { hideMenu(); done(input.value.trim()); } };
+    input.addEventListener("input", check);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); if (e.key === "Escape") { e.stopPropagation(); hideMenu(); } });
+    button.addEventListener("click", submit);
+    check();
+    showMenu(x, y, false, lab(title), input, h("div", { class: "btns" }, button));
+    input.focus();
+    input.select();
+  };
+  const lookOptions = (id: string, x: number, y: number) => {
+    const look = setup.looks.find(l => l.id === id);
+    if (!look) return;
+    showMenu(x, y, false,
+      lab(look.name),
+      setup.custom ? item("Replace with Custom", () => { hideMenu(); appearance.update(replaceWithCustom(setup, id)); }) : null,
+      item("Rename", () => {
+        const at = lookMenu.getBoundingClientRect();
+        nameForm("Rename", look.name, name => canRename(setup, id, name) ? "Rename" : null, name => appearance.update(renameLook(setup, id, name)), at.left, at.top);
+      }),
+      cantRemove(setup, id) ? null : item("Remove", () => { hideMenu(); remove(id); }));
+  };
+  const customMenu = (x: number, y: number, alignRight = false) => {
+    if (!setup.custom) return;
+    showMenu(x, y, alignRight,
+      lab(CUSTOM_NAME),
+      item("Save as…", () => {
+        const at = lookMenu.getBoundingClientRect();
+        nameForm("Save as", suggestedName(setup), name => !canSaveAs(name) ? null : lookNamed(setup, name) ? "Replace" : "Save", name => appearance.update(saveCustomAs(setup, name)), at.left, at.top);
+      }),
+      item("Remove", () => {
+        hideMenu();
+        const done = removeCustom(setup);
+        if (!done) return;
+        appearance.update(done.setup);
+        tell("Removed Custom", { label: "Undo", run: () => appearance.update(restoreCustom(setup, done.removed)) });
+      }));
   };
 
   const remove = (lookId: string) => {

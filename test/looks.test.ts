@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  argb, cantRemove, decodeSetup, DEFAULT_SETUP, edit, faceOfFile, fileSafe, hex, isChanged, isLight, pageText, preferences,
-  removeLook, restoreLook, saveAsNew, saveName, shown, besideText, sidebarWidth, step, stepOptional, STEPS, stepWeight, textWidth, useLook, weightsOf, WEB_LOOKS,
+  argb, canRename, canSaveAs, cantRemove, CUSTOM_ID, customInUse, decodeSetup, DEFAULT_SETUP, edit, faceOfFile, fileSafe, hex, isLight, lookNamed, pageText,
+  preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, saveCustomAs, saveName, shown,
+  besideText, sidebarWidth, step, stepOptional, STEPS, stepWeight, suggestedName, textWidth, useLook, weightsOf, WEB_LOOKS,
 } from "../src/looks";
 
 describe("Web's setup", () => {
@@ -33,29 +34,95 @@ describe("Web's setup", () => {
 });
 
 describe("Aa and Looks, with the app's rules", () => {
-  it("changes what you see, never the saved look; the look shows changed", () => {
+  it("makes Custom from the look in use; the saved look stays as it was", () => {
     const setup = edit(DEFAULT_SETUP, { fontSize: 1.2 });
-    expect(shown(setup).fontSize).toBe(1.2);
+    expect(setup.lookId).toBe(CUSTOM_ID);
+    expect(setup.customFrom).toBe("office");
+    expect(shown(setup)).toMatchObject({ id: CUSTOM_ID, name: "Custom", fontSize: 1.2 });
     expect(setup.looks[0].fontSize).toBe(1);
-    expect(isChanged(setup)).toBe(true);
-    // Changed back: no longer changed.
-    expect(isChanged(edit(setup, { fontSize: 1 }))).toBe(false);
-    expect(edit(setup, { fontSize: 1 }).page).toBeNull();
+    // Further changes change Custom, even back to how the look was.
+    const back = edit(setup, { fontSize: 1 });
+    expect(customInUse(back)).toBe(true);
+    expect(back.customFrom).toBe("office");
+    // A "change" that changes nothing makes no Custom.
+    expect(edit(DEFAULT_SETUP, { fontSize: 1 })).toBe(DEFAULT_SETUP);
   });
 
-  it("using a look makes what you see a copy of it", () => {
-    const setup = useLook(edit(DEFAULT_SETUP, { fontSize: 1.2 }), "office-dark");
-    expect(setup.lookId).toBe("office-dark");
-    expect(setup.page).toBeNull();
-    expect(useLook(setup, "gone")).toBe(setup);
+  it("keeps one Custom: using a look leaves it among the looks, changing another look replaces it", () => {
+    const custom = edit(DEFAULT_SETUP, { fontSize: 1.2 });
+    const dark = useLook(custom, "office-dark");
+    expect(dark.lookId).toBe("office-dark");
+    expect(dark.custom?.fontSize).toBe(1.2);
+    expect(useLook(dark, CUSTOM_ID).lookId).toBe(CUSTOM_ID);
+    const changed = edit(dark, { columns: 2 });
+    expect(changed.customFrom).toBe("office-dark");
+    expect(changed.custom).toMatchObject({ columns: 2, fontSize: 1, textColor: WEB_LOOKS[1].textColor });
+    expect(useLook(DEFAULT_SETUP, CUSTOM_ID)).toBe(DEFAULT_SETUP);
+    expect(useLook(dark, "gone")).toBe(dark);
   });
 
-  it("saves what you see as a new look with a free name, in use", () => {
-    const setup = saveAsNew(edit(DEFAULT_SETUP, { columns: 2 }));
-    expect(setup.looks.map(l => l.name)).toEqual(["Office", "Office dark", "Office 2"]);
-    expect(shown(setup)).toMatchObject({ name: "Office 2", columns: 2 });
-    expect(setup.page).toBeNull();
-    expect(saveName("Office 2", setup.looks)).toBe("Office 3");
+  it("saves Custom under a new name, or over the look with that name", () => {
+    const custom = edit(DEFAULT_SETUP, { columns: 2 });
+    expect(suggestedName(custom)).toBe("Office 2");
+    const saved = saveCustomAs(custom, " Wide ");
+    expect(saved.looks.map(l => l.name)).toEqual(["Office", "Office dark", "Wide"]);
+    expect(shown(saved)).toMatchObject({ name: "Wide", columns: 2 });
+    expect(saved.custom).toBeNull();
+    expect(saved.lookId).not.toBe(CUSTOM_ID);
+    // A name taken (any case) replaces that look, which keeps its id and name.
+    expect(lookNamed(custom, "office DARK")?.id).toBe("office-dark");
+    const over = saveCustomAs(custom, "office DARK");
+    expect(over.looks.map(l => l.name)).toEqual(["Office", "Office dark"]);
+    expect(shown(over)).toMatchObject({ id: "office-dark", name: "Office dark", columns: 2 });
+    expect(saveCustomAs(custom, " ")).toBe(custom);
+    expect(saveCustomAs(custom, "custom")).toBe(custom);
+    expect(canSaveAs("Custom")).toBe(false);
+  });
+
+  it("puts Custom in a look's place", () => {
+    const custom = edit(DEFAULT_SETUP, { textColor: argb("#333333") });
+    const replaced = replaceWithCustom(custom, "office-dark");
+    expect(replaced.lookId).toBe("office-dark");
+    expect(replaced.custom).toBeNull();
+    expect(shown(replaced)).toMatchObject({ id: "office-dark", name: "Office dark", textColor: argb("#333333") });
+    expect(replaceWithCustom(DEFAULT_SETUP, "office-dark")).toBe(DEFAULT_SETUP);
+  });
+
+  it("removes Custom back to the look it came from, and undoes it", () => {
+    const custom = useLook(edit(DEFAULT_SETUP, { fontSize: 1.2 }), CUSTOM_ID);
+    const done = removeCustom(custom)!;
+    expect(done.setup.custom).toBeNull();
+    expect(done.setup.lookId).toBe("office");
+    expect(restoreCustom(done.setup, done.removed)).toEqual(custom);
+    // Not in use: what you see stays.
+    const away = useLook(custom, "office-dark");
+    expect(removeCustom(away)!.setup.lookId).toBe("office-dark");
+    // The look it came from gone: the first look.
+    const gone = { ...custom, customFrom: "nothing" };
+    expect(removeCustom(gone)!.setup.lookId).toBe("office");
+    expect(removeCustom(DEFAULT_SETUP)).toBeNull();
+  });
+
+  it("renames a look, never to another look's name or Custom's", () => {
+    expect(renameLook(DEFAULT_SETUP, "office", "Desk").looks[0].name).toBe("Desk");
+    expect(canRename(DEFAULT_SETUP, "office", "OFFICE")).toBe(true);
+    expect(canRename(DEFAULT_SETUP, "office", "office dark")).toBe(false);
+    expect(canRename(DEFAULT_SETUP, "office", "Custom")).toBe(false);
+    expect(renameLook(DEFAULT_SETUP, "office", "")).toBe(DEFAULT_SETUP);
+    expect(saveName("Office 2", [...WEB_LOOKS, { ...WEB_LOOKS[0], id: "x", name: "office 2" }])).toBe("Office 3");
+  });
+
+  it("reads an older file's changes as Custom", () => {
+    const old = { looks: WEB_LOOKS, lookId: "office-dark", page: { ...WEB_LOOKS[1], fontSize: 1.4 } };
+    const setup = decodeSetup(JSON.stringify(old));
+    expect(setup.lookId).toBe(CUSTOM_ID);
+    expect(setup.customFrom).toBe("office-dark");
+    expect(shown(setup)).toMatchObject({ name: "Custom", fontSize: 1.4 });
+    expect("page" in setup).toBe(false);
+    // Unchanged: no Custom.
+    expect(decodeSetup(JSON.stringify({ ...old, page: WEB_LOOKS[1] })).custom).toBeNull();
+    // Custom in use without a Custom: the first look.
+    expect(decodeSetup(JSON.stringify({ looks: WEB_LOOKS, lookId: CUSTOM_ID })).lookId).toBe("office");
   });
 
   it("keeps the look in use and the last look; removing can be undone", () => {
@@ -82,7 +149,12 @@ describe("steps", () => {
     expect(step(STEPS.fontSize, 1, true)).toBe(1.1);
     expect(step(STEPS.fontSize, 2.5, true)).toBe(2.5);
     expect(step(STEPS.margins, 1, false)).toBe(0.75);
-    expect(step(STEPS.letterSpacing, 0.05, true)).toBe(0.1);
+    expect(step(STEPS.letterSpacing, 0.05, true)).toBe(0.06);
+    expect(step(STEPS.letterSpacing, 0.2, true)).toBe(0.2);
+    expect(step(STEPS.wordSpacing, 0.1, true)).toBe(0.15);
+    expect(step(STEPS.wordSpacing, 0.5, true)).toBe(0.5);
+    // A value from before the finer steps: back within them.
+    expect(step(STEPS.letterSpacing, 0.5, false)).toBe(0.2);
     expect(step(STEPS.lineHeight, 1.55, false)).toBe(1.4);
   });
 
@@ -158,7 +230,7 @@ describe("page and position", () => {
   it("are centre and turning pages for looks saved before them", () => {
     const setup = decodeSetup(JSON.stringify({ looks: [{ id: "a", columns: 2 }], lookId: "a" }));
     expect(shown(setup)).toMatchObject({ columns: 2, scroll: false, position: "centre" });
-    expect(isChanged(setup)).toBe(false);
+    expect(setup.custom).toBeNull();
   });
 
   it("scroll in one column, keeping the look's columns for when it turns pages again", () => {
@@ -166,5 +238,31 @@ describe("page and position", () => {
     expect(preferences(look, "Bookerly")).toMatchObject({ scroll: true, columnCount: 1 });
     expect(look.columns).toBe(2);
     expect(preferences({ ...look, scroll: false }, "Bookerly")).toMatchObject({ scroll: false, columnCount: 2 });
+  });
+});
+
+describe("fonts in Text's list", () => {
+  it("removes a downloaded font: the looks and Custom using it use Bookerly; Undo puts it back", () => {
+    const looks = [{ ...WEB_LOOKS[0], font: "Jost" }, { ...WEB_LOOKS[1], font: "Figtree" }];
+    const setup = edit({ ...DEFAULT_SETUP, looks, lookId: "office-dark" }, { fontSize: 1.2, font: "Jost" });
+    const done = removeFont(setup, "Jost")!;
+    expect(done.setup.removedFonts).toEqual(["Jost"]);
+    expect(done.setup.looks.map(l => l.font)).toEqual(["Bookerly", "Figtree"]);
+    expect(done.setup.custom?.font).toBe("Bookerly");
+    expect(done.switched).toEqual(["office", CUSTOM_ID]);
+    expect(restoreFont(done.setup, "Jost", done.switched)).toEqual(setup);
+    // Download brings it back to the list; the looks keep Bookerly.
+    const downloaded = restoreFont(done.setup, "Jost");
+    expect(downloaded.removedFonts).toEqual([]);
+    expect(downloaded.looks[0].font).toBe("Bookerly");
+  });
+
+  it("never removes Bookerly or Literata, and keeps the list in the setup file", () => {
+    expect(removeFont(DEFAULT_SETUP, "Bookerly")).toBeNull();
+    expect(removeFont(DEFAULT_SETUP, "Literata")).toBeNull();
+    const removed = removeFont(DEFAULT_SETUP, "Jost")!.setup;
+    expect(removeFont(removed, "Jost")).toBeNull();
+    expect(decodeSetup(JSON.stringify(removed)).removedFonts).toEqual(["Jost"]);
+    expect(decodeSetup(JSON.stringify({ ...removed, removedFonts: "Jost" })).removedFonts).toEqual([]);
   });
 });
