@@ -116,26 +116,51 @@ button.r:hover, .r .use:hover { background: var(--sel); }
 /* The Library as a sidebar beside the reader, like a chat list. */
 .app { display: flex; height: 100vh; overflow: hidden; }
 .sidebar { width: 320px; flex: none; position: relative; display: flex; flex-direction: column; border-right: 1px solid var(--rule); background: color-mix(in srgb, var(--tx) 3%, var(--bg)); }
-.shead { height: 52px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 20px; }
-.shead h1 { font-size: 18px; font-weight: 600; margin-right: auto; }
-.icon { width: 30px; height: 30px; border-radius: 6px; color: var(--ink2); font-size: 16px; text-align: center; }
+.shead { height: 52px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+.shead h1 { font-size: 18px; font-weight: 600; }
+.ic { display: inline-flex; flex: none; }
+.icon { width: 30px; height: 30px; border-radius: 6px; color: var(--ink2); display: inline-flex; align-items: center; justify-content: center; }
 .icon:hover, .icon[aria-expanded="true"] { background: var(--sel); color: var(--ink); }
-.sfilter { display: flex; gap: 8px; padding: 0 12px 10px 20px; flex: none; }
-.sfilter .search { flex: 1; min-width: 0; width: auto; max-width: none; font-size: 13px; padding: 6px 10px; }
-.sfilter .sel { flex: none; font-size: 13px; }
+.sfilter { margin: 0 12px 8px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: var(--ground); color: var(--ink3); flex: none; }
+.sfilter .search { flex: 1; min-width: 0; width: auto; max-width: none; border: 0; outline: 0; padding: 7px 0; font-size: 13px; background: none; }
+.sfilter:focus-within { border-color: var(--ink3); }
+/* "All books · 142" and the sort menu. */
+.lhead { display: flex; align-items: center; padding: 8px 10px 4px 20px; flex: none; position: relative; }
+.lhead .count { font-size: 12px; color: var(--ink3); margin-right: auto; }
+.panel.sortmenu { top: 38px; right: 8px; width: 210px; padding: 6px; }
+.sortmenu .lab { margin: 6px 10px 4px; }
+.sortmenu .v { display: inline-flex; color: var(--ink2); }
+.sortmenu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
 .sidebar .list { columns: auto; display: block; flex: 1; overflow-y: auto; padding: 0 8px 24px; }
-.sidebar .row { padding: 7px 12px 8px; border-radius: 6px; }
+/* The rows (2026-10-14): the title, % or Read on its line; the author; a line only while in progress;
+   a series' chevron at the right. The open book a soft box (from its indent in a series); hover an outline. */
+.sidebar .row { display: block; position: relative; z-index: 0; padding: 11px 12px 12px; font-variant-numeric: tabular-nums; }
+.sidebar .row:hover { background: none; }
+.sidebar .row .t, .sidebar .row .a { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
 .sidebar .row .t { font-size: 14px; }
-.sidebar .row .a { font-size: 12px; }
-.sidebar .row .p { font-size: 12px; padding-left: 10px; }
-.sidebar .row .line { margin-top: 6px; }
+.sidebar .row .x { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sidebar .row .a { font-size: 12px; color: var(--ink3); margin-top: 3px; }
+.sidebar .row .p { margin-left: auto; padding-left: 0; font-size: 12px; color: var(--ink3); flex: none; }
+.sidebar .row .chev { margin-left: auto; color: var(--ink3); align-self: center; display: inline-flex; }
+.sidebar .row .line { display: block; margin-top: 8px; }
+.sidebar .row .line[hidden] { display: none; }
+.sidebar .row.series .t::before { content: none; }
 .sidebar .row.child { padding-left: 28px; }
-.sidebar .row.cur { background: var(--sel); }
+.sidebar .row.cur::before, .sidebar .row:not(.series):not(.cur):hover::before, .sidebar .row:focus-visible::before {
+  content: ""; position: absolute; inset: 2px 0; border-radius: 6px; z-index: -1;
+}
+.sidebar .row.child::before { left: 18px !important; }
+.sidebar .row.cur::before { background: var(--sel); }
+.sidebar .row:not(.series):not(.cur):hover::before { border: 1px solid var(--line); }
+.sidebar .row:focus-visible { outline: none; }
+.sidebar .row:focus-visible::before { box-shadow: 0 0 0 2px var(--ink3); }
 .sidebar .note { padding: 12px 20px; }
+.sfoot { flex: none; border-top: 1px solid var(--rule); padding: 10px 12px 10px 20px; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink2); }
+.sfoot .who { margin-right: auto; display: flex; align-items: center; gap: 8px; }
 .mainwrap { flex: 1; min-width: 0; position: relative; }
 .main { position: relative; height: 100%; }
 .main .empty { position: absolute; top: 45%; width: 100%; text-align: center; }
-.showside { display: none; position: absolute; top: 14px; left: 24px; z-index: 4; }
+.showside { display: none; position: absolute; top: 11px; left: 10px; z-index: 4; }
 .app.noside .sidebar { display: none; }
 /* The sidebar's edge: drag to resize. */
 .resizer { position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; cursor: col-resize; z-index: 3; }
@@ -143,6 +168,6 @@ button.r:hover, .r .use:hover { background: var(--sel); }
 .dragging, .dragging * { cursor: col-resize !important; user-select: none; }
 .dragging iframe { pointer-events: none; }
 .app.narrow .resizer { display: none; }
-.app.noside .showside { display: block; }
+.app.noside .showside { display: inline-flex; }
 /* A narrow window: the Library opens over the page. */
 .app.narrow .sidebar { position: absolute; z-index: 7; top: 0; bottom: 0; left: 0; box-shadow: var(--shadow); max-width: 85vw; }

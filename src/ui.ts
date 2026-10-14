@@ -15,3 +15,26 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Attrs = 
   for (const child of children) if (child) el.append(child);
   return el;
 }
+
+/** A line icon from SVG markup: 16 px, drawn in the text colour. */
+export function icon(markup: string): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "ic";
+  el.setAttribute("aria-hidden", "true");
+  el.innerHTML = markup;
+  return el;
+}
+
+const svg = (body: string, size = 16, width = 1.3) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+
+/** The sidebar's icons (WEB.md → The sidebar, 2026-10-14). */
+export const ICONS = {
+  panel: svg('<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/>'),
+  search: svg('<circle cx="7" cy="7" r="4.5"/><path d="m10.4 10.4 3.4 3.4"/>'),
+  sliders: svg('<path d="M3 4.5h6M12.5 4.5H13M3 11.5h.5M7 11.5h6"/><circle cx="10.8" cy="4.5" r="1.6"/><circle cx="5.2" cy="11.5" r="1.6"/>'),
+  check: svg('<path d="m3.5 8.3 3 3 6-6.6"/>'),
+  dropbox: svg('<path d="m4.5 2.8-3 2 3 2 3.5-2zM11.5 2.8l-3.5 2 3.5 2 3-2zM1.5 8.8l3 2 3.5-2-3.5-2zM14.5 8.8l-3-2-3.5 2 3.5 2zM5 11.6l3 2 3-2-3-2z"/>'),
+  right: svg('<path d="M6 3.5 10.5 8 6 12.5"/>', 12, 2),
+  down: svg('<path d="M3.5 6 8 10.5 12.5 6"/>', 12, 2),
+};

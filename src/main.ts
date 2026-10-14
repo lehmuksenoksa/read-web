@@ -7,7 +7,7 @@ import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
 import { BOOKS_FOLDER, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { showReader } from "./reader";
 import { forgetAll, keepBook, keptBooks, keepValue, keptValue } from "./store";
-import { h } from "./ui";
+import { h, icon, ICONS } from "./ui";
 
 const root = document.getElementById("app")!;
 /** Web's setup and the fonts, read once per visit. */
@@ -20,7 +20,7 @@ let stopFollowing: (() => void) | null = null;
 // The browser tab says "Library"; a book's says "Read: <title>" (small enough to go unnoticed).
 document.title = "Library";
 
-/** Closes the sidebar's ⋯ menu on a click outside it or Esc (set while it can be open). */
+/** Closes the sidebar's sort menu on a click outside it or Esc (set while it can be open). */
 let closeMenu: ((e?: Event) => void) | null = null;
 document.addEventListener("click", e => closeMenu?.(e));
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu?.(); });
@@ -80,22 +80,25 @@ async function showApp() {
 
   const list = h("div", { class: "list" });
   const note = h("p", { class: "note muted" }, "Loading your books…");
-  const sort = h("select", { class: "sel", "aria-label": "Sort" },
-    h("option", { value: "recent" }, "Recent"), h("option", { value: "title" }, "Title"), h("option", { value: "author" }, "Author"));
-  sort.value = sortBy;
-  const search = h("input", { class: "search", type: "search", placeholder: "Search", "aria-label": "Search title or author", value: query });
-  const hideButton = h("button", { class: "icon", title: "Hide the Library", "aria-label": "Hide the Library" }, "⇤");
-  const menuButton = h("button", { class: "icon", title: "More", "aria-label": "More", "aria-expanded": "false" }, "⋯");
-  const menu = h("div", { class: "panel menu", hidden: true });
+  // WEB.md → The sidebar (2026-10-14): ◫ Library; search; "All books · 142" with sort and group; the books; Dropbox and Sign out.
+  const search = h("input", { class: "search", type: "search", placeholder: "Search title or author", "aria-label": "Search title or author", value: query });
+  const hideButton = h("button", { class: "icon", title: "Hide the Library", "aria-label": "Hide the Library" }, icon(ICONS.panel));
+  const count = h("span", { class: "count" });
+  const sortButton = h("button", { class: "icon", title: "Sort and group", "aria-label": "Sort and group", "aria-expanded": "false" }, icon(ICONS.sliders));
+  const menu = h("div", { class: "panel menu sortmenu", role: "menu", hidden: true });
+  const dropboxLabel = h("span", {}, "Dropbox");
   const handle = h("div", { class: "resizer", title: "Drag to resize; double-click for the usual width", role: "separator", "aria-orientation": "vertical", "aria-label": "Library width" });
   const side = h("aside", { class: "sidebar" },
     handle,
-    h("div", { class: "shead" }, h("h1", {}, "Library"), hideButton, menuButton),
-    h("div", { class: "sfilter" }, search, sort),
-    menu,
+    h("div", { class: "shead" }, hideButton, h("h1", {}, "Library")),
+    h("label", { class: "sfilter" }, icon(ICONS.search), search),
+    h("div", { class: "lhead" }, count, sortButton, menu),
     note,
-    list);
-  const showButton = h("button", { class: "link showside" }, "☰ Library");
+    list,
+    h("div", { class: "sfoot" },
+      h("span", { class: "who" }, icon(ICONS.dropbox), dropboxLabel),
+      h("button", { class: "link", onclick: () => void signOut(api) }, "Sign out")));
+  const showButton = h("button", { class: "icon showside", title: "Show the Library", "aria-label": "Show the Library" }, icon(ICONS.panel));
   const pane = h("section", { class: "main" }, h("p", { class: "empty muted" }, ""));
   root.replaceChildren(side, h("div", { class: "mainwrap" }, showButton, pane));
 
@@ -137,28 +140,35 @@ async function showApp() {
   stopFollowing?.();
   stopFollowing = look.onChange(next => { setup = next; applyLook(shown(next)); layout(); });
 
-  // ⋯: Group series and Sign out.
+  // Sort and group: Recent, Title or Author, and Group series.
+  const tick = (on: boolean) => h("span", { class: "v" }, on ? icon(ICONS.check) : null);
   const fillMenu = () => {
+    const choice = (by: SortBy, name: string) => h("button", {
+      class: "r", role: "menuitemradio", "aria-checked": String(sortBy === by),
+      onclick: () => { sortBy = by; fillMenu(); render(); },
+    }, name, tick(sortBy === by));
     const on = setup.groupSeries;
-    menu.replaceChildren(h("div", { class: "sec" },
+    menu.replaceChildren(
+      h("div", { class: "lab" }, "Sort"),
+      choice("recent", "Recent"), choice("title", "Title"), choice("author", "Author"),
+      h("hr"),
       h("button", {
-        class: "r", "aria-pressed": String(on),
+        class: "r", role: "menuitemcheckbox", "aria-checked": String(on),
         onclick: () => { look.update({ ...setup, groupSeries: !on }); fillMenu(); render(); },
-      }, "Group series", h("span", { class: "v" }, on ? "On" : "Off")),
-      h("button", { class: "r", onclick: () => void signOut(api) }, "Sign out")));
+      }, "Group series", tick(on)));
   };
   const closeTheMenu = () => {
     menu.hidden = true;
-    menuButton.setAttribute("aria-expanded", "false");
+    sortButton.setAttribute("aria-expanded", "false");
   };
-  menuButton.addEventListener("click", () => {
+  sortButton.addEventListener("click", () => {
     if (!menu.hidden) return closeTheMenu();
     fillMenu();
     menu.hidden = false;
-    menuButton.setAttribute("aria-expanded", "true");
+    sortButton.setAttribute("aria-expanded", "true");
   });
   closeMenu = (e?: Event) => {
-    if (!e || !e.composedPath().some(el => el === menu || el === menuButton)) closeTheMenu();
+    if (!e || !e.composedPath().some(el => el === menu || el === sortButton)) closeTheMenu();
   };
 
   // --- The books ---
@@ -199,13 +209,19 @@ async function showApp() {
     progress.set(id, Promise.resolve(p));
     saveLibrary();
     const row = list.querySelector<HTMLElement>(`.row[data-id="${id}"]`);
-    if (!row || book.read) return;
-    const cell = row.querySelector<HTMLElement>(".p");
-    const bar = row.querySelector<HTMLElement>(".line i");
-    if (cell) cell.textContent = p > 0 ? `${Math.round(p * 100)}%` : "";
-    if (bar) bar.style.width = `${Math.round(p * 100)}%`;
+    if (row && !book.read) showOn(row, p);
   };
-  // A row's progress is read when it comes into view: the line under it and "38%" (or "Read").
+  /** A book in progress: "38%" on its title line and the line under it; none until started. */
+  const showOn = (row: HTMLElement, p: number) => {
+    const cell = row.querySelector<HTMLElement>(".p");
+    const bar = row.querySelector<HTMLElement>(".line");
+    if (cell) cell.textContent = p > 0 ? `${Math.round(p * 100)}%` : "";
+    if (bar) {
+      bar.hidden = !(p > 0);
+      (bar.firstElementChild as HTMLElement).style.width = `${Math.round(p * 100)}%`;
+    }
+  };
+  // A row's progress is read when it comes into view: "38%" and the line under it ("Read" needs neither).
   const seen = new IntersectionObserver(entries => {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue;
@@ -213,12 +229,7 @@ async function showApp() {
       const row = entry.target as HTMLElement;
       const book = books.find(b => b.id === row.dataset.id);
       if (!book || book.read) continue;
-      void progressOf(book).then(p => {
-        const cell = row.querySelector<HTMLElement>(".p");
-        const line = row.querySelector<HTMLElement>(".line i");
-        if (cell) cell.textContent = p > 0 ? `${Math.round(p * 100)}%` : "";
-        if (line) line.style.width = `${Math.round(p * 100)}%`;
-      });
+      void progressOf(book).then(p => showOn(row, p));
     }
   }, { root: list });
   /** Series opened in this visit. */
@@ -228,7 +239,9 @@ async function showApp() {
   /** The book in the reader is the one the page started with, not one picked: a newer last-read book replaces it. */
   let startedWith = false;
 
-  const line = (fraction: number) => h("span", { class: "line" }, h("i", { style: `width: ${Math.round(fraction * 100)}%` }));
+  /** The line under a row: the share read, shown only while in progress. */
+  const line = (fraction: number | null) => h("span", { class: "line", hidden: fraction == null },
+    h("i", { style: `width: ${Math.round((fraction ?? 0) * 100)}%` }));
   const bookRow = (book: LibraryBook, inSeries: boolean) => {
     const byline = inSeries
       ? (book.seriesIndex != null ? `Book ${book.seriesIndex}` : book.author ?? "")
@@ -238,10 +251,9 @@ async function showApp() {
       "aria-current": book.id === currentId ? "true" : undefined,
       onclick: () => void openBook(book),
     },
-      h("span", { class: "t" }, book.title),
+      h("span", { class: "t" }, h("span", { class: "x" }, book.title), h("span", { class: "p" }, book.read ? "Read" : "")),
       h("span", { class: "a" }, byline),
-      h("span", { class: "p" }, book.read ? "Read" : ""),
-      line(book.read ? 1 : 0));
+      line(null));
   };
   const seriesRows = (item: Extract<LibraryItem, { kind: "series" }>) => {
     const key = item.name.toLocaleLowerCase();
@@ -251,20 +263,20 @@ async function showApp() {
       class: `row series${opened ? " open" : ""}`, "aria-expanded": String(opened),
       onclick: () => { if (open.has(key)) open.delete(key); else open.add(key); render(); },
     },
-      h("span", { class: "t" }, item.name),
+      h("span", { class: "t" }, h("span", { class: "x" }, item.name), h("span", { class: "chev" }, icon(opened ? ICONS.down : ICONS.right))),
       h("span", { class: "a" }, [item.author, `${item.books.length} books`, `${item.read} read`].filter(Boolean).join(" · ")),
-      h("span", { class: "p" }, all ? "Read" : ""),
-      line(item.read / item.books.length));
+      line(all || item.read === 0 ? null : item.read / item.books.length));
     return [head, ...(opened ? item.books.map(b => bookRow(b, true)) : [])];
   };
 
   const render = () => {
     const items = libraryItems(books, sortBy, query, setup.groupSeries);
+    const found = items.reduce((n, item) => n + (item.kind === "book" ? 1 : item.books.length), 0);
+    count.textContent = query.trim() ? `${found} found` : `All books · ${books.length}`;
     list.replaceChildren(...items.flatMap(item => (item.kind === "book" ? [bookRow(item.book, false)] : seriesRows(item))));
     list.querySelectorAll(".row[data-id]").forEach(el => seen.observe(el));
     if (!items.length && !note.isConnected) list.replaceChildren(h("p", { class: "note muted" }, books.length ? "No books match." : "No books in Dropbox's /Books/ yet."));
   };
-  sort.addEventListener("change", () => { sortBy = sort.value as SortBy; render(); });
   search.addEventListener("input", () => { query = search.value; render(); });
 
   /** A book into the reader: the one open before saves its place and closes first. */
@@ -308,11 +320,9 @@ async function showApp() {
     ]);
     books = libraryBooks(files, index, syncFiles);
   } catch (e) {
-    if (!kept) {
-      note.textContent = `Couldn't reach Dropbox: ${e instanceof Error ? e.message : e}`;
-      return;
-    }
-    list.before(h("p", { class: "note muted" }, "Couldn't reach Dropbox: the Library as last seen."));
+    // The footer says so; the Library as last seen stays.
+    dropboxLabel.textContent = "Dropbox: offline";
+    if (!kept) note.textContent = `Couldn't reach Dropbox: ${e instanceof Error ? e.message : e}`;
     return;
   }
   note.remove();
