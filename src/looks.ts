@@ -19,7 +19,8 @@ export interface Look {
   fontWeight: number;
   fontSize: number;
   lineHeight: number;
-  margins: number;
+  /** Characters per line (per column with two): the text's width, the same with or without the sidebar (2026-10-14). */
+  textWidth: number;
   letterSpacing: number;
   wordSpacing: number;
   /** Null: the book's own. */
@@ -32,7 +33,7 @@ export interface Look {
   columns: 1 | 2;
   /** The chapter scrolls instead of turning pages (the web's own; one column). */
   scroll: boolean;
-  /** Where the text sits when the margins leave space beside it (the web's own). */
+  /** Where the text sits in the reading pane (the web's own). */
   position: TextPosition;
 }
 
@@ -45,7 +46,7 @@ const NEAR_WHITE = 0xfff2f2f2 | 0;
 /** The app's defaults, for any field a look leaves out. */
 const DEFAULT: Omit<Look, "id" | "name"> = {
   background: "Oled", backgroundColor: BLACK, textColor: 0xffe6d8b0 | 0, font: "Bookerly", fontWeight: 400,
-  fontSize: 1.0, lineHeight: 1.5, margins: 1.0, letterSpacing: 0, wordSpacing: 0,
+  fontSize: 1.0, lineHeight: 1.5, textWidth: 70, letterSpacing: 0, wordSpacing: 0,
   paragraphSpacing: null, paragraphIndent: null, justify: true, hyphens: true, columns: 1,
   scroll: false, position: "centre",
 };
@@ -136,26 +137,37 @@ export function sidebarWidth(width: number): number {
 /** The space beside the page's arrows: the page's ‹ › take this much on each side. */
 export const ARROW_SPACE = 40;
 
+/** Readium's gutter inside the page, in pixels: twice this is the gap between two columns. */
+export const GUTTER_PX = 20;
+
+/** The page's text at size 100% (Readium's, the browser's default size). */
+export const BASE_FONT_PX = 16;
+
 /**
- * The text's width in a reading pane [paneWidth] wide: the pane less the arrows and the look's
- * margins on each side, Margins 1.0 being 8% of the pane (2026-10-12: the page had a fixed width
- * that Margins couldn't change).
+ * One character's average width in pixels: [sampleWidth] measured for [sample] in the look's font
+ * at its size, with the look's letter and word spacing (both in ems, as Readium takes them).
  */
-export function textWidth(paneWidth: number, margins: number): number {
-  const side = ARROW_SPACE + margins * 0.08 * paneWidth;
-  return Math.max(200, Math.round(paneWidth - 2 * side));
+export function charWidth(sampleWidth: number, sample: string, look: Pick<Look, "fontSize" | "letterSpacing" | "wordSpacing">): number {
+  const px = BASE_FONT_PX * look.fontSize;
+  const spaces = (sample.match(/\s/g) ?? []).length;
+  return (sampleWidth + look.letterSpacing * px * sample.length + look.wordSpacing * px * spaces) / sample.length;
 }
 
 /**
- * The space left and right of the text (with the arrows in it): even in the centre; at the left
- * or right, the arrow's space on that side and all the rest on the other (2026-10-12).
+ * Where the page goes in a reading pane [paneWidth] wide: its width (the look's characters per
+ * line in each column, with Readium's gutters) and the space left and right of it, where the ‹ ›
+ * are. A pane too narrow for it narrows the text; the arrows always keep their space when there's
+ * room. Centre: even; Left or Right: the arrow's space on that side and the rest on the other.
  */
-export function besideText(paneWidth: number, margins: number, position: TextPosition): { left: number; right: number } {
-  const spare = Math.max(0, paneWidth - textWidth(paneWidth, margins));
+export function pageLayout(paneWidth: number, look: Pick<Look, "textWidth" | "columns" | "scroll" | "position">, charPx: number): { page: number; left: number; right: number } {
+  const columns = look.scroll ? 1 : look.columns;
+  const wanted = Math.round(columns * (look.textWidth * charPx + 2 * GUTTER_PX));
+  const page = Math.max(Math.min(200, paneWidth), Math.min(wanted, paneWidth - 2 * ARROW_SPACE));
+  const spare = Math.max(0, paneWidth - page);
   const edge = Math.min(ARROW_SPACE, spare / 2);
-  if (position === "left") return { left: edge, right: spare - edge };
-  if (position === "right") return { left: spare - edge, right: edge };
-  return { left: spare / 2, right: spare / 2 };
+  if (look.position === "left") return { page, left: edge, right: spare - edge };
+  if (look.position === "right") return { page, left: spare - edge, right: edge };
+  return { page, left: spare / 2, right: spare / 2 };
 }
 
 const asCustom = (look: Look): Look => ({ ...look, id: CUSTOM_ID, name: CUSTOM_NAME });
@@ -336,7 +348,7 @@ export interface Steps { min: number; max: number; step: number; def: number }
 
 export const STEPS = {
   fontSize: { min: 0.6, max: 2.5, step: 0.1, def: 1.0 },
-  margins: { min: 0, max: 3, step: 0.25, def: 1.0 },
+  textWidth: { min: 60, max: 100, step: 5, def: 70 },
   lineHeight: { min: 1, max: 2, step: 0.1, def: 1.5 },
   letterSpacing: { min: 0, max: 0.2, step: 0.01, def: 0 },
   wordSpacing: { min: 0, max: 0.5, step: 0.05, def: 0 },
@@ -412,9 +424,6 @@ export function pageText(look: Look): number {
   return !isLight(look) && opaque === WHITE ? NEAR_WHITE : opaque;
 }
 
-/** Readium's gutter inside the page, in pixels: twice this is the gap between two columns. */
-const GUTTER_PX = 20;
-
 /** Readium's page settings for [look], its font declared as [fontFamily]. */
 export function preferences(look: Look, fontFamily: string): IEpubPreferences {
   const text = hex(pageText(look));
@@ -429,7 +438,7 @@ export function preferences(look: Look, fontFamily: string): IEpubPreferences {
     fontSize: look.fontSize,
     fontWeight: look.fontWeight,
     lineHeight: look.lineHeight,
-    // The margins are the space beside the page (textWidth); Readium keeps only a small gutter, the gap between two columns.
+    // The page is as wide as the look's text (pageLayout); Readium keeps only a small gutter, the gap between two columns.
     pageGutter: GUTTER_PX,
     letterSpacing: look.letterSpacing,
     wordSpacing: look.wordSpacing,
@@ -439,7 +448,7 @@ export function preferences(look: Look, fontFamily: string): IEpubPreferences {
     hyphens: look.hyphens,
     columnCount: look.scroll ? 1 : look.columns,
     scroll: look.scroll,
-    // No line-length limit: the page's width (the margins) decides it.
+    // No line-length limit of Readium's: the page's width (Text width) decides it.
     optimalLineLength: 40,
     minimalLineLength: 20,
     maximalLineLength: 2000,

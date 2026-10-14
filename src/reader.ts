@@ -10,7 +10,7 @@ import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
 import { CATALOGUE } from "./fonts";
 import {
-  argb, BUILT_IN_FONTS, canRename, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, besideText, lookNamed, textWidth, pageBackground, pageText,
+  argb, BASE_FONT_PX, BUILT_IN_FONTS, canRename, charWidth, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, lookNamed, pageBackground, pageLayout, pageText,
   preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, SANS_FONTS,
   saveCustomAs, shown, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightName, type Look, type Setup, type TextPosition, type Steps,
 } from "./looks";
@@ -24,6 +24,8 @@ import { h, icon, ICONS } from "./ui";
 export const UPLOAD_DELAY_MS = 4000;
 /** How long opening waits for Readium to find the place before showing the chapter as it is. */
 const GO_TIMEOUT_MS = 8000;
+/** The pages laid out again are shown this long after the last change: a window being resized, or a change in Aa. */
+const SETTLE_MS = { resize: 120, aa: 20 };
 
 type AaTab = "Text" | "Layout" | "Colour" | "Looks";
 
@@ -79,6 +81,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   let mountedColumns = 1;
   /** The chapter Readium shows scrolls (the look's Page: Scroll) instead of turning pages. */
   let mountedScroll = false;
+  /** What of the look lays out the pages, as last set up. */
+  let mountedLayout = "";
   let aaTab: AaTab = "Text";
   /** Fonts being downloaded now. */
   const downloading = new Set<string>();
@@ -126,6 +130,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (closed) return;
     closed = true;
     props.tools.replaceChildren();
+    rulerFont.remove();
+    window.clearTimeout(settleTimer);
     stopListening();
     resized.disconnect();
     window.removeEventListener("keydown", onKey);
@@ -363,7 +369,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       ...options.map(o => h("button", { class: o.on ? "on" : "", title: o.name, "aria-label": o.name, "aria-pressed": String(o.on), onclick: o.pick }, icon(o.icon)))));
   const switchRow = (label: string, on: boolean, set: (on: boolean) => void) =>
     h("div", { class: "r" }, label, h("button", { class: `switch${on ? " on" : ""}`, role: "switch", "aria-checked": String(on), "aria-label": label, onclick: () => set(!on) }));
-  const stepped = (label: string, key: "fontSize" | "margins" | "lineHeight" | "letterSpacing" | "wordSpacing", format: (v: number) => string) => {
+  const stepped = (label: string, key: "fontSize" | "textWidth" | "lineHeight" | "letterSpacing" | "wordSpacing", format: (v: number) => string) => {
     const look = shown(setup);
     const steps: Steps = STEPS[key];
     const value = look[key];
@@ -448,7 +454,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
           icons("Position", ([["left", "Left", ICONS.posLeft], ["centre", "Centre", ICONS.posCentre], ["right", "Right", ICONS.posRight]] as [TextPosition, string, string][])
             .map(([p, name, glyph]) => ({ name, icon: glyph, on: look.position === p, pick: () => change({ position: p }) }))),
           stepped("Line spacing", "lineHeight", v => v.toFixed(1)),
-          stepped("Margins", "margins", fixed),
+          stepped("Text width", "textWidth", v => String(v)),
           lab("Paragraphs"),
           switchRow("Justify", look.justify, on => change({ justify: on })),
           switchRow("Hyphenation", look.hyphens, on => change({ hyphens: on })),
@@ -623,12 +629,39 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     return true;
   };
 
-  /** The page around the book takes the look's colours too; the text takes the pane's width less the margins. */
-  const fitPage = (look: Look) => {
-    // Readium sizes the page from its parent: the box is the width the margins leave, placed by the look's position.
-    (page.parentElement as HTMLElement).style.width = `${textWidth(stage.clientWidth, look.margins)}px`;
-    const beside = besideText(stage.clientWidth, look.margins, look.position);
-    for (const [arrow, width] of [[left, beside.left], [right, beside.right]] as const) {
+  // --- The page's width: the look's characters per line, measured in its font (2026-10-14) ---
+
+  /** English prose: its average character, as a line of a book has it. */
+  const SAMPLE = "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity.";
+  /** The look's font in this page too, under its own name, only to measure it. */
+  const rulerFont = h("style", {});
+  document.head.append(rulerFont);
+  const ruler = document.createElement("canvas").getContext("2d");
+  let charPx = 0;
+  let measured = "";
+  const measure = async (look: Look, font: PageFont) => {
+    const key = [font.family, look.fontWeight, look.fontSize, look.letterSpacing, look.wordSpacing].join("|");
+    if (key === measured) return;
+    const css = font.css.replaceAll(`font-family: "${font.family}"`, 'font-family: "read-ruler"');
+    if (rulerFont.textContent !== css) rulerFont.textContent = css;
+    const spec = `${look.fontWeight} ${BASE_FONT_PX * look.fontSize}px "read-ruler"`;
+    await document.fonts.load(spec, SAMPLE).catch(() => undefined);
+    const width = ruler ? ((ruler.font = `${spec}, serif`), ruler.measureText(SAMPLE).width) : SAMPLE.length * BASE_FONT_PX * look.fontSize * 0.5;
+    charPx = charWidth(width, SAMPLE, look);
+    measured = key;
+  };
+
+  /**
+   * The page as wide as the look's text and placed by its position, the ‹ › beside it, the look's
+   * colours around it. A new width lays the pages out again: the place is held (keepPlace).
+   */
+  let pageWidth = 0;
+  const fitPage = (look: Look, settleMs = SETTLE_MS.resize) => {
+    const at = pageLayout(stage.clientWidth, look, charPx || BASE_FONT_PX * look.fontSize * 0.5);
+    if (pageWidth && at.page !== pageWidth && !mounting) keepPlace(settleMs);
+    pageWidth = at.page;
+    (page.parentElement as HTMLElement).style.width = `${at.page}px`;
+    for (const [arrow, width] of [[left, at.left], [right, at.right]] as const) {
       arrow.style.flex = `0 0 ${width}px`;
       arrow.style.minWidth = "0";
       // Scrolling, ‹ › aren't there (they'd jump a whole chapter); their space stays, so the text doesn't move.
@@ -637,6 +670,37 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     }
     applyLook(look);
   };
+
+  /**
+   * The pages laid out again (a new width, text size or spacing): the page is hidden meanwhile and
+   * comes back at the words that were at its top, not where Readium's share of the chapter lands
+   * (2026-10-14: hiding the sidebar or a change in Aa went back a page, with a flash of the
+   * chapter's start). The place is held until a page is turned, so changes never creep.
+   */
+  let settleTimer: number | undefined;
+  const heldPlace = (): Locator | null => {
+    if (!current) return null;
+    return anchor ??= Locator.deserialize(withPageTop(current.serialize() as Record<string, unknown>, currentTop)) ?? current;
+  };
+  const keepPlace = (settleMs: number) => {
+    if (!nav || !heldPlace()) return;
+    page.style.visibility = "hidden";
+    window.clearTimeout(settleTimer);
+    settleTimer = window.setTimeout(() => void settle(), settleMs);
+  };
+  const settle = async () => {
+    const at = anchor;
+    const entry = at && book ? startPosition(book.positions, at) : null;
+    if (at && entry && nav) {
+      const there = new Locator({ href: entry.href, type: at.type, title: at.title, locations: at.locations, text: at.text });
+      await Promise.race([
+        new Promise<void>(done => nav!.go(there, false, () => done())),
+        new Promise<void>(done => window.setTimeout(done, GO_TIMEOUT_MS)),
+      ]);
+    }
+    page.style.visibility = "";
+  };
+
   const stage = left.parentElement!;
   // A narrower or wider pane (the window, the sidebar): the page follows, once it has opened
   // (resizing Readium while it loads can leave it never arriving).
@@ -663,6 +727,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (!book) return false;
     const look = shown(setup);
     const font: PageFont = await appearance.font(look.font);
+    await measure(look, font);
     if (nav) {
       await nav.destroy();
       page.replaceChildren();
@@ -671,6 +736,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     mountedFont = look.font;
     mountedColumns = look.columns;
     mountedScroll = look.scroll;
+    mountedLayout = textLayout(look);
     const entry = at ? startPosition(book.positions, at) : null;
     nav = new EpubNavigator(page, book.publication, listeners as EpubNavigatorListeners, book.positions, entry ?? undefined, {
       preferences: preferences(look, font.family),
@@ -699,11 +765,15 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       if (!book || !nav) return;
       const look = shown(setup);
       if (look.font !== mountedFont || look.columns !== mountedColumns || look.scroll !== mountedScroll) {
-        anchor ??= current;
-        await mount(anchor);
+        await mount(heldPlace());
       } else {
         const font = await appearance.font(look.font);
-        fitPage(look);
+        await measure(look, font);
+        // Anything but colours and position lays the pages out again.
+        const layout = textLayout(look);
+        if (layout !== mountedLayout) keepPlace(SETTLE_MS.aa);
+        mountedLayout = layout;
+        fitPage(look, SETTLE_MS.aa);
         await nav.submitPreferences(new EpubPreferences(preferences(look, font.family)));
       }
     }).catch(() => undefined);
@@ -773,4 +843,11 @@ async function bookFile(dropbox: Dropbox, id: string, path: string): Promise<Uin
   if (!file) throw new Error("This book is no longer in Dropbox.");
   void keepBook(id, file.bytes);
   return file.bytes;
+}
+
+/** The look's settings that lay out the pages (not its colours, name or position). */
+function textLayout(look: Look): string {
+  const { id, name, background, backgroundColor, textColor, position, ...layout } = look;
+  void id; void name; void background; void backgroundColor; void textColor; void position;
+  return JSON.stringify(layout);
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   argb, canRename, canSaveAs, cantRemove, CUSTOM_ID, customInUse, decodeSetup, DEFAULT_SETUP, edit, faceOfFile, fileSafe, hex, isLight, lookNamed, pageText,
   preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, saveCustomAs, saveName, shown,
-  besideText, sidebarWidth, step, stepOptional, STEPS, stepWeight, suggestedName, textWidth, useLook, weightsOf, WEB_LOOKS,
+  charWidth, pageLayout, sidebarWidth, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightsOf, WEB_LOOKS,
 } from "../src/looks";
 
 describe("Web's setup", () => {
@@ -148,7 +148,8 @@ describe("steps", () => {
   it("move as the app's do", () => {
     expect(step(STEPS.fontSize, 1, true)).toBe(1.1);
     expect(step(STEPS.fontSize, 2.5, true)).toBe(2.5);
-    expect(step(STEPS.margins, 1, false)).toBe(0.75);
+    expect(step(STEPS.textWidth, 70, false)).toBe(65);
+    expect(step(STEPS.textWidth, 100, true)).toBe(100);
     expect(step(STEPS.letterSpacing, 0.05, true)).toBe(0.06);
     expect(step(STEPS.letterSpacing, 0.2, true)).toBe(0.2);
     expect(step(STEPS.wordSpacing, 0.1, true)).toBe(0.15);
@@ -177,7 +178,7 @@ describe("steps", () => {
 
 describe("the page", () => {
   it("gets Readium's settings as in the app, with the columns", () => {
-    const look = shown(edit(DEFAULT_SETUP, { columns: 2, margins: 1.5, justify: false, paragraphIndent: 1 }));
+    const look = shown(edit(DEFAULT_SETUP, { columns: 2, textWidth: 80, justify: false, paragraphIndent: 1 }));
     expect(preferences(look, "Bookerly")).toMatchObject({
       backgroundColor: "#ffffff", textColor: "#1f1f1f", fontFamily: "Bookerly", fontSize: 1, fontWeight: 400,
       lineHeight: 1.5, pageGutter: 20, textAlign: "left", hyphens: true, paragraphIndent: 1, paragraphSpacing: null, columnCount: 2,
@@ -198,11 +199,25 @@ describe("the page", () => {
 });
 
 describe("widths", () => {
-  it("of the text: the pane less the arrows and the margins (1.0 is 8% a side)", () => {
-    expect(textWidth(1040, 1)).toBe(794);
-    expect(textWidth(1040, 0)).toBe(960);
-    expect(textWidth(1040, 3)).toBe(461);
-    expect(textWidth(300, 3)).toBe(200);
+  it("of the text: the look's characters per line, the same in any pane wide enough", () => {
+    const look = { textWidth: 70, columns: 1 as const, scroll: false, position: "centre" as const };
+    // 70 characters of 8 px, with Readium's gutter of 20 px a side.
+    expect(pageLayout(1040, look, 8).page).toBe(600);
+    expect(pageLayout(1360, look, 8).page).toBe(600);
+    // Two columns: 70 characters each.
+    expect(pageLayout(1360, { ...look, columns: 2 }, 8).page).toBe(1200);
+    // Scrolling is one column whatever the look's columns.
+    expect(pageLayout(1360, { ...look, columns: 2, scroll: true }, 8).page).toBe(600);
+    // A pane too narrow: the text narrows, the arrows keep their space.
+    expect(pageLayout(500, look, 8)).toEqual({ page: 420, left: 40, right: 40 });
+    expect(pageLayout(150, look, 8).page).toBe(150);
+  });
+
+  it("of a character: the font's, with the look's letter and word spacing", () => {
+    const sample = "ab cd";
+    expect(charWidth(40, sample, { fontSize: 1, letterSpacing: 0, wordSpacing: 0 })).toBe(8);
+    // Letter spacing 0.05 em at 16 px adds 0.8 px a character; word spacing 0.25 em adds 4 px a space.
+    expect(charWidth(40, sample, { fontSize: 1, letterSpacing: 0.05, wordSpacing: 0.25 })).toBeCloseTo(9.6);
   });
 
   it("of the sidebar: 240 to 520 pixels, 320 to start with", () => {
@@ -215,21 +230,19 @@ describe("widths", () => {
   });
 
   it("beside the text: even in the centre; at a side, only the arrow's space there", () => {
-    // 1040 wide at 1.0: the text is 794, leaving 246.
-    expect(besideText(1040, 1, "centre")).toEqual({ left: 123, right: 123 });
-    expect(besideText(1040, 1, "left")).toEqual({ left: 40, right: 206 });
-    expect(besideText(1040, 1, "right")).toEqual({ left: 206, right: 40 });
-    // At 0 the arrows' space is all there is.
-    expect(besideText(1040, 0, "left")).toEqual({ left: 40, right: 40 });
-    // A pane too narrow for the text: nothing beside it.
-    expect(besideText(180, 3, "left")).toEqual({ left: 0, right: 0 });
+    const look = { textWidth: 70, columns: 1 as const, scroll: false };
+    expect(pageLayout(1040, { ...look, position: "centre" }, 8)).toEqual({ page: 600, left: 220, right: 220 });
+    expect(pageLayout(1040, { ...look, position: "left" }, 8)).toEqual({ page: 600, left: 40, right: 400 });
+    expect(pageLayout(1040, { ...look, position: "right" }, 8)).toEqual({ page: 600, left: 400, right: 40 });
+    // The sidebar hidden: the same page, more space beside it.
+    expect(pageLayout(1360, { ...look, position: "centre" }, 8)).toEqual({ page: 600, left: 380, right: 380 });
   });
 });
 
 describe("page and position", () => {
   it("are centre and turning pages for looks saved before them", () => {
     const setup = decodeSetup(JSON.stringify({ looks: [{ id: "a", columns: 2 }], lookId: "a" }));
-    expect(shown(setup)).toMatchObject({ columns: 2, scroll: false, position: "centre" });
+    expect(shown(setup)).toMatchObject({ columns: 2, scroll: false, position: "centre", textWidth: 70 });
     expect(setup.custom).toBeNull();
   });
 
