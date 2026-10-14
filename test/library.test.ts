@@ -12,10 +12,11 @@ describe("the Library", () => {
     [hash("a")]: { title: "Emma", author: "Jane Austen", read: true, cover: "abc" },
     [hash("d")]: { title: "Persuasion", author: "Jane Austen", hidden: true },
   };
-  const books = libraryBooks(files, index, [sync(hash("b"), "2026-10-11T08:00:00Z"), sync(hash("a"), "2026-10-09T08:00:00Z")]);
+  const all = libraryBooks(files, index, [sync(hash("b"), "2026-10-11T08:00:00Z"), sync(hash("a"), "2026-10-09T08:00:00Z")]);
+  const books = all.filter(b => !b.hidden);
 
-  it("lists the EPUBs in /Books/ with the phones' details; hidden books aren't shown", () => {
-    expect(books.map(b => b.title)).toEqual(["Emma", "Twig 1"]);
+  it("lists the EPUBs in /Books/ with the phones' details; hidden books are marked (Show › Hidden)", () => {
+    expect(all.map(b => [b.title, b.hidden])).toEqual([["Emma", false], ["Twig 1", false], ["Persuasion", true]]);
     expect(books[0]).toMatchObject({ author: "Jane Austen", read: true, cover: "abc", hasSyncFile: true, path: "/Books/Emma.epub" });
     expect(books[1]).toMatchObject({ author: null, read: false, cover: null, path: "/Books/Wildbow/Twig_1.epub" });
   });

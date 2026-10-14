@@ -2,7 +2,8 @@
 
 import type { FileEntry } from "./dropbox";
 import { SYNC_FOLDER } from "./paths";
-import { afterReset } from "./sync";
+import type { BookDetails } from "./details";
+import { afterReset, type Marks } from "./sync";
 
 /** One entry of `/Apps/Read/Sync/library.json`, as the S23 and the Boox write it. */
 export interface IndexEntry {
@@ -25,6 +26,10 @@ export interface LibraryBook {
   series: string | null;
   seriesIndex: number | null;
   read: boolean;
+  /** Hidden from the Library (Hide on any device); shown under Show › Hidden. */
+  hidden: boolean;
+  /** When a phone last saw this book's index entry change (0: not listed yet). Marks newer than this show over it. */
+  indexedAt: number;
   cover: string | null;
   /** When any device last saved a place in it (its sync file), for Recent. */
   lastRead: string | null;
@@ -38,8 +43,11 @@ export function titleFromFileName(name: string): string {
   return name.replace(/\.epub$/i, "").replace(/[_]+/g, " ").trim();
 }
 
-/** The Library's books: EPUBs in /Books/, with the index's details; hidden books aren't shown. */
-export function libraryBooks(files: FileEntry[], index: Record<string, IndexEntry>, syncFiles: FileEntry[]): LibraryBook[] {
+/**
+ * The Library's books: EPUBs in /Books/, with the index's details, the shared details file's edits
+ * over them ([details]), and hidden books marked as such.
+ */
+export function libraryBooks(files: FileEntry[], index: Record<string, IndexEntry>, syncFiles: FileEntry[], details: Record<string, BookDetails> = {}): LibraryBook[] {
   const synced = new Map(syncFiles.map(f => [f.pathLower, f.modified]));
   const seen = new Set<string>();
   const books: LibraryBook[] = [];
@@ -47,16 +55,18 @@ export function libraryBooks(files: FileEntry[], index: Record<string, IndexEntr
     if (!file.name.toLowerCase().endsWith(".epub") || !file.contentHash || seen.has(file.contentHash)) continue;
     seen.add(file.contentHash);
     const entry = index[file.contentHash];
-    if (entry?.hidden) continue;
+    const edited = details[file.contentHash];
     const syncPath = `${SYNC_FOLDER}/${file.contentHash}.json`.toLowerCase();
     books.push({
       id: file.contentHash,
       path: file.path,
-      title: entry?.title || titleFromFileName(file.name),
-      author: entry?.author ?? null,
-      series: entry?.series ?? null,
-      seriesIndex: entry?.seriesIndex ?? null,
+      title: edited?.title || entry?.title || titleFromFileName(file.name),
+      author: edited ? edited.author ?? null : entry?.author ?? null,
+      series: edited ? edited.series ?? null : entry?.series ?? null,
+      seriesIndex: edited ? edited.number ?? null : entry?.seriesIndex ?? null,
       read: entry?.read ?? false,
+      hidden: entry?.hidden ?? false,
+      indexedAt: entry?.updatedAt ?? 0,
       cover: entry?.cover ?? null,
       lastRead: synced.get(syncPath) ?? null,
       hasSyncFile: synced.has(syncPath),
@@ -116,6 +126,24 @@ export function searchBooks(books: LibraryBook[], query: string): LibraryBook[] 
     const text = [b.title, b.author, b.series].filter(Boolean).join(" ").toLocaleLowerCase();
     return words.every(w => text.includes(w));
   });
+}
+
+/** A book read to here or further counts as read when its status is Automatic (as on the phones). */
+export const READ_AT = 0.98;
+
+/**
+ * A book with the marks set on the web shown over the phones' index while they're newer than its
+ * entry (a phone then lists the book again with them). [progress]: the furthest place, when known.
+ */
+export function markedBook(book: LibraryBook, marks: Marks | undefined, progress: number | null): LibraryBook {
+  if (!marks) return book;
+  let { read, hidden } = book;
+  if (marks.hidden && marks.hidden.updatedAt > (book.indexedAt ?? 0)) hidden = marks.hidden.hidden;
+  if (marks.read && marks.read.updatedAt > (book.indexedAt ?? 0)) {
+    const started = marks.reset && marks.reset.at >= marks.read.updatedAt ? 0 : progress ?? 0;
+    read = marks.read.read ?? started >= READ_AT;
+  }
+  return read === book.read && hidden === book.hidden ? book : { ...book, read, hidden };
 }
 
 /** The furthest point any device has reached in a book, from its sync file. */

@@ -178,6 +178,32 @@ export function withWebPlace(remote: string | null, bookId: string, place: Posit
   return JSON.stringify({ ...file, positions });
 }
 
+/** A book's marks as the phones keep them (SyncFile.kt): the newer of each wins between devices. */
+export interface ReadMark { read: boolean | null; updatedAt: number }
+export interface HiddenMark { hidden: boolean; updatedAt: number }
+export interface Marks { read?: ReadMark; hidden?: HiddenMark; reset?: { at: number } }
+
+/**
+ * The sync file text with the book's menu choices put in (Mark as read / unread / Automatic, Hide /
+ * Unhide), everything else as it was. Mark as unread is a reset mark and Automatic, as on the phones.
+ */
+export function withMarks(remote: string | null, bookId: string, marks: Marks): string {
+  const file: Record<string, unknown> = remote ? JSON.parse(remote) : { bookId, positions: {}, history: [], version: 1 };
+  return JSON.stringify({ ...file, ...marks });
+}
+
+/** The marks in a sync file, as far as they're there. */
+export function marksOf(file: object | null): Marks {
+  const f = (file ?? {}) as Record<string, unknown>;
+  const read = f.read as ReadMark | null | undefined;
+  const hidden = f.hidden as HiddenMark | null | undefined;
+  return {
+    ...(read && typeof read.updatedAt === "number" ? { read } : {}),
+    ...(hidden && typeof hidden.updatedAt === "number" ? { hidden } : {}),
+    ...(resetAt(file) ? { reset: { at: resetAt(file) } } : {}),
+  };
+}
+
 /** "Chapter 3, 9%" style place for the prompt: the chapter's title when known, and the book's percentage. */
 export function placeLabel(position: Position, chapterTitle: string | null): string {
   const percent = `${Math.round(position.totalProgression * 100)}%`;

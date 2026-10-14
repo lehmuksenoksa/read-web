@@ -33,6 +33,9 @@ export const ICONS = {
   panel: svg('<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/>'),
   search: svg('<circle cx="7" cy="7" r="4.5"/><path d="m10.4 10.4 3.4 3.4"/>'),
   sliders: svg('<path d="M3 4.5h6M12.5 4.5H13M3 11.5h.5M7 11.5h6"/><circle cx="10.8" cy="4.5" r="1.6"/><circle cx="5.2" cy="11.5" r="1.6"/>'),
+  /** Android's Contents icon (ReadIcons.Contents). */
+  contents: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>',
+  more: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg>',
   check: svg('<path d="m3.5 8.3 3 3 6-6.6"/>'),
   dropbox: svg('<path d="m4.5 2.8-3 2 3 2 3.5-2zM11.5 2.8l-3.5 2 3.5 2 3-2zM1.5 8.8l3 2 3.5-2-3.5-2zM14.5 8.8l-3-2-3.5 2 3.5 2zM5 11.6l3 2 3-2-3-2z"/>'),
   right: svg('<path d="M6 3.5 10.5 8 6 12.5"/>', 12, 2),

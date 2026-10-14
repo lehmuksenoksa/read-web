@@ -70,10 +70,10 @@ button:disabled { opacity: .35; cursor: default; }
 .msg span { margin-right: auto; }
 
 /* Panels: Aa, Contents, Settings */
-.panel, .toc { position: absolute; top: 48px; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); max-height: calc(100vh - 72px); overflow-y: auto; z-index: 5; }
-.panel { right: 24px; width: min(400px, calc(100% - 32px)); padding-bottom: 16px; }
+.panel, .toc { position: absolute; top: 8px; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); max-height: calc(100vh - 72px); overflow-y: auto; z-index: 5; }
+.panel { left: 8px; width: min(400px, calc(100% - 32px)); padding-bottom: 16px; }
 .panel.menu { top: 48px; right: 12px; width: 240px; padding-bottom: 8px; }
-.toc { left: 24px; width: min(420px, calc(100% - 32px)); padding: 8px; display: flex; flex-direction: column; }
+.toc { left: 8px; width: min(420px, calc(100% - 32px)); padding: 8px; display: flex; flex-direction: column; }
 .panel[hidden], .toc[hidden] { display: none; }
 .tabs { display: flex; border-bottom: 1px solid var(--rule); padding: 0 12px; position: sticky; top: 0; background: var(--raised); }
 .tabs button { padding: 12px; color: var(--ink2); }
@@ -127,7 +127,7 @@ button.r:hover, .r .use:hover { background: var(--sel); }
 /* "All books · 142" and the sort menu. */
 .lhead { display: flex; align-items: center; padding: 8px 10px 4px 20px; flex: none; position: relative; }
 .lhead .count { font-size: 12px; color: var(--ink3); margin-right: auto; }
-.panel.sortmenu { top: 38px; right: 8px; width: 210px; padding: 6px; }
+.panel.sortmenu { top: 38px; right: 8px; left: auto; width: 210px; padding: 6px; }
 .sortmenu .lab { margin: 6px 10px 4px; }
 .sortmenu .v { display: inline-flex; color: var(--ink2); }
 .sortmenu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
@@ -155,12 +155,44 @@ button.r:hover, .r .use:hover { background: var(--sel); }
 .sidebar .row:focus-visible { outline: none; }
 .sidebar .row:focus-visible::before { box-shadow: 0 0 0 2px var(--ink3); }
 .sidebar .note { padding: 12px 20px; }
+/* A book's ⋯ (its menu) in place of % or Read while hovered; its row keeps the outline while the menu is open. */
+.sidebar .row .more { display: none; margin-left: auto; width: 24px; height: 20px; border-radius: 4px; align-items: center; justify-content: center; color: var(--ink2); flex: none; align-self: center; }
+.sidebar .row:not(.series):hover .p, .sidebar .row.menuon .p { display: none; }
+.sidebar .row:not(.series):hover .more, .sidebar .row.menuon .more { display: inline-flex; }
+.sidebar .row .more:hover { background: var(--sel); color: var(--ink); }
+.sidebar .row.menuon:not(.cur)::before { content: ""; position: absolute; inset: 2px 0; border-radius: 6px; z-index: -1; border: 1px solid var(--line); }
+.panel.bookmenu { position: fixed; top: 0; left: 0; width: 230px; padding: 6px; z-index: 20; }
+.bookmenu .lab { margin: 6px 10px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bookmenu .v { display: inline-flex; color: var(--ink2); }
+.bookmenu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
+.toast { z-index: 21; }
+/* Edit details */
+.dialog { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--tx) 18%, transparent); }
+.dialog .box { width: min(420px, calc(100% - 32px)); background: var(--raised); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 18px 20px 16px; }
+.dialog h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink3); margin-top: 10px; }
+.dialog input { font: inherit; font-size: 14px; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; }
+.dialog input:focus { outline: none; border-color: var(--ink3); }
+.dialog .two { display: flex; gap: 10px; }
+.dialog .two label:first-child { flex: 1; }
+.dialog .two label:last-child { width: 90px; }
+.dialog .btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { background: var(--ink); }
 .sfoot { flex: none; border-top: 1px solid var(--rule); padding: 10px 12px 10px 20px; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink2); }
 .sfoot .who { margin-right: auto; display: flex; align-items: center; gap: 8px; }
 .mainwrap { flex: 1; min-width: 0; position: relative; }
 .main { position: relative; height: 100%; }
 .main .empty { position: absolute; top: 45%; width: 100%; text-align: center; }
-.showside { display: none; position: absolute; top: 11px; left: 10px; z-index: 4; }
+/* Contents and Aa beside "Library", or with ◫ over the page's top left; their panels open beside the sidebar, or under these. */
+.shead .tools { margin-left: auto; display: flex; gap: 2px; }
+.floatbar { display: none; position: absolute; top: 10px; left: 10px; z-index: 4; gap: 2px; }
+.floatbar .tools { display: flex; gap: 2px; }
+.app.noside .floatbar, .app.narrow .floatbar { display: flex; }
+.app:not(.noside):not(.narrow) .floatbar .icon:first-child { display: none; }
+.app.noside .main > .panel, .app.noside .main > .toc, .app.narrow .main > .panel, .app.narrow .main > .toc { top: 50px; left: 10px; }
+.icon.tool { width: 30px; height: 30px; }
+.icon.aa { font-family: Literata, Georgia, serif; font-weight: 700; font-size: 16px; line-height: 1; letter-spacing: -.2px; }
 .app.noside .sidebar { display: none; }
 /* The sidebar's edge: drag to resize. */
 .resizer { position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; cursor: col-resize; z-index: 3; }
@@ -168,6 +200,6 @@ button.r:hover, .r .use:hover { background: var(--sel); }
 .dragging, .dragging * { cursor: col-resize !important; user-select: none; }
 .dragging iframe { pointer-events: none; }
 .app.narrow .resizer { display: none; }
-.app.noside .showside { display: inline-flex; }
+
 /* A narrow window: the Library opens over the page. */
 .app.narrow .sidebar { position: absolute; z-index: 7; top: 0; bottom: 0; left: 0; box-shadow: var(--shadow); max-width: 85vw; }

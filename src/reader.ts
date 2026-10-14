@@ -16,7 +16,7 @@ import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
 import { afterKeptOpening, openingPlan, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
-import { h } from "./ui";
+import { h, icon, ICONS } from "./ui";
 
 /** Uploads wait this long after the last page turn (the phones wait 5 s). */
 export const UPLOAD_DELAY_MS = 4000;
@@ -30,8 +30,10 @@ export interface ReaderProps {
   appearance: Appearance;
   id: string;
   path: string;
-  /** For the browser tab only ("Read: Mage Tank 5"); the page itself shows no title. */
+  /** The book's title (the page and the browser tab show none: the tab says "Read.web"). */
   title: string;
+  /** Where Contents and Aa go: the sidebar's top row, or over the page's top left (WEB.md, 2026-10-14). */
+  tools: HTMLElement;
   /** The book's sync file as just uploaded with Web's place: the Library's progress follows. */
   onSaved?: (syncText: string) => void;
 }
@@ -39,18 +41,19 @@ export interface ReaderProps {
 /** The book in [root] (the pane beside the Library); returns how to close it, its place saved first. */
 export async function showReader(root: HTMLElement, props: ReaderProps): Promise<() => Promise<void>> {
   const { dropbox, id, appearance } = props;
-  document.title = `Read: ${props.title}`;
   const status = h("div", { class: "foot" }, "Opening…");
   const prompt = h("div", { class: "msg", hidden: true });
   const page = h("div", { class: "page", id: "page" });
   const left = h("button", { class: "side left", "aria-label": "Previous page" }, "‹");
   const right = h("button", { class: "side right", "aria-label": "Next page" }, "›");
-  const contentsButton = h("button", { class: "link", "aria-expanded": "false" }, "Contents");
-  const aaButton = h("button", { class: "link", "aria-expanded": "false" }, "Aa");
+  // Android's Contents icon and its "Aa" (Literata).
+  const contentsButton = h("button", { class: "icon tool", title: "Contents", "aria-label": "Contents", "aria-expanded": "false" }, icon(ICONS.contents));
+  const aaButton = h("button", { class: "icon tool aa", title: "Aa", "aria-label": "Aa", "aria-expanded": "false" }, "Aa");
+  props.tools.replaceChildren(contentsButton, aaButton);
   const contents = h("div", { class: "toc", hidden: true });
   const aa = h("div", { class: "panel", hidden: true });
   root.replaceChildren(
-    h("div", { class: "rbar" }, h("span", { class: "spacer" }), contentsButton, aaButton),
+    h("div", { class: "rbar" }),
     h("div", { class: "stage" }, left, h("div", { class: "pagebox" }, page), right),
     contents,
     aa,
@@ -119,7 +122,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const close = async () => {
     if (closed) return;
     closed = true;
-    document.title = "Library";
+    props.tools.replaceChildren();
     stopListening();
     resized.disconnect();
     window.removeEventListener("keydown", onKey);
@@ -230,7 +233,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
 
   const showPlace = () => {
     if (!current) return;
-    status.textContent = `${Math.round((current.locations.totalProgression ?? 0) * 100)}%`;
+    // No percentage at the foot: the sidebar shows it (2026-10-14).
+    status.textContent = "";
     status.dataset.href = current.href;
     status.dataset.progression = String(current.locations.progression ?? 0);
   };
