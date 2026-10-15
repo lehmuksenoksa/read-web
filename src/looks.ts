@@ -3,6 +3,7 @@
 // the app does (reader/ReaderPreferences.kt). Aa's changes make Custom, as on the phones: Looks
 // saves it under a name, puts it in a look's place, or removes it (SPEC → Display settings).
 
+import { decodeHome, DEFAULT_HOME, type HomeSetup } from "./home";
 import { TextAlignment, type IEpubPreferences } from "@readium/navigator";
 
 export type Background = "Oled" | "Eink" | "Custom";
@@ -82,11 +83,13 @@ export interface Setup {
   sidebar: boolean;
   /** The sidebar's width, dragged by its edge (page pixels). */
   sidebarWidth: number;
+  /** Home's Library: the view, the sort, the sizes, Details' columns (WEB.md → Home). */
+  home: HomeSetup;
   version: 1;
 }
 
 export const DEFAULT_SETUP: Setup = {
-  looks: WEB_LOOKS, lookId: "office", custom: null, customFrom: null, removedFonts: [], groupSeries: true, sidebar: true, sidebarWidth: 320, version: 1,
+  looks: WEB_LOOKS, lookId: "office", custom: null, customFrom: null, removedFonts: [], groupSeries: true, sidebar: true, sidebarWidth: 320, home: DEFAULT_HOME, version: 1,
 };
 
 /** Setup as the file had it before Custom: Aa's changes were `page`. */
@@ -120,6 +123,7 @@ export function decodeSetup(text: string | null): Setup {
       groupSeries: raw.groupSeries !== false,
       sidebar: raw.sidebar !== false,
       sidebarWidth: sidebarWidth(raw.sidebarWidth ?? SIDEBAR.normal),
+      home: decodeHome(raw.home),
       version: 1,
     };
   } catch {

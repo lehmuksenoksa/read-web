@@ -34,6 +34,9 @@ export interface LibraryBook {
   /** When any device last saved a place in it (its sync file), for Recent. */
   lastRead: string | null;
   hasSyncFile: boolean;
+  /** When the file came to Dropbox, and its size (Home's Details). Missing in a Library kept before. */
+  added?: string | null;
+  size?: number | null;
 }
 
 export type SortBy = "recent" | "title" | "author";
@@ -70,6 +73,8 @@ export function libraryBooks(files: FileEntry[], index: Record<string, IndexEntr
       cover: entry?.cover ?? null,
       lastRead: synced.get(syncPath) ?? null,
       hasSyncFile: synced.has(syncPath),
+      added: file.modified || null,
+      size: file.size,
     });
   }
   return books;
@@ -152,6 +157,31 @@ export function furthest(syncFile: { positions?: Record<string, { totalProgressi
   return Math.max(0, ...Object.values(afterReset(syncFile)?.positions ?? {}).map(p => p.totalProgression ?? 0));
 }
 
+/** One device's place in a book, for Home's panel and Details' On column. */
+export interface Place {
+  device: string;
+  /** 0..1 of the whole book. */
+  p: number;
+  /** The chapter's title, when the place has one. */
+  chapter: string | null;
+  /** Epoch milliseconds. */
+  at: number;
+}
+
+type SyncPlace = { totalProgression?: number; timestamp?: number; deviceName?: string; locator?: { title?: unknown } };
+
+/** Each device's place in a sync file, newest first (places from before a reset left out). */
+export function placesOf(syncFile: { positions?: Record<string, SyncPlace>; reset?: unknown } | null): Place[] {
+  return Object.entries(afterReset(syncFile)?.positions ?? {})
+    .map(([id, p]) => ({
+      device: p.deviceName || id,
+      p: p.totalProgression ?? 0,
+      chapter: typeof p.locator?.title === "string" && p.locator.title.trim() ? p.locator.title.trim() : null,
+      at: p.timestamp ?? 0,
+    }))
+    .sort((a, b) => b.at - a.at);
+}
+
 /** A Library row: a book, or a series of two or more books (grouped). */
 export type LibraryItem =
   | { kind: "book"; book: LibraryBook }
@@ -213,6 +243,8 @@ export function lastReadBook(books: LibraryBook[]): LibraryBook | null {
 export interface KnownProgress {
   at: string | null;
   p: number;
+  /** Each device's place, newest first (kept since Home; missing in older kept ones). */
+  places?: Place[];
 }
 
 /** The kept progress while the book's sync file is unchanged since; null: read it again. */

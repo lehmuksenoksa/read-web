@@ -3,8 +3,9 @@ import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
 import { parseDetails, parseNumber, withDetails } from "./details";
 import { Dropbox, RevConflict } from "./dropbox";
-import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, markedBook, stillKnown, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
-import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
+import { createHome } from "./homeView";
+import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, markedBook, placesOf, stillKnown, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
+import { isLight, shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
 import { BOOKS_FOLDER, DETAILS_PATH, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { showReader } from "./reader";
 import { marksOf, withMarks, type Marks, type ReadMark } from "./sync";
@@ -66,6 +67,16 @@ async function signOut(api: Dropbox) {
   showSignIn("Signed out.");
 }
 
+// --- Home or Office: per browser (WEB.md → Home) ---
+
+const HOME_KEY = "read.home";
+function homeMode(): boolean {
+  try { return localStorage.getItem(HOME_KEY) === "1"; } catch { return false; }
+}
+function setHomeMode(on: boolean) {
+  try { if (on) localStorage.setItem(HOME_KEY, "1"); else localStorage.removeItem(HOME_KEY); } catch { /* This browser keeps nothing: Office. */ }
+}
+
 // --- The Library beside the reader ---
 
 let sortBy: SortBy = "recent";
@@ -88,17 +99,21 @@ async function showApp() {
   const count = h("span", { class: "count" });
   const sortButton = h("button", { class: "icon", title: "Sort and group", "aria-label": "Sort and group", "aria-expanded": "false" }, icon(ICONS.sliders));
   const menu = h("div", { class: "panel menu sortmenu", role: "menu", hidden: true });
-  const dropboxLabel = h("span", {}, "Dropbox");
+  // The footer (2026-10-15): Home (in Office) and Sign out; "Dropbox: offline" only while Dropbox is out of reach.
+  const dropboxLabel = h("span", { hidden: true }, "Dropbox: offline");
+  const homeLink = h("button", { class: "link", onclick: () => toHome() }, "Home");
+  const heading = h("h1", {}, "Library");
   const handle = h("div", { class: "resizer", title: "Drag to resize; double-click for the usual width", role: "separator", "aria-orientation": "vertical", "aria-label": "Library width" });
   const side = h("aside", { class: "sidebar" },
     handle,
-    h("div", { class: "shead" }, hideButton, h("h1", {}, "Library")),
+    h("div", { class: "shead" }, hideButton, heading),
     h("label", { class: "sfilter" }, icon(ICONS.search), search),
     h("div", { class: "lhead" }, count, sortButton, menu),
     note,
     list,
     h("div", { class: "sfoot" },
-      h("span", { class: "who" }, icon(ICONS.dropbox), dropboxLabel),
+      h("span", { class: "who" }, dropboxLabel),
+      homeLink,
       h("button", { class: "link", onclick: () => void signOut(api) }, "Sign out")));
   const showButton = h("button", { class: "icon", title: "Show the Library", "aria-label": "Show the Library" }, icon(ICONS.panel));
   // Contents and Aa (the reader puts them here): in the sidebar's top row, or over the page's top left
@@ -110,11 +125,22 @@ async function showApp() {
   root.replaceChildren(side, h("div", { class: "mainwrap" }, floating, pane));
 
   let setup: Setup = await look.setup();
+  let toastReady = false;
   /** On a narrow window the Library opens over the page now and then; it isn't saved. */
   let overlayOpen = false;
+  /** Home's full Library shows (not the reader). */
+  let homeShown = homeMode();
+  let home: ReturnType<typeof createHome> | null = null;
   const layout = () => {
     const visible = NARROW.matches ? overlayOpen : setup.sidebar;
-    root.className = `app${visible ? "" : " noside"}${NARROW.matches ? " narrow" : ""}`;
+    root.className = homeShown
+      ? `app homeon ${isLight(shown(setup)) ? "light" : "dark"}`
+      : `app${visible ? "" : " noside"}${NARROW.matches ? " narrow" : ""}`;
+    homeLink.hidden = homeMode();
+    heading.classList.toggle("tohome", homeMode());
+    heading.title = homeMode() ? "Back to the Library" : "";
+    // Messages show over whichever is showing.
+    if (toastReady) (homeShown && home ? home.el : pane.parentElement!).append(toast);
     (visible && !NARROW.matches ? sideSlot : floating).append(tools);
     side.style.width = `${setup.sidebarWidth}px`;
   };
@@ -146,7 +172,7 @@ async function showApp() {
   applyLook(shown(setup));
   layout();
   stopFollowing?.();
-  stopFollowing = look.onChange(next => { setup = next; applyLook(shown(next)); layout(); });
+  stopFollowing = look.onChange(next => { setup = next; applyLook(shown(next)); layout(); if (homeShown) home?.render(); });
 
   // Sort and group: Recent, Title or Author, and Group series.
   const tick = (on: boolean) => h("span", { class: "v" }, on ? icon(ICONS.check) : null);
@@ -221,21 +247,23 @@ async function showApp() {
     if (was != null) return Promise.resolve(was);
     let p = progress.get(book.id);
     if (!p) {
+      let places: KnownProgress["places"];
       p = api.readText(syncFilePath(book.id)).then(r => {
         const file = r ? JSON.parse(r.text) : null;
         syncMarks.set(book.id, marksOf(file));
+        places = placesOf(file);
         return furthest(file);
       }).catch(() => 0);
       progress.set(book.id, p);
-      void p.then(value => { known.set(book.id, { at: book.lastRead, p: value }); saveLibrary(); });
+      void p.then(value => { known.set(book.id, { at: book.lastRead, p: value, places }); saveLibrary(); });
     }
     return p;
   };
   /** A book's progress now known (Web just saved its place): its row shows it at once. */
-  const showProgress = (id: string, p: number) => {
+  const showProgress = (id: string, p: number, places?: KnownProgress["places"]) => {
     const book = bookById(id);
     if (!book) return;
-    known.set(id, { at: book.lastRead, p });
+    known.set(id, { at: book.lastRead, p, places: places ?? known.get(id)?.places });
     progress.set(id, Promise.resolve(p));
     saveLibrary();
     const row = list.querySelector<HTMLElement>(`.row[data-id="${id}"]`);
@@ -306,6 +334,10 @@ async function showApp() {
   };
 
   const render = () => {
+    renderSide();
+    if (homeShown) home?.render();
+  };
+  const renderSide = () => {
     const listed = books.map(marked).filter(b => !!b.hidden === showHidden);
     const items = libraryItems(listed, sortBy, query, setup.groupSeries);
     const found = items.reduce((n, item) => n + (item.kind === "book" ? 1 : item.books.length), 0);
@@ -322,6 +354,7 @@ async function showApp() {
   const toast = h("div", { class: "msg toast", hidden: true });
   root.append(bookMenu);
   pane.parentElement!.append(toast);
+  toastReady = true;
   /** The book whose menu is open: its row keeps the hover outline. */
   let menuFor: string | null = null;
   let toastTimer: number | undefined;
@@ -518,6 +551,11 @@ async function showApp() {
   /** A book into the reader: the one open before saves its place and closes first. */
   let opening = Promise.resolve();
   const openBook = (book: LibraryBook, atStart = false) => {
+    if (homeShown && !atStart) {
+      homeShown = false;
+      home?.closePanel();
+      layout();
+    }
     startedWith = atStart;
     if (book.id === currentId) return opening;
     currentId = book.id;
@@ -531,7 +569,7 @@ async function showApp() {
       if (currentId !== book.id) return;
       closeReader = await showReader(pane, {
         dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title, tools,
-        onSaved: text => showProgress(book.id, furthest(JSON.parse(text))),
+        onSaved: text => showProgress(book.id, furthest(JSON.parse(text)), placesOf(JSON.parse(text))),
       });
     }).catch(() => undefined); // One book that fails to open doesn't stop the next.
     return opening;
@@ -543,10 +581,62 @@ async function showApp() {
     else if (!currentId) pane.replaceChildren(h("p", { class: "empty muted" }, "Choose a book from the Library."));
   };
 
+  // --- Home (WEB.md → Home) ---
+
+  /** The kept facts while the book's sync file is unchanged since they were read. */
+  const knownNow = (id: string) => {
+    const book = books.find(b => b.id === id);
+    const was = known.get(id);
+    return book && was && stillKnown(was, book) != null ? was : null;
+  };
+  home = createHome({
+    books: () => books.map(marked),
+    showHidden: () => showHidden,
+    setShowHidden: on => { showHidden = on; render(); },
+    setup: () => setup,
+    update: next => look.update(next),
+    progress: id => knownNow(id)?.p ?? (books.find(b => b.id === id)?.hasSyncFile === false ? 0 : null),
+    places: id => knownNow(id)?.places ?? (books.find(b => b.id === id)?.hasSyncFile === false ? [] : null),
+    load: async book => {
+      // A kept entry from before Home has no places: read the file again.
+      if (knownNow(book.id) && !knownNow(book.id)!.places) { known.delete(book.id); progress.delete(book.id); }
+      await progressOf(book);
+    },
+    open: book => void openBook(book),
+    menu: (book, x, y) => openBookMenu(book, x, y),
+    readMark: book => {
+      const mark = newer(marks[book.id]?.read, syncMarks.get(book.id)?.read);
+      return mark?.read === true ? "read" : "auto";
+    },
+    setRead: (book, read) => void setRead(book, read),
+    markUnread: book => markUnread(book),
+    setHidden: (book, hidden) => void setHidden(book, hidden),
+    edit: book => editDetails(book),
+    signOut: () => void signOut(api),
+    offline: () => !dropboxLabel.hidden,
+    toOffice: () => toOffice(),
+  });
+  root.append(home.el);
+  const toHome = () => {
+    setHomeMode(true);
+    homeShown = true;
+    layout();
+    home!.render();
+  };
+  const toOffice = () => {
+    setHomeMode(false);
+    homeShown = false;
+    layout();
+    render();
+    if (!currentId) startWithLastRead();
+  };
+  heading.addEventListener("click", () => { if (homeMode()) toHome(); });
+  layout();
+
   if (kept) {
     note.remove();
     render();
-    startWithLastRead();
+    if (!homeShown) startWithLastRead();
   }
   try {
     const [files, index, syncFiles, details] = await Promise.all([
@@ -558,7 +648,8 @@ async function showApp() {
     books = libraryBooks(files, index, syncFiles, details);
   } catch (e) {
     // The footer says so; the Library as last seen stays.
-    dropboxLabel.textContent = "Dropbox: offline";
+    dropboxLabel.hidden = false;
+    render();
     if (!kept) note.textContent = `Couldn't reach Dropbox: ${e instanceof Error ? e.message : e}`;
     return;
   }
@@ -583,7 +674,8 @@ async function showApp() {
     render();
   });
   // Another device may have read another book since: the page starts with that one, unless a book was picked meanwhile.
-  if (!currentId || startedWith) startWithLastRead();
+  // Home starts with its Library; the reader waits for a book.
+  if (!homeShown && (!currentId || startedWith)) startWithLastRead();
   // Then, quietly, the books read last that this browser doesn't have yet, one at a time.
   void opening.then(async () => {
     const kept = new Set((await keptBooks()).map(b => b.id));
