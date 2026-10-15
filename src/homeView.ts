@@ -7,6 +7,7 @@ import {
   menuSort, moveColumn, nextInSeries, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
   type BookView, type ColumnKey, type Facts, type HomeSetup,
 } from "./home";
+import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
 import { lastReadBook, type LibraryBook, type LibraryItem, type Place, type SortBy } from "./library";
 import type { Setup } from "./looks";
 import { h, icon, ICONS } from "./ui";
@@ -35,6 +36,8 @@ export interface HomeContext {
   signOut(): void;
   offline(): boolean;
   toOffice(): void;
+  /** Add books: reads a file (its title and author, for its line), then adds it to /Books/. */
+  readFile(file: File): Promise<{ title: string | null; author: string | null; add: () => Promise<AddOutcome> }>;
 }
 
 /** The covers' colours when a book has no cover of its own. */
@@ -103,7 +106,8 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
   const zoom = h("input", { type: "range", min: "0", max: String(SIZES.length - 1), step: "1", "aria-label": "Size" });
   const zoomMore = h("button", { class: "zb", title: "Larger", "aria-label": "Larger" });
   const views = h("div", { class: "hviews", role: "tablist" });
-  const status = h("div", { class: "hstatus" }, count, h("span", { class: "grow" }), h("div", { class: "hzoom" }, zoomLess, zoom, zoomMore), views);
+  const addButton = h("button", { class: "hadd" }, "+ Add books");
+  const status = h("div", { class: "hstatus" }, count, h("span", { class: "grow" }), h("div", { class: "hzoom" }, zoomLess, zoom, zoomMore), views, addButton);
   const main = h("main", { class: "hmain" });
   const cont = h("button", { class: "hcont", hidden: true });
   const panel = h("aside", { class: "hpanel", "aria-label": "Book" });
@@ -457,6 +461,69 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     main.querySelectorAll(".tr.on").forEach(x => x.classList.remove("on"));
     if ("book" in panelFor) main.querySelector(`.tr[data-id="${panelFor.book.id}"]`)?.classList.add("on");
   };
+
+  // --- Add books (WEB.md → Home, step 2): drop EPUBs on Home or the dialog, or choose them ---
+
+  let addDialog: { el: HTMLElement; lines: HTMLElement; summary: HTMLElement } | null = null;
+  const picker = h("input", { type: "file", multiple: true, accept: ".epub,application/epub+zip", hidden: true });
+  el.append(picker);
+  const openAdd = () => {
+    if (addDialog) return addDialog;
+    const lines = h("div", { class: "addlines" });
+    const summary = h("div", { class: "addsum" });
+    const drop = h("button", { class: "adddrop" }, h("b", {}, "Drop EPUB files here"), h("span", { class: "word" }, "or choose files"));
+    const close = () => { addDialog?.el.remove(); addDialog = null; document.removeEventListener("keydown", onKey, true); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    const box = h("div", { class: "addbox", role: "dialog", "aria-modal": "true", "aria-label": "Add books" },
+      h("div", { class: "addhead" }, h("h2", {}, "Add books"), h("button", { class: "hicon", title: "Close", "aria-label": "Close", onclick: close }, svgEl(CLOSE))),
+      drop, lines, summary,
+      h("div", { class: "addbtns" }, h("button", { class: "seal", onclick: close }, "Done")));
+    const dialog = h("div", { class: "hdialog" }, box);
+    dialog.addEventListener("click", e => { if (e.target === dialog) close(); });
+    drop.addEventListener("click", () => picker.click());
+    document.addEventListener("keydown", onKey, true);
+    el.append(dialog);
+    addDialog = { el: dialog, lines, summary };
+    return addDialog;
+  };
+  /** The files one by one: a line each, "Adding…" until it's done. */
+  let adding = Promise.resolve();
+  const outcomes: AddOutcome[] = [];
+  const addFiles = (files: File[]) => {
+    const dialog = openAdd();
+    for (const file of files) {
+      const state = h("span", { class: "st" }, "Adding…");
+      const name = h("span", { class: "nm" }, h("b", {}, file.name));
+      const line = h("div", { class: "addline" }, name, state);
+      dialog.lines.append(line);
+      adding = adding.then(async () => {
+        let outcome: AddOutcome;
+        try {
+          const read = await ctx.readFile(file);
+          if (read.title) name.replaceChildren(h("b", {}, read.title), read.author ? ` · ${read.author}` : "");
+          outcome = await read.add();
+        } catch {
+          outcome = { kind: "failed" };
+        }
+        outcomes.push(outcome);
+        state.textContent = outcomeText(outcome);
+        line.classList.add(outcome.kind === "added" ? "ok" : outcome.kind === "already" ? "same" : "bad");
+        dialog.summary.textContent = addSummary(outcomes);
+      });
+    }
+  };
+  addButton.addEventListener("click", () => { outcomes.length = 0; openAdd(); });
+  picker.addEventListener("change", () => { if (picker.files?.length) addFiles([...picker.files]); picker.value = ""; });
+  const hasFiles = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+  el.addEventListener("dragover", e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer!.dropEffect = "copy"; el.classList.add("dropping"); });
+  el.addEventListener("dragleave", e => { if (e.target === el || !el.contains(e.relatedTarget as Node)) el.classList.remove("dropping"); });
+  el.addEventListener("drop", e => {
+    el.classList.remove("dropping");
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    if (!addDialog) outcomes.length = 0;
+    addFiles([...e.dataTransfer!.files]);
+  });
 
   // --- Events ---
 

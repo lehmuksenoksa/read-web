@@ -1,7 +1,7 @@
 // Dropbox through its plain HTTP API (no Dropbox library). Nothing it fetches is cached by the
 // browser (no-store), and it can only write the paths [isWritablePath] allows.
 
-import { isAddablePath, isWritablePath } from "./paths";
+import { isAddablePath, isNewBookPath, isWritablePath } from "./paths";
 
 const API = "https://api.dropboxapi.com/2";
 const CONTENT = "https://content.dropboxapi.com/2";
@@ -118,7 +118,25 @@ export class Dropbox {
     }
   }
 
+  /**
+   * Adds a book to /Books/ (Home's Add books): never over a file that's there. Its content hash, the
+   * book's id; null when a file of that name is there already.
+   */
+  async addBook(path: string, bytes: Uint8Array): Promise<string | null> {
+    if (!isNewBookPath(path)) throw new Error(`Read on the web doesn't add ${path}`);
+    try {
+      return (await this.uploadFile(path, bytes, "add")).content_hash ?? null;
+    } catch (e) {
+      if (e instanceof RevConflict) return null;
+      throw e;
+    }
+  }
+
   private async upload(path: string, body: Uint8Array, mode: unknown): Promise<string> {
+    return (await this.uploadFile(path, body, mode)).rev;
+  }
+
+  private async uploadFile(path: string, body: Uint8Array, mode: unknown): Promise<{ rev: string; content_hash?: string }> {
     const response = await this.call(`${CONTENT}/files/upload`, {
       method: "POST",
       headers: {
@@ -133,7 +151,7 @@ export class Dropbox {
       throw new Error(`Dropbox upload: ${body}`);
     }
     if (!response.ok) throw new Error(`Dropbox upload: ${response.status}`);
-    return ((await response.json()) as { rev: string }).rev;
+    return (await response.json()) as { rev: string; content_hash?: string };
   }
 
   /** Signing out: the sign-in stops working at Dropbox at once. */

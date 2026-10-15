@@ -3,9 +3,10 @@ import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
 import { parseDetails, parseNumber, withDetails } from "./details";
 import { Dropbox, RevConflict } from "./dropbox";
+import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
 import { createHome } from "./homeView";
-import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, markedBook, placesOf, stillKnown, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
-import { isLight, shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
+import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, markedBook, placesOf, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
+import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
 import { BOOKS_FOLDER, DETAILS_PATH, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { showReader } from "./reader";
 import { marksOf, withMarks, type Marks, type ReadMark } from "./sync";
@@ -134,7 +135,8 @@ async function showApp() {
   const layout = () => {
     const visible = NARROW.matches ? overlayOpen : setup.sidebar;
     root.className = homeShown
-      ? `app homeon ${isLight(shown(setup)) ? "light" : "dark"}`
+      // Home is always Dark for now (2026-10-15); Light waits for choosing the look in Home.
+      ? "app homeon dark"
       : `app${visible ? "" : " noside"}${NARROW.matches ? " narrow" : ""}`;
     homeLink.hidden = homeMode();
     heading.classList.toggle("tohome", homeMode());
@@ -218,6 +220,8 @@ async function showApp() {
 
   // The Library as this browser last saw it shows at once; Dropbox's replaces it when it comes.
   const kept = await keptValue<KeptLibrary>("library");
+  /** Books added from Home: what their EPUBs say, until a phone lists them in library.json. */
+  const addedHere: Record<string, IndexEntry> = (await keptValue<Record<string, IndexEntry>>("added")) ?? {};
   let books: LibraryBook[] = kept?.books ?? [];
   /** Each book's furthest place, with the time of the sync file it was read from: read again only when that changes. */
   const known = new Map<string, KnownProgress>(Object.entries(kept?.progress ?? {}));
@@ -615,7 +619,45 @@ async function showApp() {
     signOut: () => void signOut(api),
     offline: () => !dropboxLabel.hidden,
     toOffice: () => toOffice(),
+    readFile: async file => {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let info: BookInfo | null = null;
+      let id: string | null = null;
+      if (isEpubName(file.name)) {
+        try { info = await bookInfo(bytes); id = await contentHash(bytes); } catch { /* Not an EPUB. */ }
+      }
+      return { title: info?.title ?? null, author: info?.author ?? null, add: () => addBook(file.name, bytes, info, id) };
+    },
   });
+  /** One book into /Books/ (never over a file there); shown at once with what its EPUB says. */
+  const addBook = async (name: string, bytes: Uint8Array, info: BookInfo | null, id: string | null): Promise<AddOutcome> => {
+    const before = beforeUpload({ name, size: bytes.byteLength, id, title: info?.title ?? null }, books);
+    if (before) return before;
+    const path = bookPath(name);
+    const got = await api.addBook(bookPath(name), bytes).catch(() => undefined);
+    if (got === undefined) return { kind: "failed" };
+    if (got === null) return { kind: "name-taken", name };
+    const cover = info?.cover ? await thumbnail(info.cover) : null;
+    const entry: IndexEntry = {
+      title: info?.title || titleFromFileName(name),
+      ...(info?.author ? { author: info.author } : {}),
+      ...(info?.series ? { series: info.series, ...(info.seriesIndex != null ? { seriesIndex: info.seriesIndex } : {}) } : {}),
+      ...(cover ? { cover } : {}),
+      updatedAt: 0,
+    };
+    addedHere[got] = entry;
+    void keepValue("added", addedHere);
+    books = [...books.filter(b => b.id !== got), {
+      id: got, path, title: entry.title, author: entry.author ?? null, series: entry.series ?? null, seriesIndex: entry.seriesIndex ?? null,
+      read: false, hidden: false, indexedAt: 0, cover: entry.cover ?? null, lastRead: null, hasSyncFile: false,
+      added: new Date().toISOString(), size: bytes.byteLength,
+    }];
+    saveLibrary();
+    render();
+    // Opening it needn't download what was just uploaded.
+    void keepBook(got, bytes);
+    return { kind: "added", id: got };
+  };
   root.append(home.el);
   const toHome = () => {
     setHomeMode(true);
@@ -645,7 +687,10 @@ async function showApp() {
       api.listFolder(SYNC_FOLDER, false),
       api.readText(DETAILS_PATH).then(r => parseDetails(r?.text ?? null).books).catch(() => ({})),
     ]);
-    books = libraryBooks(files, index, syncFiles, details);
+    books = libraryBooks(files, index, syncFiles, details, addedHere);
+    // Once a phone has listed a book added here, its entry is the one shown.
+    const listed = Object.keys(addedHere).filter(id => (index as Record<string, IndexEntry>)[id]);
+    if (listed.length) { for (const id of listed) delete addedHere[id]; void keepValue("added", addedHere); }
   } catch (e) {
     // The footer says so; the Library as last seen stays.
     dropboxLabel.hidden = false;

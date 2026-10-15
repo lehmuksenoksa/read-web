@@ -50,14 +50,15 @@ export function titleFromFileName(name: string): string {
  * The Library's books: EPUBs in /Books/, with the index's details, the shared details file's edits
  * over them ([details]), and hidden books marked as such.
  */
-export function libraryBooks(files: FileEntry[], index: Record<string, IndexEntry>, syncFiles: FileEntry[], details: Record<string, BookDetails> = {}): LibraryBook[] {
+export function libraryBooks(files: FileEntry[], index: Record<string, IndexEntry>, syncFiles: FileEntry[], details: Record<string, BookDetails> = {}, added: Record<string, IndexEntry> = {}): LibraryBook[] {
   const synced = new Map(syncFiles.map(f => [f.pathLower, f.modified]));
   const seen = new Set<string>();
   const books: LibraryBook[] = [];
   for (const file of files) {
     if (!file.name.toLowerCase().endsWith(".epub") || !file.contentHash || seen.has(file.contentHash)) continue;
     seen.add(file.contentHash);
-    const entry = index[file.contentHash];
+    // A book added from Home shows what its EPUB says until a phone lists it.
+    const entry = index[file.contentHash] ?? added[file.contentHash];
     const edited = details[file.contentHash];
     const syncPath = `${SYNC_FOLDER}/${file.contentHash}.json`.toLowerCase();
     books.push({

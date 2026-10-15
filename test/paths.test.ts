@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Dropbox } from "../src/dropbox";
-import { DETAILS_PATH, fontPath, isAddablePath, isWritablePath, syncFilePath, WEB_SETUP_PATH } from "../src/paths";
+import { DETAILS_PATH, fontPath, isAddablePath, isNewBookPath, isWritablePath, syncFilePath, WEB_SETUP_PATH } from "../src/paths";
 
 const id = "a".repeat(64);
 
@@ -23,13 +23,17 @@ describe("where the web version may write", () => {
     expect(() => syncFilePath("../Books/x")).toThrow();
   });
 
-  it("adds only downloaded font files in /Apps/Read/Fonts/, never Bookerly's or anything else", () => {
+  it("adds only downloaded font files in /Apps/Read/Fonts/ and new EPUBs straight in /Books/, nothing else", () => {
     expect(isAddablePath(fontPath("Newsreader-r-latin-1.woff2"))).toBe(true);
     expect(isAddablePath(fontPath("Newsreader.json"))).toBe(true);
+    expect(isAddablePath("/Books/Piranesi.epub")).toBe(true);
+    expect(isAddablePath("/Books/The Hobbit (1937).EPUB")).toBe(true);
     for (const path of [
       "/Apps/Read/Fonts/Bookerly-Regular.ttf", "/Apps/Read/Fonts/../Sync/x.json", "/Apps/Read/Fonts/a/b.woff2",
       "/Books/x.woff2", "/Apps/Read/Sync/devices/Web/setup.json", syncFilePath(id), "/Apps/Read/Fonts/x.txt",
+      "/Books/Wildbow/Twig.epub", "/Books/../Apps/x.epub", "/Books/..epub", "/Books/notes.pdf", "/Books/x.epub.json", "/books/x.epub", "/Other/x.epub", "/Books/.epub/",
     ]) expect(isAddablePath(path), path).toBe(false);
+    for (const path of ["/Books/Wildbow/Twig.epub", "/Books/x.pdf", fontPath("Newsreader.json")]) expect(isNewBookPath(path), path).toBe(false);
   });
 
   afterEach(() => vi.unstubAllGlobals());
@@ -43,7 +47,25 @@ describe("where the web version may write", () => {
     await expect(api.writeText(fontPath("Newsreader.json"), "{}", null)).rejects.toThrow();
     await expect(api.addFile("/Apps/Read/Fonts/Bookerly-Regular.ttf", new Uint8Array())).rejects.toThrow();
     await expect(api.addFile(syncFilePath(id), new Uint8Array())).rejects.toThrow();
+    await expect(api.addBook("/Books/Wildbow/Twig.epub", new Uint8Array())).rejects.toThrow();
+    await expect(api.addBook(syncFilePath(id), new Uint8Array())).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("adds a book with Dropbox's add mode, never over a file: a name taken is null", async () => {
+    const sent: { mode: unknown; autorename: unknown }[] = [];
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const arg = JSON.parse((init.headers as Record<string, string>)["Dropbox-API-Arg"]);
+      sent.push({ mode: arg.mode, autorename: arg.autorename });
+      return arg.path === "/Books/Taken.epub"
+        ? new Response('{"error_summary":"path/conflict/file/"}', { status: 409 })
+        : new Response(JSON.stringify({ rev: "1", content_hash: "h".repeat(64) }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const api = new Dropbox("token", () => undefined);
+    expect(await api.addBook("/Books/New.epub", new Uint8Array([1]))).toBe("h".repeat(64));
+    expect(await api.addBook("/Books/Taken.epub", new Uint8Array([1]))).toBeNull();
+    expect(sent).toEqual([{ mode: "add", autorename: false }, { mode: "add", autorename: false }]);
   });
 
   it("is the only kind of write in the code", () => {
@@ -57,6 +79,7 @@ describe("where the web version may write", () => {
       if (file !== "dropbox.ts") expect(text.includes("files/upload"), `${file} uploads`).toBe(false);
       for (const call of text.matchAll(/\.writeText\(([^,]+),/g)) expect(call[1].trim(), `${file}: ${call[0]}`).toMatch(/^(syncFilePath\(|WEB_SETUP_PATH$|DETAILS_PATH$)/);
       for (const call of text.matchAll(/\.addFile\(([^,]+),/g)) expect(call[1].trim(), `${file}: ${call[0]}`).toMatch(/^fontPath\(/);
+      for (const call of text.matchAll(/\.addBook\(([^,]+),/g)) expect(call[1].trim(), `${file}: ${call[0]}`).toMatch(/^bookPath\(/);
     }
   });
 });

@@ -30,10 +30,16 @@ export const fontPath = (name: string) => `${FONTS_FOLDER}/${name}`;
 
 /**
  * Files the web version may add (never overwrite or remove): a downloaded font's files and its
- * list of files in `/Apps/Read/Fonts/`. Bookerly's .ttf files there are never touched.
+ * list of files in `/Apps/Read/Fonts/` (Bookerly's .ttf files there are never touched), and since
+ * Home's Add books (2026-10-15) an EPUB straight in `/Books/` (CLAUDE.md: only add new ones the user adds).
  */
 export function isAddablePath(path: string): boolean {
-  return /^\/Apps\/Read\/Fonts\/[A-Za-z0-9-]+\.(woff2|json)$/.test(path);
+  return /^\/Apps\/Read\/Fonts\/[A-Za-z0-9-]+\.(woff2|json)$/.test(path) || isNewBookPath(path);
+}
+
+/** An EPUB straight in /Books/ (not in a folder in it), its name without "..". */
+export function isNewBookPath(path: string): boolean {
+  return /^\/Books\/[^/]+\.[eE][pP][uU][bB]$/.test(path) && !path.includes("..");
 }
 
 /** The phones' setup backups (read only): the device list, each device's settings and fonts. */
