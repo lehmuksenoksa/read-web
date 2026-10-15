@@ -13,6 +13,23 @@ export function syncFilePath(bookId: string): string {
   return `${SYNC_FOLDER}/${bookId}.json`;
 }
 
+/** The phones' serials (read only): the subscriptions, and each serial's chapter list (WEB.md → Home, step 3a). */
+export const SUBSCRIPTIONS_PATH = `${SYNC_FOLDER}/subscriptions.json`;
+export const CHAPTERS_FOLDER = `${SYNC_FOLDER}/chapters`;
+
+/** A serial's id as the phones make them: "rr-12345", "pt-name", "pt-c12345". */
+export const isSerialId = (id: string) => /^(rr|pt)-[A-Za-z0-9_-]+$/.test(id);
+
+/** A serial's chapter list and its sync file, read only. */
+export function chapterListPath(id: string): string {
+  if (!isSerialId(id)) throw new Error(`Not a serial: ${id}`);
+  return `${CHAPTERS_FOLDER}/${id}.json`;
+}
+export function serialSyncPath(id: string): string {
+  if (!isSerialId(id)) throw new Error(`Not a serial: ${id}`);
+  return `${SYNC_FOLDER}/${id}.json`;
+}
+
 /** Web's own setup (its looks, the look in use, the interface): not in the phones' device list. */
 export const WEB_SETUP_PATH = `${SYNC_FOLDER}/devices/Web/setup.json`;
 

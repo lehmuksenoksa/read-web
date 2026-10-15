@@ -3,10 +3,14 @@
 // actions (the book menu, Edit details, opening a book) are the page's own, passed in.
 
 import {
-  ago, BOOK_VIEWS, clickSort, column, DEFAULT_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
-  menuSort, moveColumn, nextInSeries, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
-  type BookView, type ColumnKey, type Facts, type HomeSetup,
+  ago, BOOK_VIEWS, clickSort, column, DEFAULT_COLUMNS, DEFAULT_SERIAL_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
+  menuSort, moveColumn, nextInSeries, SERIAL_VIEWS, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
+  type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
 } from "./home";
+import {
+  chapterDateLabel, lastCheck, newChaptersText, numbersOnly, panelChapters, searchSerials, serialColumn, sortSerials,
+  type Serial, type SerialColumnKey,
+} from "./serials";
 import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
 import { lastReadBook, type LibraryBook, type LibraryItem, type Place, type SortBy } from "./library";
 import type { Setup } from "./looks";
@@ -38,6 +42,12 @@ export interface HomeContext {
   toOffice(): void;
   /** Add books: reads a file (its title and author, for its line), then adds it to /Books/. */
   readFile(file: File): Promise<{ title: string | null; author: string | null; add: () => Promise<AddOutcome> }>;
+  /** The serials (WEB.md → Home, step 3a); null until read. */
+  serials(): Serial[] | null;
+  /** Reads the serials' files from Dropbox (once, and again after a while away). */
+  loadSerials(): Promise<void>;
+  /** Edit details… for a serial: its title and author. */
+  editSerial(serial: Serial): void;
 }
 
 /** The covers' colours when a book has no cover of its own. */
@@ -86,12 +96,21 @@ function pct(p: number | null): string {
 export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => void; isOpen: () => boolean; closePanel: () => void } {
   let query = "";
   let menuOpen: HTMLElement | null = null;
-  /** The panel's book or series; null when closed. */
-  let panelFor: { book: LibraryBook } | { series: LibraryBook[] } | null = null;
+  /** The panel's book, series or serial; null when closed. */
+  let panelFor: { book: LibraryBook } | { series: LibraryBook[] } | { serial: string } | null = null;
 
+  /** Library & Serials: the one in front is the side shown; a click on the other turns to it. */
   const markEl = h("div", { class: "hmark", "aria-label": "Library & Serials" });
-  const m = wordmark(true, 58);
-  markEl.innerHTML = `<span class="lib">${m.library}</span><span class="and">${m.ampersand}</span><span class="ser" title="Serials come later">${m.serials}</span>`;
+  const renderMark = (books: boolean) => {
+    const m = wordmark(books, 58);
+    markEl.innerHTML = `<button class="lib" aria-pressed="${books}" title="Library">${m.library}</button><span class="and">${m.ampersand}</span><button class="ser" aria-pressed="${!books}" title="Serials">${m.serials}</button>`;
+  };
+  markEl.addEventListener("click", e => {
+    const side = (e.target as HTMLElement).closest(".lib") ? "books" : (e.target as HTMLElement).closest(".ser") ? "serials" : null;
+    if (!side || side === home().tab) return;
+    closePanel();
+    setHome({ tab: side });
+  });
   const search = h("input", { type: "search", placeholder: "Search title or author", "aria-label": "Search title or author" });
   const officeButton = h("button", { onclick: () => ctx.toOffice() }, "Office");
   const gear = h("button", { class: "hicon", title: "Settings", "aria-label": "Settings" }, svgEl(GEAR));
@@ -115,6 +134,9 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
 
   const home = () => ctx.setup().home;
   const setHome = (change: Partial<HomeSetup>) => ctx.update({ ...ctx.setup(), home: { ...home(), ...change } });
+  const serialsSetup = () => home().serials;
+  const setSerials = (change: Partial<SerialsSetup>) => setHome({ serials: { ...serialsSetup(), ...change } });
+  const onSerials = () => home().tab === "serials";
   const facts: Facts = {
     progress: id => ctx.progress(id),
     device: id => ctx.places(id)?.[0]?.device ?? null,
@@ -149,7 +171,7 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
       h("button", { class: "r", role: "menuitemradio", "aria-checked": String(!hidden), onclick: () => { closeMenu(); ctx.setShowHidden(false); } }, "All books", tick(!hidden)),
       h("button", { class: "r", role: "menuitemradio", "aria-checked": String(hidden), onclick: () => { closeMenu(); ctx.setShowHidden(true); } }, "Hidden", tick(hidden)));
   };
-  count.addEventListener("click", e => { e.stopPropagation(); if (menuOpen) closeMenu(); else openMenu(sortMenu(), count); });
+  count.addEventListener("click", e => { e.stopPropagation(); if (menuOpen) closeMenu(); else if (!onSerials()) openMenu(sortMenu(), count); });
   gear.addEventListener("click", e => {
     e.stopPropagation();
     if (menuOpen) return closeMenu();
@@ -158,32 +180,37 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
       h("button", { class: "r", role: "menuitem", onclick: () => { closeMenu(); ctx.signOut(); } }, "Sign out")), gear, true);
   });
 
+  /** Details' columns, the Library's or the Serials': what ☰ and dragging change. */
+  type Columns = { order: string[]; hidden: string[] };
+  const table = () => onSerials()
+    ? { cols: serialsSetup().columns as Columns, name: (k: string) => serialColumn(k as SerialColumnKey).name, set: (c: Columns) => setSerials({ columns: c as SerialsSetup["columns"] }), reset: DEFAULT_SERIAL_COLUMNS as Columns }
+    : { cols: home().columns as Columns, name: (k: string) => column(k as ColumnKey).name, set: (c: Columns) => setHome({ columns: c as HomeSetup["columns"] }), reset: DEFAULT_COLUMNS as Columns };
+
   /** ☰ at the end of Details' headings: a box per column (Title stays), drag a line to move it, and Reset. */
   const columnsMenu = (anchor: HTMLElement) => {
-    const cols = home().columns;
+    const t = table();
     const menu = h("div", { role: "menu", class: "colmenu" }, h("div", { class: "lab" }, "Columns"));
-    for (const key of cols.order) {
-      const c = column(key);
+    for (const key of t.cols.order) {
       const fixed = key === FIXED;
-      const box = h("input", { type: "checkbox", "aria-label": c.name });
-      box.checked = !cols.hidden.includes(key);
+      const box = h("input", { type: "checkbox", "aria-label": t.name(key) });
+      box.checked = !t.cols.hidden.includes(key);
       box.disabled = fixed;
-      box.addEventListener("change", () => setHome({ columns: toggleColumn(home().columns, key) }));
+      box.addEventListener("change", () => table().set(toggleColumn(table().cols, key)));
       menu.append(h("label", { class: `ci${fixed ? " fixed" : ""}`, "data-col": key, draggable: fixed ? undefined : "true" },
-        h("span", { class: "grip" }, fixed ? "" : "⋮⋮"), box, c.name));
+        h("span", { class: "grip" }, fixed ? "" : "⋮⋮"), box, t.name(key)));
     }
-    menu.append(h("hr"), h("button", { class: "r", onclick: () => setHome({ columns: DEFAULT_COLUMNS }) }, "Reset"));
+    menu.append(h("hr"), h("button", { class: "r", onclick: () => table().set(table().reset) }, "Reset"));
     dragColumns(menu);
     openMenu(menu, anchor, true);
   };
 
   /** Dragging a heading, or a line in ☰'s list, moves its column before the one it's dropped on. */
-  let dragging: ColumnKey | null = null;
+  let dragging: string | null = null;
   const dragColumns = (container: HTMLElement) => {
     container.addEventListener("dragstart", e => {
       const c = (e.target as HTMLElement).closest<HTMLElement>("[data-col][draggable]");
       if (!c) return;
-      dragging = c.dataset.col as ColumnKey;
+      dragging = c.dataset.col!;
       e.dataTransfer!.effectAllowed = "move";
       e.dataTransfer!.setData("text/plain", dragging);
     });
@@ -200,9 +227,9 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
       container.querySelectorAll(".over").forEach(x => x.classList.remove("over"));
       if (!dragging || !c) return;
       e.preventDefault();
-      const moved = moveColumn(home().columns, dragging, c.dataset.col as ColumnKey);
+      const moved = moveColumn(table().cols, dragging, c.dataset.col!);
       dragging = null;
-      setHome({ columns: moved });
+      table().set(moved);
     });
     container.addEventListener("dragend", () => { dragging = null; });
   };
@@ -314,10 +341,120 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     num: "48px", progress: "minmax(170px,1.3fr)", last: "120px", on: "80px", added: "110px", size: "80px",
   })[key];
 
+  // --- Serials (WEB.md → Home, step 3a): from the phones' chapter lists, read only ---
+
+  const SERIAL_WIDTHS: Record<SerialColumnKey, [string, string]> = {
+    title: ["minmax(220px,2fr)", "minmax(220px,2fr)"], author: ["minmax(130px,1.2fr)", "minmax(130px,1.2fr)"], site: ["110px", "110px"],
+    new: ["100px", "64px"], unread: ["130px", "72px"], updated: ["100px", "100px"],
+    latest: ["minmax(200px,1.8fr)", "minmax(200px,1.8fr)"], reading: ["minmax(200px,1.8fr)", "minmax(200px,1.8fr)"], lastread: ["110px", "110px"],
+  };
+  /** "2 NEW" in the seal's colours; just "2" where Details is crowded. */
+  const newTag = (x: Serial, numbers = false) => x.progress.newCount ? h("span", { class: `tag new${numbers ? " n" : ""}` }, numbers ? String(x.progress.newCount) : `${x.progress.newCount} NEW`) : null;
+  /** "30 UNREAD" (the unread ones not NEW), or CAUGHT UP; in Details only the number, never CAUGHT UP. */
+  const unreadTag = (x: Serial, inDetails = false, numbers = false) => {
+    const n = x.progress.olderUnreadCount;
+    if (n) return h("span", { class: `tag${numbers ? " n" : ""}` }, numbers ? String(n) : `${n} UNREAD`);
+    return x.caughtUp && !inDetails ? h("span", { class: "tag cu" }, "CAUGHT UP") : null;
+  };
+  const tagRow = (x: Serial) => h("span", { class: "tagrow" }, ...present(newTag(x), unreadTag(x)));
+  const updatedLabel = (x: Serial) => chapterDateLabel(x.latest?.published, Date.now(), true);
+  const bySite = (x: Serial) => [x.author, x.site].filter(Boolean).join(" · ");
+  const serialOpen = (x: Serial) => panelFor != null && "serial" in panelFor && panelFor.serial === x.id;
+
+  const serialCard = (x: Serial, expanded: boolean) => {
+    const updated = updatedLabel(x);
+    const lines = () => {
+      const now = Date.now();
+      const latest = x.latest;
+      const same = latest && x.current && latest.id === x.current.id;
+      return h("span", { class: "lines" },
+        ...(latest ? [h("span", { class: "k" }, "LATEST"), h("span", {}, latest.title), h("span", { class: "d" }, chapterDateLabel(latest.published, now, true) ?? "")] : []),
+        ...(same ? [] : [h("span", { class: "k" }, "READING"), h("span", { class: x.current ? "" : "dim" }, x.current?.title ?? "Not started"), h("span", { class: "d" }, chapterDateLabel(x.current?.published, now, true) ?? "")]));
+    };
+    return h("button", { class: `scard${serialOpen(x) ? " on" : ""}`, "data-sid": x.id, onclick: () => openSerial(x) },
+      h("span", { class: "head" }, h("span", { class: "t" }, redTitle(x.title)), tagRow(x)),
+      h("span", { class: "a" }, bySite(x)),
+      expanded ? lines() : h("span", { class: "m" }, h("span", { class: "grow" }), updated ? `Updated ${updated}` : ""));
+  };
+
+  const serialCell = (x: Serial, key: SerialColumnKey, numbers: boolean) => {
+    const td = (child: Node | string | null, cls = "") => h("div", { class: `td${cls ? ` ${cls}` : ""}` }, ...present(typeof child === "string" ? document.createTextNode(child) : child));
+    switch (key) {
+      case "title": return td(h("span", { class: "t" }, x.title));
+      case "author": return td(x.author ?? "", "dim");
+      case "site": return td(x.site, "dim");
+      case "new": return td(newTag(x, numbers));
+      case "unread": return td(unreadTag(x, true, numbers));
+      case "updated": return td(updatedLabel(x) ?? "", "dim");
+      case "latest": return td(x.latest?.title ?? "", "dim");
+      case "reading": return td(x.current?.title ?? (x.chapters.length ? "Not started" : ""), "dim");
+      case "lastread": return td(x.lastRead ? ago(new Date(x.lastRead).toISOString(), Date.now()) : "", "dim");
+    }
+  };
+
+  const serialDetails = (list: Serial[]) => {
+    const cols = shownColumns(serialsSetup().columns);
+    const sort = serialsSetup().sort;
+    const numbers = numbersOnly(cols.length, window.innerWidth);
+    const box = h("div", { class: "tbl ser", role: "table", style: `grid-template-columns:${cols.map(k => SERIAL_WIDTHS[k][numbers ? 1 : 0]).join(" ")} 40px` });
+    const headings = h("div", { class: "tr hd", role: "row" },
+      ...cols.map(key => {
+        const on = sort.key === key;
+        return h("div", {
+          class: `th${on ? " sort" : ""}`, role: "columnheader", "data-col": key,
+          draggable: key === FIXED ? undefined : "true",
+          onclick: () => setSerials({ sort: sort.key === key ? { key, reversed: !sort.reversed } : { key, reversed: false } }),
+        }, serialColumn(key).heading, on ? (sort.reversed ? " ▴" : " ▾") : "");
+      }),
+      h("div", { class: "th colbtn" }, h("button", { title: "Columns", "aria-label": "Columns", onclick: (e: Event) => { e.stopPropagation(); if (menuOpen?.classList.contains("colmenu")) closeMenu(); else columnsMenu(e.currentTarget as HTMLElement); } }, svgEl(LINES))));
+    dragColumns(headings);
+    box.append(headings);
+    for (const x of list) {
+      box.append(h("div", { class: `tr${serialOpen(x) ? " on" : ""}`, role: "row", "data-sid": x.id, onclick: () => openSerial(x) },
+        ...cols.map(key => serialCell(x, key, numbers)), h("div", { class: "td" })));
+    }
+    return box;
+  };
+
+  /** The Serials side: its status line, views and size, and the serials found, in Details' sort. */
+  const renderSerials = (columnsOpen: boolean) => {
+    const ss = serialsSetup();
+    const view: SerialView = ss.view;
+    const all = ctx.serials();
+    if (all == null) void ctx.loadSerials().then(renderSoon);
+    const shown = sortSerials(searchSerials(all ?? [], query), ss.sort);
+    const z = SIZES[ss.sizes[view]];
+    main.style.setProperty("--z", String(z));
+    main.style.setProperty("--f", String(textScale(z)));
+    main.className = `hmain s-${view}`;
+    const check = all && lastCheck(all);
+    count.textContent = all == null ? "" : [newChaptersText(all), check ? `checked ${ago(new Date(check.at).toISOString(), Date.now())} on ${check.device}` : ""].filter(Boolean).join(" · ");
+    count.classList.add("plain");
+    const letter = (n: number) => `<svg width="20" height="20" viewBox="0 0 20 20"><text x="10" y="${(10 + n * 0.36).toFixed(1)}" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="600" font-size="${n}" fill="currentColor">A</text></svg>`;
+    zoomLess.innerHTML = letter(11);
+    zoomMore.innerHTML = letter(19);
+    zoom.value = String(ss.sizes[view]);
+    zoomLess.disabled = ss.sizes[view] === 0;
+    zoomMore.disabled = ss.sizes[view] === SIZES.length - 1;
+    views.replaceChildren(...SERIAL_VIEWS.map(v => h("button", { class: v.view === view ? "on" : "", role: "tab", "aria-selected": String(v.view === view), onclick: () => setSerials({ view: v.view }) }, v.name)));
+    seen.disconnect();
+    if (all == null) main.replaceChildren();
+    else if (!shown.length) main.replaceChildren(h("p", { class: "hempty" }, all.length ? "No serials match." : "No serials yet."));
+    else if (view === "details") main.replaceChildren(serialDetails(shown));
+    else main.replaceChildren(h("div", { class: `scards${view === "expanded" ? " long" : ""}` }, ...shown.map(x => serialCard(x, view === "expanded"))));
+    const anchor = columnsOpen ? main.querySelector<HTMLElement>(".colbtn button") : null;
+    if (anchor) columnsMenu(anchor);
+    cont.hidden = true;
+    renderPanel();
+  };
+
   const render = () => {
     // ☰'s list stays open while its boxes change the columns; other menus close.
     const columnsOpen = menuOpen?.classList.contains("colmenu") ?? false;
     closeMenu();
+    renderMark(!onSerials());
+    if (onSerials()) return renderSerials(columnsOpen);
+    count.classList.remove("plain");
     const hs = home();
     const view = hs.view;
     const all = books();
@@ -385,6 +522,12 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     renderPanel();
     if (!ctx.places(b.id) && b.hasSyncFile) void ctx.load(b).then(() => { if (panelFor && "book" in panelFor && panelFor.book.id === b.id) renderPanel(); });
   };
+  const openSerial = (x: Serial) => {
+    panelFor = { serial: x.id };
+    main.querySelectorAll(".scard.on, .tr.on").forEach(e => e.classList.remove("on"));
+    main.querySelectorAll(`[data-sid="${x.id}"]`).forEach(e => e.classList.add("on"));
+    renderPanel();
+  };
   const openSeries = (members: LibraryBook[]) => {
     panelFor = { series: members.map(m => m.id).map(id => ctx.books().find(b => b.id === id)!).filter(Boolean) };
     renderPanel();
@@ -394,7 +537,7 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     if (!panelFor) return;
     panelFor = null;
     panel.classList.remove("open");
-    main.querySelector(".tr.on")?.classList.remove("on");
+    main.querySelectorAll(".tr.on, .scard.on").forEach(e => e.classList.remove("on"));
   };
   let fromSeries: LibraryBook[] | null = null;
 
@@ -402,6 +545,35 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     if (!panelFor) return;
     const top = h("div", { class: "top" });
     const closeButton = h("button", { class: "hicon", title: "Close", "aria-label": "Close", onclick: closePanel }, svgEl(CLOSE));
+    if ("serial" in panelFor) {
+      const id = panelFor.serial;
+      const x = ctx.serials()?.find(s => s.id === id);
+      if (!x) return closePanel();
+      top.append(h("span", { class: "grow" }), closeButton);
+      const now = Date.now();
+      const updated = updatedLabel(x);
+      const link = (c: { title: string; url: string }, cls = "") => h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", class: cls }, c.title);
+      const rows = panelChapters(x);
+      panel.replaceChildren(...present(top,
+        h("h1", { class: "sans" }, redTitle(x.title)),
+        h("div", { class: "by" }, bySite(x)),
+        h("div", { class: "stline" }, ...present(newTag(x), unreadTag(x)), updated ? h("span", {}, `Updated ${updated}`) : null),
+        h("div", { class: "acts" },
+          h("a", { class: "seal", href: x.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${x.site} ↗`),
+          h("button", { class: "well", onclick: () => ctx.editSerial(x) }, "Edit details…")),
+        x.chapters.length ? h("div", { class: "sec" }, h("h3", {}, "Reading"),
+          h("div", { class: "chap" }, ...(x.current
+            ? [link(x.current), h("span", { class: "d" }, chapterDateLabel(x.current.published, now, true) ?? "")]
+            : [h("span", { class: "dim" }, "Not started"), h("span", {})]))) : null,
+        rows.length ? h("div", { class: "sec" }, h("h3", {}, "Chapters"),
+          h("div", { class: "chap" }, ...rows.flatMap(({ chapter: c, index }) => {
+            const cls = [index === x.progress.currentIndex ? "cur" : "", x.progress.isRead(index) ? "read" : "", c.locked ? "locked" : ""].filter(Boolean).join(" ");
+            return [h("span", {}, link(c, cls), x.progress.isNew(index) ? h("span", { class: "nw" }, "NEW") : null), h("span", { class: "d" }, chapterDateLabel(c.published, now, true) ?? "")];
+          }))) : null,
+        h("div", { class: "foot2" }, x.checkedAt && x.device ? `Checked ${ago(new Date(x.checkedAt).toISOString(), now)} on ${x.device}` : "No chapters from the phones yet.")));
+      panel.classList.add("open");
+      return;
+    }
     if ("series" in panelFor) {
       fromSeries = panelFor.series;
       const ms = inOrder(panelFor.series.map(m => ctx.books().find(b => b.id === m.id) ?? m));
@@ -528,10 +700,15 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
   // --- Events ---
 
   search.addEventListener("input", () => { query = search.value; render(); });
-  const setSize = (step: number) => setHome({ sizes: { ...home().sizes, [home().view]: Math.max(0, Math.min(SIZES.length - 1, step)) } as Record<BookView, number> });
+  const sizeNow = () => (onSerials() ? serialsSetup().sizes[serialsSetup().view] : home().sizes[home().view]);
+  const setSize = (step: number) => {
+    const at = Math.max(0, Math.min(SIZES.length - 1, step));
+    if (onSerials()) setSerials({ sizes: { ...serialsSetup().sizes, [serialsSetup().view]: at } as Record<SerialView, number> });
+    else setHome({ sizes: { ...home().sizes, [home().view]: at } as Record<BookView, number> });
+  };
   zoom.addEventListener("input", () => setSize(Number(zoom.value)));
-  zoomLess.addEventListener("click", () => setSize(home().sizes[home().view] - 1));
-  zoomMore.addEventListener("click", () => setSize(home().sizes[home().view] + 1));
+  zoomLess.addEventListener("click", () => setSize(sizeNow() - 1));
+  zoomMore.addEventListener("click", () => setSize(sizeNow() + 1));
   main.addEventListener("contextmenu", e => {
     const item = (e.target as HTMLElement).closest<HTMLElement>("[data-id]");
     const book = item && ctx.books().find(b => b.id === item.dataset.id);
@@ -545,7 +722,7 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     const path = e.composedPath();
     if (menuOpen && !path.includes(menuOpen)) closeMenu();
     if (!panelFor || path.includes(panel)) return;
-    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .bcard, .tr[data-id], .hcont, .hmenu") || x.closest(".bookmenu, .dialog, .toast")))) return;
+    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .bcard, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark") || x.closest(".bookmenu, .dialog, .toast")))) return;
     closePanel();
   });
   document.addEventListener("keydown", e => {

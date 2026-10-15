@@ -1,0 +1,335 @@
+// Serials on Home (WEB.md → Home, step 3a, agreed 2026-10-15). The web can't reach Royal Road or
+// Patreon, so it shows the serials from what the phones put in Dropbox: the subscriptions file, each
+// serial's chapter list (`chapters/<serial>.json`, written by the phone that checked) and its sync
+// file. NEW, UNREAD and CAUGHT UP follow the phones' own rules (StoryRules.kt, LibraryState.kt).
+
+import type { BookDetails } from "./details";
+import { afterReset } from "./sync";
+
+// --- The files ---
+
+/** One chapter as a phone wrote it (SharedChapter in ChapterLists.kt). */
+export interface SharedChapter {
+  id: string;
+  title: string;
+  url: string;
+  /** As the site gave it (ISO time). */
+  published?: string | null;
+  locked?: boolean;
+  empty?: boolean;
+  /** When a phone first showed it; 0: the serial came with it (never NEW); missing: not yet (NEW). */
+  seenAt?: number | null;
+}
+
+/** `/Apps/Read/Sync/chapters/<serial>.json`. */
+export interface ChapterList {
+  bookId: string;
+  /** The phone that wrote it, and when it last checked the site. */
+  device: string;
+  checkedAt?: number | null;
+  chapters: SharedChapter[];
+}
+
+/** One serial in `/Apps/Read/Sync/subscriptions.json` (SubscriptionEntry in SubscriptionsSync.kt). */
+export interface Subscription {
+  bookId: string;
+  url: string;
+  title: string;
+  author?: string | null;
+  site?: string | null;
+  removed?: boolean;
+  /** When each chapter was first seen, on either phone (chapter id → time); the last 30 days only. */
+  seen?: Record<string, number>;
+  /** The chapter read to its end (CAUGHT UP). */
+  endChapterId?: string | null;
+}
+
+export function parseSubscriptions(text: string | null): Subscription[] {
+  if (!text) return [];
+  const stories = (JSON.parse(text) as { stories?: Subscription[] }).stories;
+  return Array.isArray(stories) ? stories.filter(s => s && typeof s.bookId === "string" && typeof s.title === "string") : [];
+}
+
+export function parseChapterList(text: string | null): ChapterList | null {
+  if (!text) return null;
+  const file = JSON.parse(text) as ChapterList;
+  return file && typeof file.bookId === "string" && Array.isArray(file.chapters) ? file : null;
+}
+
+/** "rr" or "pt" from the file; told from the address in files from before 2026-10-04. */
+export function siteName(sub: Pick<Subscription, "site" | "url">): string {
+  const key = sub.site ?? (sub.url.toLowerCase().includes("patreon.com") ? "pt" : "rr");
+  return key === "pt" ? "Patreon" : "Royal Road";
+}
+
+// --- The phones' rules ---
+
+/** How long a chapter stays NEW after it was first seen in the Serials list. */
+export const NEW_FOR_MS = 24 * 60 * 60_000;
+
+/** "ch/678.xhtml" → "678". */
+export function chapterIdOf(href: string): string | null {
+  if (!href.includes("ch/")) return null;
+  const id = href.split("#")[0].split("/").pop()!.replace(/\.xhtml$/, "");
+  return id || null;
+}
+
+/** The chapter a place's href is in: its index in [ids], or null. */
+export function currentChapterIndex(ids: string[], href: string | null | undefined): number | null {
+  const id = href ? chapterIdOf(href.replace(/\\\//g, "/")) : null;
+  const at = id == null ? -1 : ids.indexOf(id);
+  return at >= 0 ? at : null;
+}
+
+/**
+ * The chapters still NEW at [now]: not yet seen on either phone, or seen less than [NEW_FOR_MS] ago.
+ * A chapter counts as seen at the earlier of the list's time and the subscriptions file's.
+ */
+export function freshIndexes(chapters: SharedChapter[], now: number, seen: Record<string, number> = {}): Set<number> {
+  const fresh = new Set<number>();
+  chapters.forEach((c, i) => {
+    const times = [c.seenAt, seen[c.id]].filter((t): t is number => typeof t === "number");
+    const at = times.length ? Math.min(...times) : null;
+    if (at == null || now - at < NEW_FOR_MS) fresh.add(i);
+  });
+  return fresh;
+}
+
+/** Where a reader is in a serial's chapters (StoryProgress in StoryRules.kt). */
+export interface StoryProgress {
+  chapterCount: number;
+  currentIndex: number | null;
+  /** Readable chapters after the current one; not started: all of them. */
+  unreadCount: number;
+  /** Unread chapters still NEW: the "N NEW" tag. */
+  newCount: number;
+  /** Unread chapters that aren't NEW any more: the "N UNREAD" tag beside "N NEW". */
+  olderUnreadCount: number;
+  isNew(index: number): boolean;
+  isRead(index: number): boolean;
+}
+
+/** [unreadable]: Patreon's locked and empty posts, never unread or NEW. [fresh]: [freshIndexes]. */
+export function storyProgress(chapterCount: number, currentIndex: number | null, unreadable: Set<number> = new Set(), fresh: Set<number> = new Set()): StoryProgress {
+  const first = currentIndex == null ? 0 : currentIndex + 1;
+  const isNew = (i: number) => fresh.has(i) && i >= first && !unreadable.has(i);
+  let unreadCount = 0;
+  let newCount = 0;
+  for (let i = first; i < chapterCount; i++) {
+    if (!unreadable.has(i)) unreadCount++;
+    if (isNew(i)) newCount++;
+  }
+  return {
+    chapterCount, currentIndex, unreadCount, newCount, olderUnreadCount: unreadCount - newCount,
+    isNew, isRead: i => currentIndex != null && i < currentIndex,
+  };
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
+
+/** A day in [timeZone] (the browser's own when not given). */
+function dayOf(at: number, timeZone?: string): { y: number; m: number; d: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(at));
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value);
+  return { y: get("year"), m: get("month"), d: get("day") };
+}
+
+/**
+ * When the site posted a chapter, as the phones say it: "45 min ago", "8 h ago", "3 days ago", then
+ * "12 Sept" within the year, then "Jan 2025"; [compact]: "8 h", "3 d", "12.9.", "1/2025". Null when
+ * there's no date or it can't be read.
+ */
+export function chapterDateLabel(published: string | null | undefined, now: number, compact = false, timeZone?: string): string | null {
+  if (!published || !/^\d{4}-\d\d-\d\dT/.test(published)) return null;
+  const at = Date.parse(published);
+  if (!Number.isFinite(at)) return null;
+  const minutes = Math.round(Math.max(0, now - at) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return compact ? `${minutes} min` : `${minutes} min ago`;
+  if (minutes < 24 * 60) return compact ? `${Math.floor(minutes / 60)} h` : `${Math.floor(minutes / 60)} h ago`;
+  if (minutes < 7 * 24 * 60) {
+    const days = Math.floor(minutes / (24 * 60));
+    return compact ? `${days} d` : days === 1 ? "1 day ago" : `${days} days ago`;
+  }
+  const date = dayOf(at, timeZone);
+  if (date.y === dayOf(now, timeZone).y) return compact ? `${date.d}.${date.m}.` : `${date.d} ${MONTHS[date.m - 1]}`;
+  return compact ? `${date.m}/${date.y}` : `${MONTHS[date.m - 1]} ${date.y}`;
+}
+
+// --- Places ---
+
+type SyncPlace = { href?: string; progression?: number; timestamp?: number; deviceName?: string; locator?: { href?: unknown } };
+
+/** The furthest place any device has reached in a serial (its sync file): its chapter index, when, and on which device. */
+export function furthestPlace(syncFile: { positions?: Record<string, SyncPlace>; reset?: unknown } | null, ids: string[]): { index: number; at: number; device: string } | null {
+  let best: { index: number; progression: number; at: number; device: string } | null = null;
+  for (const [key, p] of Object.entries(afterReset(syncFile)?.positions ?? {})) {
+    const href = p.href ?? (typeof p.locator?.href === "string" ? p.locator.href : null);
+    const index = currentChapterIndex(ids, href);
+    if (index == null) continue;
+    const progression = p.progression ?? 0;
+    if (!best || index > best.index || (index === best.index && progression > best.progression)) {
+      best = { index, progression, at: p.timestamp ?? 0, device: p.deviceName || key };
+    }
+  }
+  return best && { index: best.index, at: best.at, device: best.device };
+}
+
+/** When the serial was last read on any device. */
+export function lastReadAt(syncFile: { positions?: Record<string, SyncPlace>; reset?: unknown } | null): number | null {
+  const times = Object.values(afterReset(syncFile)?.positions ?? {}).map(p => p.timestamp ?? 0).filter(t => t > 0);
+  return times.length ? Math.max(...times) : null;
+}
+
+// --- Home's serials ---
+
+/** A serial as Home shows it. */
+export interface Serial {
+  id: string;
+  title: string;
+  author: string | null;
+  site: string;
+  url: string;
+  /** The site's chapters in its order; empty until a phone has written the list. */
+  chapters: SharedChapter[];
+  progress: StoryProgress;
+  /** The chapter being read (the furthest place on any device). */
+  current: SharedChapter | null;
+  caughtUp: boolean;
+  /** The newest chapter that can be read. */
+  latest: SharedChapter | null;
+  /** When the newest readable chapter was posted (epoch ms). */
+  updated: number | null;
+  lastRead: number | null;
+  /** The phone that last checked the site, and when. */
+  checkedAt: number | null;
+  device: string | null;
+}
+
+/** What the phones know of a serial's place: from its sync file. */
+export interface SerialPlace {
+  syncFile: { positions?: Record<string, SyncPlace>; reset?: unknown } | null;
+}
+
+const readable = (c: SharedChapter) => !c.locked && !c.empty;
+
+/** The subscribed serials (not unsubscribed), with their chapters, places and edited titles. */
+export function homeSerials(subs: Subscription[], lists: Record<string, ChapterList | null>, places: Record<string, SerialPlace["syncFile"]>, details: Record<string, BookDetails>, now: number): Serial[] {
+  return subs.filter(s => !s.removed).map(sub => {
+    const list = lists[sub.bookId] ?? null;
+    const chapters = list?.chapters ?? [];
+    const ids = chapters.map(c => c.id);
+    const syncFile = places[sub.bookId] ?? null;
+    const place = furthestPlace(syncFile, ids);
+    const unreadable = new Set(chapters.flatMap((c, i) => (readable(c) ? [] : [i])));
+    const progress = storyProgress(chapters.length, place?.index ?? null, unreadable, freshIndexes(chapters, now, sub.seen));
+    const current = place ? chapters[place.index] : null;
+    const latest = [...chapters].reverse().find(readable) ?? null;
+    const edited = details[sub.bookId];
+    const updated = Date.parse(latest?.published ?? "");
+    return {
+      id: sub.bookId,
+      title: edited?.title || sub.title,
+      author: edited ? edited.author ?? null : sub.author ?? null,
+      site: siteName(sub),
+      url: sub.url,
+      chapters,
+      progress,
+      current,
+      // Caught up: the current chapter was read to its end and nothing readable comes after it.
+      caughtUp: current != null && progress.unreadCount === 0 && sub.endChapterId === current.id,
+      latest,
+      updated: Number.isFinite(updated) ? updated : null,
+      lastRead: lastReadAt(syncFile),
+      checkedAt: list?.checkedAt ?? null,
+      device: list?.device ?? null,
+    };
+  });
+}
+
+/** The serials whose title or author has [query]. */
+export function searchSerials(serials: Serial[], query: string): Serial[] {
+  const q = query.trim().toLocaleLowerCase();
+  return q ? serials.filter(s => `${s.title} ${s.author ?? ""}`.toLocaleLowerCase().includes(q)) : serials;
+}
+
+/** The latest check of all, for the status line: when and on which phone. */
+export function lastCheck(serials: Serial[]): { at: number; device: string } | null {
+  const checked = serials.filter(s => s.checkedAt != null && s.device);
+  if (!checked.length) return null;
+  const last = checked.reduce((a, b) => (b.checkedAt! > a.checkedAt! ? b : a));
+  return { at: last.checkedAt!, device: last.device! };
+}
+
+/** "4 new chapters", "1 new chapter", "No new chapters". */
+export function newChaptersText(serials: Serial[]): string {
+  const n = serials.reduce((k, s) => k + s.progress.newCount, 0);
+  return n === 0 ? "No new chapters" : n === 1 ? "1 new chapter" : `${n} new chapters`;
+}
+
+/** The chapters the panel lists: newest first down to the one before the current chapter, at most [max]; empty posts left out. */
+export function panelChapters(serial: Serial, max = 12): { chapter: SharedChapter; index: number }[] {
+  const rows = serial.chapters.map((chapter, index) => ({ chapter, index })).filter(r => !r.chapter.empty).reverse();
+  const stop = serial.progress.currentIndex == null ? -1 : serial.progress.currentIndex - 1;
+  const upTo = rows.filter(r => r.index >= stop);
+  return (upTo.length ? upTo : rows).slice(0, max);
+}
+
+// --- Details' columns for serials ---
+
+export type SerialColumnKey = "title" | "author" | "site" | "new" | "unread" | "updated" | "latest" | "reading" | "lastread";
+
+export interface SerialColumn {
+  key: SerialColumnKey;
+  name: string;
+  heading: string;
+  /** 1: A to Z, oldest first; -1 the other way. A first click sorts this way. */
+  firstDir: 1 | -1;
+}
+
+export const SERIAL_COLUMNS: SerialColumn[] = [
+  { key: "title", name: "Serial", heading: "Serial", firstDir: 1 },
+  { key: "author", name: "Author", heading: "Author", firstDir: 1 },
+  { key: "site", name: "Site", heading: "Site", firstDir: 1 },
+  { key: "new", name: "New", heading: "New", firstDir: -1 },
+  { key: "unread", name: "Unread", heading: "Unread", firstDir: -1 },
+  { key: "updated", name: "Updated", heading: "Updated", firstDir: -1 },
+  { key: "latest", name: "Latest chapter", heading: "Latest chapter", firstDir: -1 },
+  { key: "reading", name: "Reading", heading: "Reading", firstDir: 1 },
+  { key: "lastread", name: "Last read", heading: "Last read", firstDir: -1 },
+];
+export const serialColumn = (key: SerialColumnKey) => SERIAL_COLUMNS.find(c => c.key === key)!;
+
+const sortKey = (text: string | null) => (text ?? "").replace(/^(the|a|an)\s+/i, "").toLocaleLowerCase();
+
+function serialValue(s: Serial, col: SerialColumnKey): string | number | null {
+  switch (col) {
+    case "title": return sortKey(s.title);
+    case "author": return s.author ? sortKey(s.author) : null;
+    case "site": return s.site;
+    case "new": return s.progress.newCount;
+    case "unread": return s.chapters.length ? s.progress.olderUnreadCount : null;
+    case "updated":
+    case "latest": return s.updated;
+    case "reading": return s.current ? sortKey(s.current.title) : null;
+    case "lastread": return s.lastRead;
+  }
+}
+
+/** The serials in [sort]'s order; nothing to sort by goes last, ties by title. */
+export function sortSerials(serials: Serial[], sort: { key: SerialColumnKey; reversed: boolean }): Serial[] {
+  const dir = serialColumn(sort.key).firstDir * (sort.reversed ? -1 : 1);
+  return [...serials].sort((a, b) => {
+    const x = serialValue(a, sort.key);
+    const y = serialValue(b, sort.key);
+    const byTitle = sortKey(a.title).localeCompare(sortKey(b.title));
+    if (x == null || y == null) return x == null && y == null ? byTitle : x == null ? 1 : -1;
+    const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y));
+    return c * dir || byTitle;
+  });
+}
+
+/** Details shows New and Unread as plain numbers when it's crowded: seven columns or more, or a window under 1200 px. */
+export function numbersOnly(shownColumns: number, windowWidth: number): boolean {
+  return shownColumns >= 7 || windowWidth < 1200;
+}

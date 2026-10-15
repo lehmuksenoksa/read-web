@@ -2,6 +2,7 @@
 // setup keeps for it, the sorts, Details' columns, the size steps and the title's red word.
 
 import { libraryItems, searchBooks, type LibraryBook, type LibraryItem, type SortBy } from "./library";
+import { SERIAL_COLUMNS, type SerialColumnKey } from "./serials";
 
 export type BookView = "grid" | "cards" | "details";
 export const BOOK_VIEWS: { view: BookView; name: string }[] = [
@@ -40,7 +41,7 @@ export const COLUMNS: Column[] = [
 const KEYS = COLUMNS.map(c => c.key);
 export const column = (key: ColumnKey) => COLUMNS.find(c => c.key === key)!;
 /** Title stays: always shown, never moved. */
-export const FIXED: ColumnKey = "title";
+export const FIXED = "title";
 
 export interface HomeSort {
   key: ColumnKey;
@@ -48,8 +49,33 @@ export interface HomeSort {
   reversed: boolean;
 }
 
+export type SerialView = "compact" | "expanded" | "details";
+export const SERIAL_VIEWS: { view: SerialView; name: string }[] = [
+  { view: "compact", name: "Compact" }, { view: "expanded", name: "Expanded" }, { view: "details", name: "Details" },
+];
+
+/** The Serials side of Home: its own view, sort, sizes and Details' columns. */
+export interface SerialsSetup {
+  view: SerialView;
+  sort: { key: SerialColumnKey; reversed: boolean };
+  sizes: Record<SerialView, number>;
+  columns: { order: SerialColumnKey[]; hidden: SerialColumnKey[] };
+}
+
+const SERIAL_KEYS = SERIAL_COLUMNS.map(c => c.key);
+export const DEFAULT_SERIAL_COLUMNS: SerialsSetup["columns"] = { order: SERIAL_KEYS, hidden: ["latest", "reading", "lastread"] };
+export const DEFAULT_SERIALS: SerialsSetup = {
+  view: "compact",
+  sort: { key: "updated", reversed: false },
+  sizes: { compact: 2, expanded: 2, details: 2 },
+  columns: DEFAULT_SERIAL_COLUMNS,
+};
+
 /** What Web's setup keeps for Home (in Dropbox, so every browser shows the same). */
 export interface HomeSetup {
+  /** Library or Serials in front. */
+  tab: "books" | "serials";
+  serials: SerialsSetup;
   view: BookView;
   /** One sort for all three views. */
   sort: HomeSort;
@@ -61,6 +87,8 @@ export interface HomeSetup {
 export const DEFAULT_COLUMNS: HomeSetup["columns"] = { order: KEYS, hidden: ["cover", "added", "size"] };
 
 export const DEFAULT_HOME: HomeSetup = {
+  tab: "books",
+  serials: DEFAULT_SERIALS,
   view: "grid",
   sort: { key: "last", reversed: false },
   sizes: { grid: 2, cards: 2, details: 2 },
@@ -77,14 +105,30 @@ export function decodeHome(raw: unknown): HomeSetup {
     : DEFAULT_HOME.sort;
   const sizesRaw = (r.sizes ?? {}) as Record<string, unknown>;
   const sizes = Object.fromEntries(BOOK_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v])])) as Record<BookView, number>;
-  const colsRaw = (r.columns ?? {}) as { order?: unknown; hidden?: unknown };
-  const order = Array.isArray(colsRaw.order) ? colsRaw.order.filter((k): k is ColumnKey => KEYS.includes(k as ColumnKey)) : [];
+  const columns = decodeColumns(r.columns, KEYS, DEFAULT_COLUMNS);
+  return { tab: r.tab === "serials" ? "serials" : "books", serials: decodeSerials(r.serials), view, sort, sizes, columns };
+}
+
+function decodeColumns<K extends string>(raw: unknown, keys: K[], fallback: { order: K[]; hidden: K[] }): { order: K[]; hidden: K[] } {
+  const colsRaw = (raw ?? {}) as { order?: unknown; hidden?: unknown };
+  const order = Array.isArray(colsRaw.order) ? colsRaw.order.filter((k): k is K => keys.includes(k as K)) : [];
   // Columns added later join at the end, in their first order.
-  const columns = {
-    order: [...new Set([...order, ...KEYS])],
-    hidden: Array.isArray(colsRaw.hidden) ? colsRaw.hidden.filter((k): k is ColumnKey => KEYS.includes(k as ColumnKey) && k !== FIXED) : DEFAULT_COLUMNS.hidden,
+  return {
+    order: [...new Set([...order, ...keys])],
+    hidden: Array.isArray(colsRaw.hidden) ? colsRaw.hidden.filter((k): k is K => keys.includes(k as K) && k !== FIXED) : fallback.hidden,
   };
-  return { view, sort, sizes, columns };
+}
+
+function decodeSerials(raw: unknown): SerialsSetup {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof SerialsSetup, unknown>>;
+  const view = SERIAL_VIEWS.some(v => v.view === r.view) ? (r.view as SerialView) : DEFAULT_SERIALS.view;
+  const sortRaw = (r.sort ?? {}) as { key?: unknown; reversed?: unknown };
+  const sort = SERIAL_KEYS.includes(sortRaw.key as SerialColumnKey)
+    ? { key: sortRaw.key as SerialColumnKey, reversed: sortRaw.reversed === true }
+    : DEFAULT_SERIALS.sort;
+  const sizesRaw = (r.sizes ?? {}) as Record<string, unknown>;
+  const sizes = Object.fromEntries(SERIAL_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v])])) as Record<SerialView, number>;
+  return { view, sort, sizes, columns: decodeColumns(r.columns, SERIAL_KEYS, DEFAULT_SERIAL_COLUMNS) };
 }
 
 // --- Size ---
@@ -104,7 +148,7 @@ export function textScale(size: number): number {
 // --- Columns ---
 
 /** [key] moved to just before [before] (null: to the end). Title doesn't move. */
-export function moveColumn(columns: HomeSetup["columns"], key: ColumnKey, before: ColumnKey | null): HomeSetup["columns"] {
+export function moveColumn<K extends string>(columns: { order: K[]; hidden: K[] }, key: K, before: K | null): { order: K[]; hidden: K[] } {
   if (key === FIXED || key === before) return columns;
   const order = columns.order.filter(k => k !== key);
   const at = before == null ? order.length : order.indexOf(before);
@@ -112,13 +156,13 @@ export function moveColumn(columns: HomeSetup["columns"], key: ColumnKey, before
   return { ...columns, order };
 }
 
-export function toggleColumn(columns: HomeSetup["columns"], key: ColumnKey): HomeSetup["columns"] {
+export function toggleColumn<K extends string>(columns: { order: K[]; hidden: K[] }, key: K): { order: K[]; hidden: K[] } {
   if (key === FIXED) return columns;
   const hidden = columns.hidden.includes(key) ? columns.hidden.filter(k => k !== key) : [...columns.hidden, key];
   return { ...columns, hidden };
 }
 
-export function shownColumns(columns: HomeSetup["columns"]): ColumnKey[] {
+export function shownColumns<K extends string>(columns: { order: K[]; hidden: K[] }): K[] {
   return columns.order.filter(k => !columns.hidden.includes(k));
 }
 

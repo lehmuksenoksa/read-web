@@ -1,13 +1,14 @@
 import "./style.css";
 import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
-import { parseDetails, parseNumber, withDetails } from "./details";
+import { parseDetails, parseNumber, withDetails, type BookDetails } from "./details";
 import { Dropbox, RevConflict } from "./dropbox";
 import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
 import { createHome } from "./homeView";
 import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, markedBook, placesOf, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
 import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
-import { BOOKS_FOLDER, DETAILS_PATH, LIBRARY_INDEX_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
+import { BOOKS_FOLDER, chapterListPath, CHAPTERS_FOLDER, DETAILS_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
+import { homeSerials, parseChapterList, parseSubscriptions, type ChapterList, type Serial, type Subscription } from "./serials";
 import { showReader } from "./reader";
 import { marksOf, withMarks, type Marks, type ReadMark } from "./sync";
 import { forgetAll, keepBook, keptBooks, keepValue, keptValue } from "./store";
@@ -223,6 +224,8 @@ async function showApp() {
   /** Books added from Home: what their EPUBs say, until a phone lists them in library.json. */
   const addedHere: Record<string, IndexEntry> = (await keptValue<Record<string, IndexEntry>>("added")) ?? {};
   let books: LibraryBook[] = kept?.books ?? [];
+  /** The shared details file's edits, books' and serials'. */
+  let detailsNow: Record<string, BookDetails> = {};
   /** Each book's furthest place, with the time of the sync file it was read from: read again only when that changes. */
   const known = new Map<string, KnownProgress>(Object.entries(kept?.progress ?? {}));
   let saveTimer: number | undefined;
@@ -492,7 +495,7 @@ async function showApp() {
   };
 
   /** Edit details…: title, author, series and number, into the shared details file (the newer edit wins per book). */
-  const editDetails = (book: LibraryBook) => {
+  const editDetails = (book: LibraryBook, serial = false) => {
     const field = (label: string, value: string, attrs: Record<string, string> = {}) => {
       const input = h("input", { value, "aria-label": label, ...attrs });
       return [h("label", {}, label, input), input] as const;
@@ -504,7 +507,7 @@ async function showApp() {
     const save = h("button", { class: "btn primary", type: "submit" }, "Save");
     const form = h("form", { class: "box" },
       h("h2", {}, "Edit details"),
-      titleRow, authorRow, h("div", { class: "two" }, seriesRow, numberRow),
+      titleRow, authorRow, serial ? null : h("div", { class: "two" }, seriesRow, numberRow),
       h("div", { class: "btns" }, h("button", { class: "btn", type: "button", onclick: () => close() }, "Cancel"), save));
     const dialog = h("div", { class: "dialog", role: "dialog", "aria-modal": "true", "aria-label": "Edit details" }, form);
     const close = () => { dialog.remove(); document.removeEventListener("keydown", onKey, true); };
@@ -528,7 +531,9 @@ async function showApp() {
       };
       close();
       const before = books.find(b => b.id === book.id);
+      const detailsBefore = detailsNow;
       books = books.map(b => (b.id === book.id ? { ...b, title: edit.title, author: edit.author, series: edit.series, seriesIndex: edit.number } : b));
+      detailsNow = { ...detailsNow, [book.id]: { ...detailsNow[book.id], ...edit, updatedAt: Date.now() } };
       saveLibrary();
       render();
       try {
@@ -543,6 +548,7 @@ async function showApp() {
         }
       } catch {
         if (before) books = books.map(b => (b.id === book.id ? before : b));
+        detailsNow = detailsBefore;
         render();
         failed();
       }
@@ -593,6 +599,41 @@ async function showApp() {
     const was = known.get(id);
     return book && was && stillKnown(was, book) != null ? was : null;
   };
+  // Serials (WEB.md → Home, step 3a): the subscriptions file, each serial's chapter list and sync file, read when Serials is first shown.
+  let serialData: { subs: Subscription[]; lists: Record<string, ChapterList | null>; places: Record<string, Parameters<typeof homeSerials>[2][string]> } | null = null;
+  let serialsLoading: Promise<void> | null = null;
+  const loadSerials = () => serialsLoading ??= (async () => {
+    try {
+      const [subsText, listed, syncListed] = await Promise.all([
+        api.readText(SUBSCRIPTIONS_PATH), api.listFolder(CHAPTERS_FOLDER, false), api.listFolder(SYNC_FOLDER, false),
+      ]);
+      const subs = parseSubscriptions(subsText?.text ?? null).filter(sub => !sub.removed && isSerialId(sub.bookId));
+      const lists: Record<string, ChapterList | null> = {};
+      const places: Record<string, Parameters<typeof homeSerials>[2][string]> = {};
+      const named = (files: { name: string }[]) => new Set(files.map(f => f.name.toLowerCase()));
+      const haveList = named(listed);
+      const haveSync = named(syncListed);
+      await Promise.all(subs.map(async sub => {
+        const file = `${sub.bookId}.json`.toLowerCase();
+        const [list, sync] = await Promise.all([
+          haveList.has(file) ? api.readText(chapterListPath(sub.bookId)).then(r => parseChapterList(r?.text ?? null)).catch(() => null) : null,
+          haveSync.has(file) ? api.readText(serialSyncPath(sub.bookId)).then(r => (r ? JSON.parse(r.text) : null)).catch(() => null) : null,
+        ]);
+        lists[sub.bookId] = list;
+        places[sub.bookId] = sync;
+      }));
+      serialData = { subs, lists, places };
+    } catch {
+      // The footer says so; the serials as last read stay (none: an empty list).
+      dropboxLabel.hidden = false;
+      serialData ??= { subs: [], lists: {}, places: {} };
+    }
+  })();
+  const serialsNow = (): Serial[] | null => serialData && homeSerials(serialData.subs, serialData.lists, serialData.places, detailsNow, Date.now());
+  const serialAsBook = (x: Serial): LibraryBook => ({
+    id: x.id, path: "", title: x.title, author: x.author, series: null, seriesIndex: null, read: false, hidden: false,
+    indexedAt: 0, cover: null, lastRead: null, hasSyncFile: false,
+  });
   home = createHome({
     books: () => books.map(marked),
     showHidden: () => showHidden,
@@ -628,6 +669,9 @@ async function showApp() {
       }
       return { title: info?.title ?? null, author: info?.author ?? null, add: () => addBook(file.name, bytes, info, id) };
     },
+    serials: serialsNow,
+    loadSerials,
+    editSerial: x => editDetails(serialAsBook(x), true),
   });
   /** One book into /Books/ (never over a file there); shown at once with what its EPUB says. */
   const addBook = async (name: string, bytes: Uint8Array, info: BookInfo | null, id: string | null): Promise<AddOutcome> => {
@@ -687,6 +731,7 @@ async function showApp() {
       api.listFolder(SYNC_FOLDER, false),
       api.readText(DETAILS_PATH).then(r => parseDetails(r?.text ?? null).books).catch(() => ({})),
     ]);
+    detailsNow = details;
     books = libraryBooks(files, index, syncFiles, details, addedHere);
     // Once a phone has listed a book added here, its entry is the one shown.
     const listed = Object.keys(addedHere).filter(id => (index as Record<string, IndexEntry>)[id]);
@@ -710,6 +755,8 @@ async function showApp() {
       return;
     }
     if (Date.now() - hiddenAt < RECHECK_AFTER_MS || !currentToken()) return;
+    // The serials are read again too, when they've been shown.
+    if (serialData) { serialsLoading = null; void loadSerials().then(render); }
     const syncFiles = await api.listFolder(SYNC_FOLDER, false).catch(() => null);
     const next = syncFiles && withSyncTimes(books, syncFiles);
     if (!next) return;
