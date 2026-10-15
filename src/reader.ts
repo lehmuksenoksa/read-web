@@ -16,6 +16,7 @@ import {
 } from "./looks";
 import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
+import { chapterHref, chapterIdOf, nextAfterCaughtUp } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
 import { afterKeptOpening, openingPlan, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
 import { h, icon, ICONS } from "./ui";
@@ -40,11 +41,26 @@ export interface ReaderProps {
   tools: HTMLElement;
   /** The book's sync file as just uploaded with Web's place: the Library's progress follows. */
   onSaved?: (syncText: string) => void;
+  /** A serial (WEB.md → Home, step 3b) instead of an EPUB from /Books/. */
+  serial?: SerialReading;
+}
+
+/** What the reader needs of a serial. */
+export interface SerialReading {
+  open(): Book;
+  syncPath: string;
+  /** The chapter read to its end (CAUGHT UP): a place still in it opens at the next chapter. */
+  endChapterId: string | null;
+  /** A page turned past the end of the newest chapter (the href of the chapter that ended). */
+  onPastEnd(href: string): void;
+  /** The reader is in this chapter now (the next ones are fetched ahead). */
+  onChapter(href: string): void;
 }
 
 /** The book in [root] (the pane beside the Library); returns how to close it, its place saved first. */
 export async function showReader(root: HTMLElement, props: ReaderProps): Promise<() => Promise<void>> {
   const { dropbox, id, appearance } = props;
+  const syncPath = props.serial?.syncPath ?? syncFilePath(id);
   const status = h("div", { class: "foot" }, "Opening…");
   const prompt = h("div", { class: "msg", hidden: true });
   const page = h("div", { class: "page", id: "page" });
@@ -100,10 +116,10 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     // This browser keeps it too, to open here next time without waiting for Dropbox.
     void keepValue(`place:${id}`, place);
     for (let attempt = 0; attempt < 3; attempt++) {
-      const remote = await dropbox.readText(syncFilePath(id));
+      const remote = await dropbox.readText(syncPath);
       try {
         const text = withWebPlace(remote?.text ?? null, id, place);
-        await dropbox.writeText(syncFilePath(id), text, remote?.rev ?? null);
+        await dropbox.writeText(syncPath, text, remote?.rev ?? null);
         props.onSaved?.(text);
         return;
       } catch (e) {
@@ -148,7 +164,10 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (!nav) return;
     moved = true;
     anchor = null;
-    if (forward) nav.goForward(false, () => undefined);
+    if (forward) nav.goForward(false, ok => {
+      // A serial read past the end of its newest chapter: CAUGHT UP.
+      if (!ok && props.serial && current && book && current.href.split("#")[0] === book.readingOrder[book.readingOrder.length - 1]) props.serial.onPastEnd(current.href);
+    });
     else nav.goBackward(false, () => undefined);
   };
   /** Scrolling: a moved place is saved, as after a page turn. */
@@ -278,7 +297,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   };
 
   const readSyncFile = async (): Promise<SyncFile | null> => {
-    const remote = await dropbox.readText(syncFilePath(id));
+    const remote = await dropbox.readText(syncPath);
     if (!remote) return null;
     try {
       return JSON.parse(remote.text) as SyncFile;
@@ -602,13 +621,18 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     positionChanged: (locator: Locator) => {
       current = locator;
       currentTop = readPageTop();
+      props.serial?.onChapter(locator.href);
       showPlace();
       if (moved) scheduleUpload();
     },
     tap: () => pageClicked(),
     click: () => pageClicked(),
-    // Links to other sites aren't followed from a book.
-    handleLocator: () => true,
+    // Links to other sites aren't followed from a book; a serial's link to its site opens in a new tab.
+    handleLocator: (locator: Locator) => {
+      const href = locator.href;
+      if (props.serial && /^https:\/\/(www\.)?(royalroad\.com|patreon\.com)\//.test(href)) window.open(href, "_blank", "noopener,noreferrer");
+      return true;
+    },
   };
   /** The words at the top of the page in view (null if it can't be read: the place keeps its progress only). */
   const readPageTop = (): PageTop | null => {
@@ -787,10 +811,20 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     // kept it, at once, with Dropbox's read alongside (WEB.md → Kept in this browser); else Dropbox's.
     const syncRead = readSyncFile();
     syncRead.catch(() => undefined);
-    const [bytes, kept] = await Promise.all([bookFile(dropbox, id, props.path), keptValue<Position>(`place:${id}`)]);
-    book = await openBook(bytes);
+    const [opened, kept] = await Promise.all([
+      props.serial ? props.serial.open() : bookFile(dropbox, id, props.path).then(openBook),
+      keptValue<Position>(`place:${id}`),
+    ]);
+    book = opened;
+    /** A CAUGHT UP serial whose newer chapters have come opens at the first of them, which becomes the place. */
+    const pastCaughtUp = (at: Locator | null): Locator | null => {
+      const next = props.serial && book && at ? nextAfterCaughtUp(book.readingOrder.map(h => chapterIdOf(h) ?? ""), chapterIdOf(at.href), props.serial.endChapterId) : null;
+      if (!next || !at) return at;
+      moved = true;
+      return new Locator({ href: chapterHref(next), type: at.type, locations: new LocatorLocations({ progression: 0 }) });
+    };
     if (kept) {
-      if (!(await mount(Locator.deserialize(kept.locator) ?? null))) tell("Couldn't find your place in this book.");
+      if (!(await mount(pastCaughtUp(Locator.deserialize(kept.locator) ?? null)))) tell("Couldn't find your place in this book.");
       void syncRead.then(file => {
         if (closed) return;
         const next = afterKeptOpening(withCurrent(file), id, kept, moved, dismissedAt);
@@ -805,7 +839,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     } else {
       const plan = openingPlan(await syncRead, null);
       if (plan.start) void keepValue(`place:${id}`, plan.start);
-      const saved = plan.start ? Locator.deserialize(plan.start.locator) ?? null : null;
+      const saved = pastCaughtUp(plan.start ? Locator.deserialize(plan.start.locator) ?? null : null);
       if (!(await mount(saved))) tell("Couldn't find your place in this book.");
       if (plan.ask) ask(plan.ask);
     }

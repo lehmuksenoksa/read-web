@@ -30,16 +30,28 @@ export function serialSyncPath(id: string): string {
   return `${SYNC_FOLDER}/${id}.json`;
 }
 
+/** A serial's chapter text as the phones put it in Dropbox (step 3b), read only: `chapters/<serial>/<chapter>.xhtml`. */
+export function chapterFolderPath(id: string): string {
+  if (!isSerialId(id)) throw new Error(`Not a serial: ${id}`);
+  return `${CHAPTERS_FOLDER}/${id}`;
+}
+export function chapterTextPath(id: string, chapterId: string): string {
+  if (!/^[A-Za-z0-9_-]+$/.test(chapterId)) throw new Error(`Not a chapter: ${chapterId}`);
+  return `${chapterFolderPath(id)}/${chapterId}.xhtml`;
+}
+
 /** Web's own setup (its looks, the look in use, the interface): not in the phones' device list. */
 export const WEB_SETUP_PATH = `${SYNC_FOLDER}/devices/Web/setup.json`;
 
 /**
- * The only paths the web version may write: a book's own sync file in `/Apps/Read/Sync/`, Web's own
- * setup file, and the shared details file (Edit details, 2026-10-14). Never anything in `/Books/` or
- * anywhere else (the app's rule, CLAUDE.md → Never).
+ * The only paths the web version may write: a book's or a serial's own sync file in
+ * `/Apps/Read/Sync/` (Web's place; serials since step 3b), Web's own setup file, the shared details
+ * file (Edit details, 2026-10-14) and the subscriptions file (a serial's CAUGHT UP mark, step 3b).
+ * Never anything in `/Books/` or anywhere else (the app's rule, CLAUDE.md → Never).
  */
 export function isWritablePath(path: string): boolean {
-  return /^\/Apps\/Read\/Sync\/[0-9a-f]{64}\.json$/.test(path) || path === WEB_SETUP_PATH || path === DETAILS_PATH;
+  return /^\/Apps\/Read\/Sync\/([0-9a-f]{64}|(rr|pt)-[A-Za-z0-9_-]+)\.json$/.test(path)
+    || path === WEB_SETUP_PATH || path === DETAILS_PATH || path === SUBSCRIPTIONS_PATH;
 }
 
 /** A font file or a font's list of files, in `/Apps/Read/Fonts/` (fonts downloaded from Google Fonts). */

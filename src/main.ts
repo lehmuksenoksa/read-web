@@ -7,8 +7,13 @@ import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, t
 import { createHome } from "./homeView";
 import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, markedBook, placesOf, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
 import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
-import { BOOKS_FOLDER, chapterListPath, CHAPTERS_FOLDER, DETAILS_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
-import { homeSerials, parseChapterList, parseSubscriptions, type ChapterList, type Serial, type Subscription } from "./serials";
+import { backupPath, BOOKS_FOLDER, chapterFolderPath, chapterListPath, CHAPTERS_FOLDER, chapterTextPath, DETAILS_PATH, DEVICES_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
+import { openSerial } from "./serialBook";
+import {
+  chapterIdOf, homeSerials, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, progressLabel, readingOrderOf, searchSerials, sortSerials, withEndMark,
+  type ChapterList, type Serial, type Subscription,
+} from "./serials";
+import { keptFile } from "./store";
 import { showReader } from "./reader";
 import { marksOf, withMarks, type Marks, type ReadMark } from "./sync";
 import { forgetAll, keepBook, keptBooks, keepValue, keptValue } from "./store";
@@ -299,8 +304,10 @@ async function showApp() {
   }, { root: list });
   /** Series opened in this visit. */
   const open = new Set<string>();
-  /** The book in the reader. */
+  /** The book or serial in the reader. */
   let currentId: string | null = null;
+  /** What's in the reader: the sidebar lists books, or serials while a serial is open. */
+  let currentKind: "book" | "serial" = "book";
   /** The book in the reader is the one the page started with, not one picked: a newer last-read book replaces it. */
   let startedWith = false;
 
@@ -344,7 +351,23 @@ async function showApp() {
     renderSide();
     if (homeShown) home?.render();
   };
+  /** A serial's row in the sidebar while a serial is open (WEB.md → Home, step 3b). */
+  const serialRow = (x: Serial) => h("button", {
+    class: `row${x.id === currentId ? " cur" : ""}`, "data-sid": x.id, "aria-current": x.id === currentId ? "true" : undefined,
+    onclick: () => void openSerialNow(x),
+  },
+    h("span", { class: "t" }, h("span", { class: "x" }, x.title)),
+    h("span", { class: "a" }, x.chapters.length ? progressLabel(x.progress) : x.site));
   const renderSide = () => {
+    sortButton.style.display = currentKind === "serial" ? "none" : "";
+    heading.textContent = currentKind === "serial" ? "Serials" : "Library";
+    if (currentKind === "serial") {
+      const all = serialsNow() ?? [];
+      const found = sortSerials(searchSerials(all, query), { key: "lastread", reversed: false });
+      count.textContent = query.trim() ? `${found.length} found` : `Serials · ${all.length}`;
+      list.replaceChildren(...(found.length ? found.map(serialRow) : [h("p", { class: "note muted" }, all.length ? "No serials match." : "No serials yet.")]));
+      return;
+    }
     const listed = books.map(marked).filter(b => !!b.hidden === showHidden);
     const items = libraryItems(listed, sortBy, query, setup.groupSeries);
     const found = items.reduce((n, item) => n + (item.kind === "book" ? 1 : item.books.length), 0);
@@ -569,6 +592,7 @@ async function showApp() {
     startedWith = atStart;
     if (book.id === currentId) return opening;
     currentId = book.id;
+    currentKind = "book";
     // Its series open, so the highlighted row shows.
     if (book.series) open.add(book.series.toLocaleLowerCase());
     render();
@@ -584,6 +608,94 @@ async function showApp() {
     }).catch(() => undefined); // One book that fails to open doesn't stop the next.
     return opening;
   };
+  /** A serial into the reader (WEB.md → Home, step 3b): its chapters from Dropbox, its place in its sync file. */
+  const openSerialNow = (x: Serial) => {
+    if (homeShown) {
+      homeShown = false;
+      home?.closePanel();
+      layout();
+    }
+    startedWith = false;
+    if (x.id === currentId) return opening;
+    currentId = x.id;
+    currentKind = "serial";
+    render();
+    if (NARROW.matches) { overlayOpen = false; layout(); }
+    opening = opening.then(async () => {
+      await closeReader?.();
+      closeReader = null;
+      if (currentId !== x.id) return;
+      const [inDropbox, keep] = await Promise.all([chaptersInDropbox(x.id), phonesKeep()]);
+      const sub = serialData?.subs.find(s => s.bookId === x.id);
+      const order = readingOrderOf(x.chapters).map(c => c.id);
+      const text = (chapterId: string) => keptFile(chapterTextPath(x.id, chapterId), () => api.download(chapterTextPath(x.id, chapterId)).then(f => f?.bytes ?? null))
+        .then(bytes => (bytes ? new TextDecoder().decode(bytes) : null));
+      closeReader = await showReader(pane, {
+        dropbox: api, appearance: look, id: x.id, path: "", title: x.title, tools,
+        onSaved: saved => {
+          if (serialData) serialData = { ...serialData, places: { ...serialData.places, [x.id]: JSON.parse(saved) } };
+          render();
+        },
+        serial: {
+          open: () => openSerial({ id: x.id, title: x.title, author: x.author, site: x.site, chapters: x.chapters, inDropbox, keepNotes: keepsNotes(sub, keep), text }),
+          syncPath: serialSyncPath(x.id),
+          endChapterId: sub?.endChapterId ?? null,
+          onChapter: href => {
+            // The next two chapters, fetched ahead and kept in this browser.
+            const at = order.indexOf(chapterIdOf(href) ?? "");
+            for (const next of order.slice(at + 1, at + 3)) if (at >= 0 && inDropbox.has(next)) void text(next).catch(() => null);
+          },
+          onPastEnd: href => {
+            const chapterId = chapterIdOf(href);
+            if (chapterId && inDropbox.has(chapterId)) void markCaughtUp(x.id, chapterId);
+          },
+        },
+      });
+    }).catch(() => undefined);
+    return opening;
+  };
+  /** Which chapters of a serial are in Dropbox: listed when it's first opened or shown, and kept. */
+  const inDropboxNow = new Map<string, Promise<Set<string>>>();
+  const chaptersInDropbox = (id: string): Promise<Set<string>> => {
+    let got = inDropboxNow.get(id);
+    if (!got) {
+      got = api.listFolder(chapterFolderPath(id), false)
+        .then(files => new Set(files.filter(f => f.name.endsWith(".xhtml")).map(f => f.name.slice(0, -".xhtml".length))))
+        .catch(() => { inDropboxNow.delete(id); return new Set<string>(); });
+      inDropboxNow.set(id, got);
+    }
+    return got;
+  };
+  const inDropboxCount = new Map<string, number>();
+  /** The phones' "keep author notes" setting, from their setup backups; read once. */
+  let phonesKeepRead: Promise<boolean> | null = null;
+  const phonesKeep = () => phonesKeepRead ??= (async () => {
+    const devices = await api.readText(DEVICES_PATH).then(r => (r ? (JSON.parse(r.text).devices as string[]) : [])).catch(() => []);
+    const backups = await Promise.all(devices.filter(d => /^[A-Za-z0-9 _.-]+$/.test(d)).map(d => api.readText(backupPath(d)).then(r => (r ? JSON.parse(r.text) : null)).catch(() => null)));
+    return phonesKeepNotes(backups.filter(Boolean));
+  })();
+  /** Read to the end of the newest chapter: CAUGHT UP, in the subscriptions file (that serial's end mark only). */
+  const markCaughtUp = async (id: string, chapterId: string) => {
+    try {
+      for (let attempt = 0; ; attempt++) {
+        const remote = await api.readText(SUBSCRIPTIONS_PATH);
+        const next = remote && withEndMark(remote.text, id, chapterId, Date.now());
+        if (!next) break;
+        try {
+          await api.writeText(SUBSCRIPTIONS_PATH, next, remote.rev);
+          if (serialData) serialData = { ...serialData, subs: parseSubscriptions(next) };
+          break;
+        } catch (err) {
+          if (!(err instanceof RevConflict) || attempt >= 2) throw err;
+        }
+      }
+      tell("Caught up");
+      render();
+    } catch {
+      failed();
+    }
+  };
+
   /** At the start, the book read last on any device; opening it saves no place. */
   const startWithLastRead = () => {
     const last = lastReadBook(books.map(marked).filter(b => !b.hidden));
@@ -672,6 +784,13 @@ async function showApp() {
     serials: serialsNow,
     loadSerials,
     editSerial: x => editDetails(serialAsBook(x), true),
+    openSerial: x => void openSerialNow(x),
+    chaptersInDropbox: x => {
+      if (!inDropboxCount.has(x.id)) void chaptersInDropbox(x.id).then(set => { inDropboxCount.set(x.id, set.size); render(); });
+      inDropboxCount.set(x.id, inDropboxCount.get(x.id) ?? -1);
+      const n = inDropboxCount.get(x.id)!;
+      return n < 0 ? null : n;
+    },
   });
   /** One book into /Books/ (never over a file there); shown at once with what its EPUB says. */
   const addBook = async (name: string, bytes: Uint8Array, info: BookInfo | null, id: string | null): Promise<AddOutcome> => {
@@ -714,7 +833,8 @@ async function showApp() {
     homeShown = false;
     layout();
     render();
-    if (!currentId) startWithLastRead();
+    // Office lists books: a serial in the reader gives way to the book read last.
+    if (!currentId || currentKind === "serial") startWithLastRead();
   };
   heading.addEventListener("click", () => { if (homeMode()) toHome(); });
   layout();
@@ -756,7 +876,7 @@ async function showApp() {
     }
     if (Date.now() - hiddenAt < RECHECK_AFTER_MS || !currentToken()) return;
     // The serials are read again too, when they've been shown.
-    if (serialData) { serialsLoading = null; void loadSerials().then(render); }
+    if (serialData) { serialsLoading = null; inDropboxNow.clear(); inDropboxCount.clear(); void loadSerials().then(render); }
     const syncFiles = await api.listFolder(SYNC_FOLDER, false).catch(() => null);
     const next = syncFiles && withSyncTimes(books, syncFiles);
     if (!next) return;

@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { decodeHome, DEFAULT_SERIALS, moveColumn, shownColumns } from "../src/home";
 import { chapterListPath, isSerialId, isWritablePath, serialSyncPath } from "../src/paths";
 import {
-  chapterDateLabel, currentChapterIndex, freshIndexes, furthestPlace, homeSerials, lastCheck, NEW_FOR_MS, newChaptersText,
-  numbersOnly, panelChapters, parseChapterList, parseSubscriptions, searchSerials, sortSerials, storyProgress,
+  chapterDateLabel, chapterHref, currentChapterIndex, estimatedLengths, freshIndexes, furthestPlace, homeSerials, keepsNotes, lastCheck, lastReadSerial,
+  missingChapterPage, NEW_FOR_MS, newChaptersText, nextAfterCaughtUp, numbersOnly, panelChapters, parseChapterList, parseSubscriptions, phonesKeepNotes,
+  progressLabel, readingOrderOf, searchSerials, sortSerials, storyProgress, withEndMark,
   type ChapterList, type SharedChapter, type Subscription,
 } from "../src/serials";
 
@@ -198,13 +199,79 @@ describe("Serials' setup and paths", () => {
     expect(moveColumn(home.serials.columns, "new", "site").order.slice(0, 2)).toEqual(["new", "site"]);
   });
 
-  it("reads a serial's files only, never writes them", () => {
+  it("reads a serial's chapter files only; writes only its sync file (Web's place)", () => {
     expect(chapterListPath("rr-12345")).toBe("/Apps/Read/Sync/chapters/rr-12345.json");
     expect(serialSyncPath("pt-c12345")).toBe("/Apps/Read/Sync/pt-c12345.json");
     expect(isSerialId("pt-name_1")).toBe(true);
     expect(isSerialId("../x")).toBe(false);
     expect(() => chapterListPath("../library")).toThrow();
     expect(isWritablePath("/Apps/Read/Sync/chapters/rr-12345.json")).toBe(false);
-    expect(isWritablePath("/Apps/Read/Sync/rr-12345.json")).toBe(false);
+    expect(isWritablePath("/Apps/Read/Sync/rr-12345.json")).toBe(true);
+  });
+});
+
+describe("Reading a serial on the web (step 3b)", () => {
+  const cs: SharedChapter[] = [
+    { id: "1", title: "One", url: "u1", length: 20_000 },
+    { id: "2", title: "Two", url: "u2", locked: true },
+    { id: "3", title: "Three", url: "u3", empty: true },
+    { id: "4", title: "Four", url: "u4" },
+    { id: "5", title: "Five", url: "u5", length: 10_000 },
+  ];
+
+  it("is the readable chapters, sized as the phones estimate them", () => {
+    expect(readingOrderOf(cs).map(c => c.id)).toEqual(["1", "4", "5"]);
+    expect(estimatedLengths(readingOrderOf(cs))).toEqual([20_000, 15_000, 10_000]);
+    expect(estimatedLengths([{ id: "a", title: "", url: "" }])).toEqual([12_000]);
+    expect(chapterHref("1001")).toBe("ch/1001.xhtml");
+  });
+
+  it("shows a chapter no phone has put in Dropbox as its title and a link to the site", () => {
+    const page = missingChapterPage("Chapter 216: <The> Survey", "https://www.royalroad.com/fiction/1/x/chapter/216", "Royal Road");
+    expect(page).toContain("<head>");
+    expect(page).toContain("<h1>Chapter 216: &lt;The&gt; Survey</h1>");
+    expect(page).toContain("Not in Dropbox yet.");
+    expect(page).toContain('<a href="https://www.royalroad.com/fiction/1/x/chapter/216">Read it on Royal Road ↗</a>');
+  });
+
+  it("keeps authors' notes by the serial's own setting, or the phones' newest backup for Default", () => {
+    expect(keepsNotes({ authorNotes: "Keep" }, false)).toBe(true);
+    expect(keepsNotes({ authorNotes: "Remove" }, true)).toBe(false);
+    expect(keepsNotes({ authorNotes: "Default" }, true)).toBe(true);
+    expect(keepsNotes(undefined, false)).toBe(false);
+    expect(phonesKeepNotes([{ savedAt: 2, settings: { keepAuthorNotes: "true" } }, { savedAt: 5, settings: { keepAuthorNotes: "false" } }])).toBe(false);
+    expect(phonesKeepNotes([{ savedAt: 9, settings: {} }, { savedAt: 2, settings: { keepAuthorNotes: "true" } }])).toBe(true);
+    expect(phonesKeepNotes([])).toBe(false);
+  });
+
+  it("opens a CAUGHT UP serial at the first newer chapter, only while the place is in the ended one", () => {
+    expect(nextAfterCaughtUp(["1", "4", "5"], "4", "4")).toBe("5");
+    expect(nextAfterCaughtUp(["1", "4", "5"], "5", "5")).toBeNull();
+    expect(nextAfterCaughtUp(["1", "4", "5"], "1", "4")).toBeNull();
+    expect(nextAfterCaughtUp(["1", "4", "5"], null, "4")).toBeNull();
+  });
+
+  it("marks CAUGHT UP in the subscriptions file: that serial's end only, everything else as it was", () => {
+    const file = JSON.stringify({ stories: [
+      { bookId: "rr-1", url: "u", title: "A", seen: { c1: 5 }, endChapterId: "3", endAt: 100, future: "kept" },
+      { bookId: "rr-2", url: "v", title: "B", endChapterId: "9", endAt: 50 },
+    ], version: 1, other: true });
+    const next = JSON.parse(withEndMark(file, "rr-1", "5", 200)!);
+    expect(next.other).toBe(true);
+    expect(next.stories[0]).toEqual({ bookId: "rr-1", url: "u", title: "A", seen: { c1: 5 }, endChapterId: "5", endAt: 200, future: "kept" });
+    expect(next.stories[1]).toEqual({ bookId: "rr-2", url: "v", title: "B", endChapterId: "9", endAt: 50 });
+    // A newer end there already, the same end, or no such serial: nothing to write.
+    expect(withEndMark(file, "rr-1", "5", 90)).toBeNull();
+    expect(withEndMark(file, "rr-1", "3", 300)).toBeNull();
+    expect(withEndMark(file, "rr-9", "1", 300)).toBeNull();
+  });
+
+  it("labels the sidebar's rows as the phones do, and Continue is the serial read last", () => {
+    expect(progressLabel(storyProgress(215, 211))).toBe("Ch. 212 of 215");
+    expect(progressLabel(storyProgress(188, 187))).toBe("Up to date · 188");
+    expect(progressLabel(storyProgress(30, null))).toBe("Not started · 30");
+    const s = (id: string, lastRead: number | null, n = 3) => homeSerials([sub(id, id)], { [id]: list(id, chapters(n)) }, lastRead ? { [id]: { positions: { a: place("ch/1001.xhtml", 0, lastRead, "S23") } } } : {}, {}, NOW)[0];
+    expect(lastReadSerial([s("rr-1", 5), s("rr-2", 9), s("rr-3", null)])?.id).toBe("rr-2");
+    expect(lastReadSerial([s("rr-3", null)])).toBeNull();
   });
 });

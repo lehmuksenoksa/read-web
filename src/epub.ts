@@ -270,11 +270,17 @@ export function nameBlocks(body: NamedNode, taken: Set<string>): void {
  * no scripts or script attributes (WEB.md: book pages can't run scripts), and their images,
  * stylesheets and fonts point to in-memory copies (blob: addresses), never to a server.
  */
+/** Where a book's files come from: an EPUB's zip, or a serial's chapters in Dropbox. */
+export interface BookFiles {
+  has(name: string): boolean;
+  read(name: string): Promise<Uint8Array>;
+}
+
 export class ZipFetcher implements Fetcher {
   private readonly blobs = new Map<string, Promise<string>>();
   private readonly urls: string[] = [];
 
-  constructor(private readonly zip: Zip) {}
+  constructor(private readonly zip: BookFiles) {}
 
   links(): Link[] {
     return [];

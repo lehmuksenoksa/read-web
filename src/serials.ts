@@ -19,6 +19,8 @@ export interface SharedChapter {
   empty?: boolean;
   /** When a phone first showed it; 0: the serial came with it (never NEW); missing: not yet (NEW). */
   seenAt?: number | null;
+  /** The stored chapter's size in bytes on the phone that wrote the list (step 3b). */
+  length?: number | null;
 }
 
 /** `/Apps/Read/Sync/chapters/<serial>.json`. */
@@ -40,8 +42,11 @@ export interface Subscription {
   removed?: boolean;
   /** When each chapter was first seen, on either phone (chapter id → time); the last 30 days only. */
   seen?: Record<string, number>;
-  /** The chapter read to its end (CAUGHT UP). */
+  /** The chapter read to its end (CAUGHT UP), and when. */
   endChapterId?: string | null;
+  endAt?: number | null;
+  /** "Default", "Keep" or "Remove". */
+  authorNotes?: string;
 }
 
 export function parseSubscriptions(text: string | null): Subscription[] {
@@ -332,4 +337,83 @@ export function sortSerials(serials: Serial[], sort: { key: SerialColumnKey; rev
 /** Details shows New and Unread as plain numbers when it's crowded: seven columns or more, or a window under 1200 px. */
 export function numbersOnly(shownColumns: number, windowWidth: number): boolean {
   return shownColumns >= 7 || windowWidth < 1200;
+}
+
+// --- Reading a serial on the web (WEB.md → Home, step 3b) ---
+
+/** A chapter's href in the serial as a book, as the phones have it (StoryRules.chapterHref). */
+export const chapterHref = (id: string) => `ch/${id}.xhtml`;
+
+/** Until any chapter's size is known, chapters are taken to be about this long (the phones' DEFAULT_CHAPTER_BYTES). */
+const DEFAULT_CHAPTER_BYTES = 12_000;
+
+/** The chapters in the serial as a book: the readable ones (Patreon's locked and empty posts left out, as on the phones). */
+export function readingOrderOf(chapters: SharedChapter[]): SharedChapter[] {
+  return chapters.filter(readable);
+}
+
+/** Each chapter's size for Readium's page count: the known ones, the others their average (as the phones estimate). */
+export function estimatedLengths(chapters: SharedChapter[]): number[] {
+  const known = chapters.map(c => c.length).filter((n): n is number => typeof n === "number" && n > 0);
+  const average = known.length ? Math.round(known.reduce((a, b) => a + b, 0) / known.length) : DEFAULT_CHAPTER_BYTES;
+  return chapters.map(c => (typeof c.length === "number" && c.length > 0 ? c.length : average));
+}
+
+const escapeText = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** The page for a chapter no phone has put in Dropbox yet: its title and a link to it on the site. */
+export function missingChapterPage(title: string, url: string, site: string): string {
+  const safe = escapeText(title);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en"><head><meta charset="UTF-8"/><title>${safe}</title></head><body><h1>${safe}</h1><p>Not in Dropbox yet.</p><p><a href="${escapeText(url)}">Read it on ${escapeText(site)} ↗</a></p></body></html>`;
+}
+
+/** The phones' class on authors' notes in a stored chapter (RoyalRoad.kt's AUTHOR_NOTE_CLASS). */
+export const AUTHOR_NOTE_CLASS = "read-author-note";
+
+/** Whether a serial's authors' notes show: its own setting, or for Default the phones' setting. */
+export function keepsNotes(sub: Pick<Subscription, "authorNotes"> | undefined, phonesKeep: boolean): boolean {
+  return sub?.authorNotes === "Keep" ? true : sub?.authorNotes === "Remove" ? false : phonesKeep;
+}
+
+/** The phones' "keep author notes" setting, from the newest setup backup; off when none says. */
+export function phonesKeepNotes(backups: { savedAt?: number; settings?: Record<string, string> }[]): boolean {
+  const newest = [...backups].filter(b => b.settings && "keepAuthorNotes" in b.settings).sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0))[0];
+  return newest?.settings?.keepAuthorNotes === "true";
+}
+
+/**
+ * Where a CAUGHT UP serial opens once newer chapters have come (SPEC → Subscriptions, 2026-10-12):
+ * the first chapter after the one read to its end, when the place is still in that chapter; null
+ * when it opens at its place.
+ */
+export function nextAfterCaughtUp(order: string[], placeId: string | null, endId: string | null | undefined): string | null {
+  if (!placeId || placeId !== endId) return null;
+  const at = order.indexOf(endId);
+  return at >= 0 && at + 1 < order.length ? order[at + 1] : null;
+}
+
+/**
+ * The subscriptions file with [bookId] marked read to the end of [chapterId] at [now] (CAUGHT UP):
+ * that serial's end mark only, everything else as it was; null when a newer end is there already.
+ */
+export function withEndMark(text: string, bookId: string, chapterId: string, now: number): string | null {
+  const file = JSON.parse(text) as { stories?: (Subscription & Record<string, unknown>)[] };
+  const stories = file.stories ?? [];
+  const entry = stories.find(s => s.bookId === bookId);
+  if (!entry || (entry.endAt ?? 0) >= now) return null;
+  if (entry.endChapterId === chapterId) return null;
+  return JSON.stringify({ ...file, stories: stories.map(s => (s.bookId === bookId ? { ...s, endChapterId: chapterId, endAt: now } : s)) });
+}
+
+/** "Ch. 212 of 215", "Up to date · 188" or "Not started · 30" (the phones' StoryProgress.label). */
+export function progressLabel(p: StoryProgress): string {
+  if (p.currentIndex == null) return `Not started · ${p.chapterCount}`;
+  if (p.unreadCount === 0) return `Up to date · ${p.chapterCount}`;
+  return `Ch. ${p.currentIndex + 1} of ${p.chapterCount}`;
+}
+
+/** The serial read last on any device: Continue on Serials. */
+export function lastReadSerial(serials: Serial[]): Serial | null {
+  return serials.filter(s => s.lastRead != null && s.chapters.length).sort((a, b) => b.lastRead! - a.lastRead!)[0] ?? null;
 }

@@ -8,7 +8,7 @@ import {
   type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
 } from "./home";
 import {
-  chapterDateLabel, lastCheck, newChaptersText, numbersOnly, panelChapters, searchSerials, serialColumn, sortSerials,
+  chapterDateLabel, lastCheck, lastReadSerial, newChaptersText, numbersOnly, panelChapters, readingOrderOf, searchSerials, serialColumn, sortSerials,
   type Serial, type SerialColumnKey,
 } from "./serials";
 import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
@@ -48,6 +48,10 @@ export interface HomeContext {
   loadSerials(): Promise<void>;
   /** Edit details… for a serial: its title and author. */
   editSerial(serial: Serial): void;
+  /** A serial into the reader (step 3b). */
+  openSerial(serial: Serial): void;
+  /** How many of its chapters are in Dropbox; null until listed (then Home is drawn again). */
+  chaptersInDropbox(serial: Serial): number | null;
 }
 
 /** The covers' colours when a book has no cover of its own. */
@@ -359,6 +363,12 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
   const tagRow = (x: Serial) => h("span", { class: "tagrow" }, ...present(newTag(x), unreadTag(x)));
   const updatedLabel = (x: Serial) => chapterDateLabel(x.latest?.published, Date.now(), true);
   const bySite = (x: Serial) => [x.author, x.site].filter(Boolean).join(" · ");
+  /** "214 of 215 chapters in Dropbox", once listed. */
+  const inDropbox = (x: Serial) => {
+    const n = ctx.chaptersInDropbox(x);
+    const of = readingOrderOf(x.chapters).length;
+    return n == null || !of ? "" : `${Math.min(n, of)} of ${of} chapters in Dropbox`;
+  };
   const serialOpen = (x: Serial) => panelFor != null && "serial" in panelFor && panelFor.serial === x.id;
 
   const serialCard = (x: Serial, expanded: boolean) => {
@@ -444,7 +454,14 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     else main.replaceChildren(h("div", { class: `scards${view === "expanded" ? " long" : ""}` }, ...shown.map(x => serialCard(x, view === "expanded"))));
     const anchor = columnsOpen ? main.querySelector<HTMLElement>(".colbtn button") : null;
     if (anchor) columnsMenu(anchor);
-    cont.hidden = true;
+    // Continue: the serial read last on any device, and its chapter.
+    const last = all && lastReadSerial(all);
+    cont.hidden = !last;
+    if (last) {
+      cont.replaceChildren(h("span", { class: "ci" }, h("span", { class: "k" }, "Continue"), h("span", { class: "t sans" }, redTitle(last.title)),
+        h("span", { class: "k ch" }, last.current?.title ?? "")));
+      cont.onclick = () => ctx.openSerial(last);
+    }
     renderPanel();
   };
 
@@ -559,8 +576,8 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
         h("div", { class: "by" }, bySite(x)),
         h("div", { class: "stline" }, ...present(newTag(x), unreadTag(x)), updated ? h("span", {}, `Updated ${updated}`) : null),
         h("div", { class: "acts" },
-          h("a", { class: "seal", href: x.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${x.site} ↗`),
-          h("button", { class: "well", onclick: () => ctx.editSerial(x) }, "Edit details…")),
+          readingOrderOf(x.chapters).length ? h("button", { class: "seal", onclick: () => ctx.openSerial(x) }, x.current ? "Continue" : "Read") : null,
+          h("a", { class: "well", href: x.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${x.site} ↗`)),
         x.chapters.length ? h("div", { class: "sec" }, h("h3", {}, "Reading"),
           h("div", { class: "chap" }, ...(x.current
             ? [link(x.current), h("span", { class: "d" }, chapterDateLabel(x.current.published, now, true) ?? "")]
@@ -570,7 +587,8 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
             const cls = [index === x.progress.currentIndex ? "cur" : "", x.progress.isRead(index) ? "read" : "", c.locked ? "locked" : ""].filter(Boolean).join(" ");
             return [h("span", {}, link(c, cls), x.progress.isNew(index) ? h("span", { class: "nw" }, "NEW") : null), h("span", { class: "d" }, chapterDateLabel(c.published, now, true) ?? "")];
           }))) : null,
-        h("div", { class: "foot2" }, x.checkedAt && x.device ? `Checked ${ago(new Date(x.checkedAt).toISOString(), now)} on ${x.device}` : "No chapters from the phones yet.")));
+        h("div", { class: "sec" }, h("button", { class: "word", onclick: () => ctx.editSerial(x) }, "Edit details…")),
+        h("div", { class: "foot2" }, x.checkedAt && x.device ? [`Checked ${ago(new Date(x.checkedAt).toISOString(), now)} on ${x.device}`, inDropbox(x)].filter(Boolean).join(" · ") : "No chapters from the phones yet.")));
       panel.classList.add("open");
       return;
     }
