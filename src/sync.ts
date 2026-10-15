@@ -52,37 +52,77 @@ export function samePosition(a: Position, b: Position): boolean {
   return a.href === b.href && Math.abs(a.progression - b.progression) <= SAME_POSITION_TOLERANCE + 1e-9;
 }
 
+/**
+ * How places in a book compare (the app's PlaceOrder): a book by its overall progress; a serial by
+ * its chapter in the site's order, then the progress within it (report #81: each device estimates a
+ * serial's overall progress from the chapters it has, so the estimates disagree).
+ */
+export interface PlaceOrder {
+  /** Above zero when [a] is further on than [b]. */
+  compare(a: Position, b: Position): number;
+  same(a: Position, b: Position): boolean;
+}
+
+export const BOOK_ORDER: PlaceOrder = {
+  compare: (a, b) => a.totalProgression - b.totalProgression,
+  same: samePosition,
+};
+
+/** A place this far into a chapter counts as its end (the phones' end-of-chapter mark is 1.0). */
+export const CHAPTER_END = 0.98;
+
+/** A serial's chapters by id, in the site's order; the end of one chapter and the start of the next are the same place. */
+export function serialOrder(chapterIds: string[]): PlaceOrder {
+  const index = new Map(chapterIds.map((id, i) => [id, i]));
+  const at = (p: Position) => {
+    const id = p.href.split("#")[0].split("/").pop()!.replace(/\.xhtml$/, "");
+    return p.href.includes("ch/") ? index.get(id) ?? null : null;
+  };
+  const endThenStart = (end: Position, start: Position) => {
+    const ie = at(end);
+    return ie != null && at(start) === ie + 1 && end.progression >= CHAPTER_END && start.progression <= SAME_POSITION_TOLERANCE + 1e-9;
+  };
+  return {
+    compare: (a, b) => {
+      const ia = at(a);
+      const ib = at(b);
+      // A chapter not in the list (gone from the site): the overall progress, as for a book.
+      if (ia == null || ib == null) return BOOK_ORDER.compare(a, b);
+      return ia !== ib ? ia - ib : a.progression - b.progression;
+    },
+    same: (a, b) => samePosition(a, b) || endThenStart(a, b) || endThenStart(b, a),
+  };
+}
+
 export type Decision =
   | { kind: "stay" }
   | { kind: "jump"; position: Position }
   | { kind: "ask"; position: Position };
 
 /** Ask when the other place is further on; stay when it's behind; jump when there's no place here yet. */
-export function decide(mine: Position | null, other: Position): Decision {
-  if (mine && samePosition(mine, other)) return { kind: "stay" };
+export function decide(mine: Position | null, other: Position, order: PlaceOrder = BOOK_ORDER): Decision {
+  if (mine && order.same(mine, other)) return { kind: "stay" };
   if (!mine) return { kind: "jump", position: other };
-  if (other.totalProgression > mine.totalProgression) return { kind: "ask", position: other };
+  if (order.compare(other, mine) > 0) return { kind: "ask", position: other };
   return { kind: "stay" };
 }
 
 /** [decide], only for news: the other place must be newer than this device's last move and than a "Stay". */
-export function resolve(mine: Position | null, other: Position, dismissedAt: number | null): Decision {
+export function resolve(mine: Position | null, other: Position, dismissedAt: number | null, order: PlaceOrder = BOOK_ORDER): Decision {
   if (mine && other.timestamp <= mine.timestamp) return { kind: "stay" };
   if (dismissedAt != null && other.timestamp <= dismissedAt) return { kind: "stay" };
-  return decide(mine, other);
+  return decide(mine, other, order);
 }
 
-function furthestFirst(a: Position, b: Position): number {
-  return b.totalProgression - a.totalProgression || b.timestamp - a.timestamp;
-}
+const furthestFirst = (order: PlaceOrder) => (a: Position, b: Position): number => order.compare(b, a) || b.timestamp - a.timestamp;
 
 /**
  * Of the other devices' places, the one to compare with [mine]: the furthest of those that are
  * news; with none, the newest (which [resolve] lets be).
  */
-export function otherToCompare(others: Position[], mine: Position | null, dismissedAt: number | null): Position | null {
+export function otherToCompare(others: Position[], mine: Position | null, dismissedAt: number | null, order: PlaceOrder = BOOK_ORDER): Position | null {
   const news = others.filter(p => (!mine || p.timestamp > mine.timestamp) && (dismissedAt == null || p.timestamp > dismissedAt));
-  if (news.length) return [...news].sort(furthestFirst)[0];
+  if (news.length) return [...news].sort(furthestFirst(order))[0];
   return [...others].sort((a, b) => b.timestamp - a.timestamp)[0] ?? null;
 }
 
@@ -96,14 +136,14 @@ export interface OpeningPlan {
  * Opening a book on the web: at Web's own place; a book never read here opens at the furthest
  * place another device reached; when another device is further on, it asks.
  */
-export function openingPlan(whole: SyncFile | null, dismissedAt: number | null = null): OpeningPlan {
+export function openingPlan(whole: SyncFile | null, dismissedAt: number | null = null, order: PlaceOrder = BOOK_ORDER): OpeningPlan {
   const file = afterReset(whole);
   const positions = file?.positions ?? {};
   const mine = positions[WEB_DEVICE_ID] ?? null;
   const others = Object.entries(positions).filter(([id]) => id !== WEB_DEVICE_ID).map(([, p]) => p);
-  const other = otherToCompare(others, mine, dismissedAt);
+  const other = otherToCompare(others, mine, dismissedAt, order);
   if (!other) return { start: mine, ask: null };
-  const decision = resolve(mine, other, dismissedAt);
+  const decision = resolve(mine, other, dismissedAt, order);
   switch (decision.kind) {
     case "jump": return { start: decision.position, ask: null };
     case "ask": return { start: mine, ask: decision.position };
@@ -125,17 +165,17 @@ export function withKeptPlace(file: SyncFile | null, bookId: string, kept: Posit
  * page if no page was turned yet; another device further on is asked about, as at any opening.
  */
 export function afterKeptOpening(
-  whole: SyncFile | null, bookId: string, kept: Position, moved: boolean, dismissedAt: number | null = null,
+  whole: SyncFile | null, bookId: string, kept: Position, moved: boolean, dismissedAt: number | null = null, order: PlaceOrder = BOOK_ORDER,
 ): { moveTo: Position | null; ask: Position | null; restart: boolean } {
   const file = afterReset(whole);
   // Started over on a phone since this browser kept its place: as if it had none.
   if (kept.timestamp <= resetAt(whole)) {
-    const plan = openingPlan(file, dismissedAt);
+    const plan = openingPlan(file, dismissedAt, order);
     return { moveTo: moved ? null : plan.start, ask: plan.ask, restart: !moved && !plan.start };
   }
   const theirs = file?.positions[WEB_DEVICE_ID] ?? null;
   const moveTo = !moved && theirs && theirs.timestamp > kept.timestamp && !samePosition(theirs, kept) ? theirs : null;
-  return { moveTo, ask: openingPlan(withKeptPlace(file, bookId, moveTo ?? kept), dismissedAt).ask, restart: false };
+  return { moveTo, ask: openingPlan(withKeptPlace(file, bookId, moveTo ?? kept), dismissedAt, order).ask, restart: false };
 }
 
 /** The first words, cut at a word boundary. */

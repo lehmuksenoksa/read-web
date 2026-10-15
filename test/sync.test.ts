@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterKeptOpening, afterReset, decide, openingPlan, otherToCompare, positionFromLocator, samePosition, snippet, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "../src/sync";
+import { afterKeptOpening, afterReset, decide, openingPlan, otherToCompare, type Position, positionFromLocator, resolve, samePosition, serialOrder, snippet, type SyncFile, WEB_DEVICE_ID, withWebPlace } from "../src/sync";
 
 function position(p: Partial<Position> = {}): Position {
   const href = p.href ?? "chapter12.xhtml";
@@ -169,5 +169,31 @@ describe("a book started over on a phone (Mark as unread, 2026-10-13)", () => {
   it("goes to where another device read after it", () => {
     const later = position({ deviceName: "Boox", href: "chapter2.xhtml", totalProgression: 0.05, timestamp: 7000 });
     expect(afterKeptOpening(reset({ "boox-id": later }, 6000), "b", kept, false)).toEqual({ moveTo: later, ask: null, restart: false });
+  });
+});
+
+describe("a serial's places (report #81)", () => {
+  const order = serialOrder(["948", "949", "950"]);
+  const at = (chapter: string, progression: number, total: number, timestamp = 2_000, deviceName = "Go7"): Position =>
+    ({ locator: {}, href: `ch/${chapter}.xhtml`, progression, totalProgression: total, timestamp, deviceName, snippet: "" });
+
+  it("doesn't take the end of a chapter for further on than the start of the next", () => {
+    const web = at("950", 0, 0.951, 1_000, "Web");
+    const boox = at("949", 1, 0.962);
+    expect(decide(web, boox, order)).toEqual({ kind: "stay" });
+    expect(resolve(web, boox, null, order)).toEqual({ kind: "stay" });
+    expect(decide(boox, { ...web, timestamp: 3_000 }, order)).toEqual({ kind: "stay" });
+    // As a book, the estimates would have asked.
+    expect(decide(web, boox)).toEqual({ kind: "ask", position: boox });
+  });
+
+  it("asks when another device is in a later chapter, whatever the estimates", () => {
+    const mine = at("949", 0.3, 0.97, 1_000, "Web");
+    const s23 = at("950", 0.2, 0.9, 2_000, "S23");
+    expect(decide(mine, s23, order)).toEqual({ kind: "ask", position: s23 });
+    expect(decide(s23, { ...mine, timestamp: 3_000 }, order)).toEqual({ kind: "stay" });
+    const file: SyncFile = { bookId: "pt-x", positions: { web: mine, s23, boox: at("949", 1, 0.99, 2_500, "Boox") } };
+    expect(openingPlan(file, null, order).ask?.deviceName).toBe("S23");
+    expect(openingPlan(file, null).ask?.deviceName).toBe("Boox");
   });
 });

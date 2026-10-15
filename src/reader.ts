@@ -18,7 +18,7 @@ import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
 import { chapterHref, chapterIdOf, nextAfterCaughtUp } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
-import { afterKeptOpening, openingPlan, positionFromLocator, withWebPlace, WEB_DEVICE_ID, type Position, type SyncFile } from "./sync";
+import { afterKeptOpening, BOOK_ORDER, openingPlan, positionFromLocator, serialOrder, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
 import { h, icon, ICONS } from "./ui";
 
 /** Uploads wait this long after the last page turn (the phones wait 5 s). */
@@ -306,11 +306,14 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     }
   };
 
+  /** A serial's places compare by chapter (report #81); a book's by its overall progress. */
+  const placeOrder = (): PlaceOrder => (props.serial && book ? serialOrder(book.readingOrder.map(h => chapterIdOf(h) ?? "")) : BOOK_ORDER);
+
   // Back to this tab: another device may have read on meanwhile.
   const onVisible = async () => {
     if (document.visibilityState !== "visible" || !nav || closed) return;
     const file = await readSyncFile().catch(() => null);
-    const plan = openingPlan(withCurrent(file), dismissedAt);
+    const plan = openingPlan(withCurrent(file), dismissedAt, placeOrder());
     if (plan.ask) ask(plan.ask);
   };
   /** The sync file with Web's place as it is on screen now (not yet uploaded). */
@@ -827,7 +830,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       if (!(await mount(pastCaughtUp(Locator.deserialize(kept.locator) ?? null)))) tell("Couldn't find your place in this book.");
       void syncRead.then(file => {
         if (closed) return;
-        const next = afterKeptOpening(withCurrent(file), id, kept, moved, dismissedAt);
+        const next = afterKeptOpening(withCurrent(file), id, kept, moved, dismissedAt, placeOrder());
         if (next.moveTo) goThere(next.moveTo, true);
         // Started over on a phone (Mark as unread): back to the start, and this browser forgets its place.
         if (next.restart && book) {
@@ -837,7 +840,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
         if (next.ask) ask(next.ask);
       }).catch(() => undefined);
     } else {
-      const plan = openingPlan(await syncRead, null);
+      const plan = openingPlan(await syncRead, null, placeOrder());
       if (plan.start) void keepValue(`place:${id}`, plan.start);
       const saved = pastCaughtUp(plan.start ? Locator.deserialize(plan.start.locator) ?? null : null);
       if (!(await mount(saved))) tell("Couldn't find your place in this book.");
