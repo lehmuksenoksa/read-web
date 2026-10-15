@@ -66,7 +66,22 @@ export function withDefaults(look: Partial<Look> & { id: string }): Look {
 export const CUSTOM_ID = "custom";
 export const CUSTOM_NAME = "Custom";
 
-/** Web's setup (`/Apps/Read/Sync/devices/Web/setup.json`): its looks, the one in use, Custom, the fonts, the Library's grouping. */
+/** The bar's, the Library's and the panels' colours (not the page's: that's the look). */
+export type Chrome = "light" | "dark";
+
+/** A style's look in use and its Custom (WEB.md → One app, two styles: Home and Office each have their own). */
+export interface StyleLook {
+  lookId: string;
+  custom: Look | null;
+  customFrom: string | null;
+}
+
+/**
+ * Web's setup (`/Apps/Read/Sync/devices/Web/setup.json`): its looks, the one in use, Custom, the
+ * fonts, the Library's grouping. As the file has it, `lookId`, `custom` and `customFrom` are
+ * Office's and `homeLook` Home's; as the page sees it ([forStyle]), they're the style's in use
+ * and `homeLook` the other one's.
+ */
 export interface Setup {
   looks: Look[];
   /** A saved look's id, or [CUSTOM_ID] while Custom is in use. */
@@ -85,15 +100,48 @@ export interface Setup {
   sidebarWidth: number;
   /** Home's Library: the view, the sort, the sizes, Details' columns (WEB.md → Home). */
   home: HomeSetup;
+  /** The other style's look in use (in the file: Home's). */
+  homeLook: StyleLook;
+  /** Light or Dark around the page, each style its own. */
+  chrome: { home: Chrome; office: Chrome };
   version: 1;
 }
 
 export const DEFAULT_SETUP: Setup = {
-  looks: WEB_LOOKS, lookId: "office", custom: null, customFrom: null, removedFonts: [], groupSeries: true, sidebar: true, sidebarWidth: 320, home: DEFAULT_HOME, version: 1,
+  looks: WEB_LOOKS, lookId: "office", custom: null, customFrom: null, removedFonts: [], groupSeries: true, sidebar: true, sidebarWidth: 320, home: DEFAULT_HOME,
+  homeLook: { lookId: "office", custom: null, customFrom: null }, chrome: { home: "dark", office: "light" }, version: 1,
 };
+
+/** The setup as the page sees it in Home (true) or Office: the look in use is that style's. Its own inverse. */
+export function forStyle(setup: Setup, home: boolean): Setup {
+  if (!home) return setup;
+  const { lookId, custom, customFrom } = setup.homeLook;
+  return { ...setup, lookId, custom, customFrom, homeLook: { lookId: setup.lookId, custom: setup.custom, customFrom: setup.customFrom } };
+}
 
 /** Setup as the file had it before Custom: Aa's changes were `page`. */
 type SetupFile = Partial<Setup> & { page?: Partial<Look> & { id: string } };
+type LookFile = { lookId?: unknown; custom?: unknown; customFrom?: unknown; page?: Partial<Look> & { id: string } };
+
+/** A style's look in use as the file has it; a look no longer there is the first. */
+function decodeStyleLook(raw: LookFile, looks: Look[]): StyleLook {
+  const saved = looks.some(l => l.id === raw.lookId) ? raw.lookId as string : looks[0].id;
+  let custom = raw.custom && typeof raw.custom === "object" ? asCustom(withDefaults({ ...(raw.custom as Partial<Look>), id: CUSTOM_ID })) : null;
+  let customFrom = typeof raw.customFrom === "string" ? raw.customFrom : null;
+  let lookId = raw.lookId === CUSTOM_ID && custom ? CUSTOM_ID : saved;
+  // An older file's changes to the look in use are Custom now.
+  if (!custom && raw.page && typeof raw.page.id === "string") {
+    const page = withDefaults(raw.page);
+    if (differs(page, looks.find(l => l.id === saved)!)) {
+      custom = asCustom(page);
+      customFrom = saved;
+      lookId = CUSTOM_ID;
+    }
+  }
+  return { lookId, custom, customFrom };
+}
+
+const chromeOf = (value: unknown, otherwise: Chrome): Chrome => (value === "light" || value === "dark" ? value : otherwise);
 
 /** The setup file's text, read leniently: anything missing or unreadable is the default. */
 export function decodeSetup(text: string | null): Setup {
@@ -101,29 +149,22 @@ export function decodeSetup(text: string | null): Setup {
     const raw = JSON.parse(text ?? "") as SetupFile;
     const looks = (raw.looks ?? []).filter(l => l && typeof l.id === "string" && l.id !== CUSTOM_ID).map(withDefaults);
     if (!looks.length) return DEFAULT_SETUP;
-    const saved = looks.some(l => l.id === raw.lookId) ? raw.lookId! : looks[0].id;
-    let custom = raw.custom && typeof raw.custom === "object" ? asCustom(withDefaults({ ...raw.custom, id: CUSTOM_ID })) : null;
-    let customFrom = typeof raw.customFrom === "string" ? raw.customFrom : null;
-    let lookId = raw.lookId === CUSTOM_ID && custom ? CUSTOM_ID : saved;
-    // An older file's changes to the look in use are Custom now.
-    if (!custom && raw.page && typeof raw.page.id === "string") {
-      const page = withDefaults(raw.page);
-      if (differs(page, looks.find(l => l.id === saved)!)) {
-        custom = asCustom(page);
-        customFrom = saved;
-        lookId = CUSTOM_ID;
-      }
-    }
+    const office = decodeStyleLook(raw, looks);
+    // Before Home had its own look (2026-10-15), both used Office's: Home starts with it.
+    const homeLook = raw.homeLook && typeof raw.homeLook === "object" ? decodeStyleLook(raw.homeLook as LookFile, looks) : office;
+    const chrome = (raw.chrome ?? {}) as Partial<Record<"home" | "office", unknown>>;
+    const officeLook = (office.lookId === CUSTOM_ID ? office.custom : looks.find(l => l.id === office.lookId)) ?? looks[0];
     return {
       looks,
-      lookId,
-      custom,
-      customFrom,
+      ...office,
       removedFonts: Array.isArray(raw.removedFonts) ? raw.removedFonts.filter(f => typeof f === "string") : [],
       groupSeries: raw.groupSeries !== false,
       sidebar: raw.sidebar !== false,
       sidebarWidth: sidebarWidth(raw.sidebarWidth ?? SIDEBAR.normal),
       home: decodeHome(raw.home),
+      homeLook,
+      // Office's chrome took its look's colours before it had its own: it starts as Light or Dark as that look is.
+      chrome: { home: chromeOf(chrome.home, "dark"), office: chromeOf(chrome.office, isLight(officeLook) ? "light" : "dark") },
       version: 1,
     };
   } catch {
@@ -295,6 +336,7 @@ export function renameLook(setup: Setup, id: string, name: string): Setup {
 export function cantRemove(setup: Setup, id: string): string | null {
   if (setup.looks.length <= 1) return "The last look stays.";
   if (id === setup.lookId) return "Use another look first.";
+  if (id === setup.homeLook.lookId) return "The other style (Home or Office) uses it.";
   return null;
 }
 
@@ -330,7 +372,10 @@ export function removeFont(setup: Setup, family: string): { setup: Setup; switch
   const switched = [...setup.looks, ...(setup.custom ? [setup.custom] : [])].filter(l => l.font === family).map(l => l.id);
   const swap = (l: Look) => l.font === family ? { ...l, font: "Bookerly" } : l;
   return {
-    setup: { ...setup, looks: setup.looks.map(swap), custom: setup.custom && swap(setup.custom), removedFonts: [...setup.removedFonts, family] },
+    setup: {
+      ...setup, looks: setup.looks.map(swap), custom: setup.custom && swap(setup.custom), removedFonts: [...setup.removedFonts, family],
+      homeLook: { ...setup.homeLook, custom: setup.homeLook.custom && swap(setup.homeLook.custom) },
+    },
     switched,
   };
 }
@@ -342,6 +387,7 @@ export function restoreFont(setup: Setup, family: string, switched: string[] = [
     ...setup,
     looks: setup.looks.map(back),
     custom: setup.custom && back(setup.custom),
+    homeLook: { ...setup.homeLook, custom: setup.homeLook.custom && back(setup.homeLook.custom) },
     removedFonts: setup.removedFonts.filter(f => f !== family),
   };
 }

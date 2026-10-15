@@ -120,6 +120,8 @@ async function showApp() {
   /** Dropbox out of reach: ⚙ says so. */
   let offline = false;
 
+  // Home and Office each have their own look (WEB.md → One app, two styles).
+  look.setStyle(homeMode());
   let setup: Setup = await look.setup();
   /** The Library (its Library or Serials side) or the reader; at the start, where this browser was. */
   let screen: "library" | "reader" = lastPlace().kind === "library" ? "library" : "reader";
@@ -127,8 +129,8 @@ async function showApp() {
   let panelOpen = false;
   let home: ReturnType<typeof createHome> | null = null;
   const layout = () => {
-    // Home is always Dark for now (2026-10-15); Office takes the look's colours.
-    root.className = `app ${homeMode() ? "homeon dark" : "office"} ${screen}${NARROW.matches ? " narrow" : ""}${panelOpen && screen === "reader" ? " panelopen" : ""}`;
+    // Light or Dark around the page: each style its own (2026-10-15).
+    root.className = `app ${homeMode() ? "homeon" : "office"} ${setup.chrome[homeMode() ? "home" : "office"]} ${screen}${NARROW.matches ? " narrow" : ""}${panelOpen && screen === "reader" ? " panelopen" : ""}`;
   };
   NARROW.addEventListener("change", layout);
   applyLook(shown(setup));
@@ -649,8 +651,12 @@ async function showApp() {
     signOut: () => void signOut(api),
     offline: () => offline,
     isHome: homeMode,
+    chrome: () => setup.chrome[homeMode() ? "home" : "office"],
+    setChrome: chrome => look.update({ ...setup, chrome: { ...setup.chrome, [homeMode() ? "home" : "office"]: chrome } }),
     setHome: on => {
       setHomeMode(on);
+      // The page takes that style's look (the listener lays out and draws again).
+      look.setStyle(on);
       layout();
       home?.render();
       showTitle();

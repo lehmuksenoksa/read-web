@@ -4,7 +4,7 @@
 
 import { RevConflict, type Dropbox } from "./dropbox";
 import { CATALOGUE, fontIndex, fontIndexName, googleCssUrl, parseGoogleCss, type FontIndex } from "./fonts";
-import { BOOKERLY_FILES, decodeSetup, DEFAULT_SETUP, hex, pageBackground, pageText, weightsOf, type FontFileFace, type Look, type Setup } from "./looks";
+import { BOOKERLY_FILES, decodeSetup, DEFAULT_SETUP, forStyle, hex, pageBackground, pageText, weightsOf, type FontFileFace, type Look, type Setup } from "./looks";
 import { FONTS_FOLDER, fontPath, WEB_SETUP_PATH } from "./paths";
 import { forgetFiles, keepValue, keptFile, keptValue } from "./store";
 
@@ -26,7 +26,10 @@ const LITERATA: FontFileFace[] = [
 
 export class Appearance {
   private setupLoad: Promise<void> | null = null;
+  /** The setup as the file has it (Office's look on top; Home's in `homeLook`). */
   private current: Setup = DEFAULT_SETUP;
+  /** Home (true) or Office: whose look the page sees and changes. */
+  private home = false;
   private rev: string | null = null;
   private saveTimer: number | undefined;
   private readonly listeners = new Set<(setup: Setup) => void>();
@@ -44,7 +47,23 @@ export class Appearance {
   async setup(): Promise<Setup> {
     this.setupLoad ??= this.loadSetup();
     await this.setupLoad;
-    return this.current;
+    return this.view();
+  }
+
+  private view(): Setup {
+    return forStyle(this.current, this.home);
+  }
+
+  /** Home or Office in use: the page takes that style's look (and Aa changes it). */
+  setStyle(home: boolean) {
+    if (home === this.home) return;
+    this.home = home;
+    this.tell();
+  }
+
+  private tell() {
+    const view = this.view();
+    for (const listener of this.listeners) listener(view);
   }
 
   private async loadSetup() {
@@ -61,7 +80,7 @@ export class Appearance {
         void keepValue("setup", JSON.stringify(setup));
         if (JSON.stringify(setup) === JSON.stringify(this.current)) return;
         this.current = setup;
-        for (const listener of this.listeners) listener(setup);
+        this.tell();
       }).catch(() => undefined);
       return;
     }
@@ -76,9 +95,9 @@ export class Appearance {
 
   /** A change: shown at once, saved to Dropbox a moment after the last one. */
   update(next: Setup) {
-    this.current = next;
-    void keepValue("setup", JSON.stringify(next));
-    for (const listener of this.listeners) listener(next);
+    this.current = forStyle(next, this.home);
+    void keepValue("setup", JSON.stringify(this.current));
+    this.tell();
     window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => void this.save(), SAVE_DELAY_MS);
   }

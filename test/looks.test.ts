@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   argb, canRename, canSaveAs, cantRemove, CUSTOM_ID, customInUse, decodeSetup, DEFAULT_SETUP, edit, faceOfFile, fileSafe, hex, isLight, lookNamed, pageText,
   preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, saveCustomAs, saveName, shown,
-  charWidth, pageLayout, sidebarWidth, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightsOf, WEB_LOOKS,
+  charWidth, forStyle, pageLayout, sidebarWidth, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightsOf, WEB_LOOKS,
 } from "../src/looks";
 
 describe("Web's setup", () => {
@@ -277,5 +277,43 @@ describe("fonts in Text's list", () => {
     expect(removeFont(removed, "Jost")).toBeNull();
     expect(decodeSetup(JSON.stringify(removed)).removedFonts).toEqual(["Jost"]);
     expect(decodeSetup(JSON.stringify({ ...removed, removedFonts: "Jost" })).removedFonts).toEqual([]);
+  });
+});
+
+describe("Home and Office each have their own look (2026-10-15)", () => {
+  const file = (extra: object) => JSON.stringify({
+    looks: [{ id: "paper", name: "Paper", background: "Custom", backgroundColor: -1, textColor: -14737633 }, { id: "night", name: "Night", background: "Custom", backgroundColor: -15592942, textColor: -3557760 }],
+    lookId: "paper", ...extra,
+  });
+
+  it("starts Home with Office's look when the file has none for it", () => {
+    const setup = decodeSetup(file({}));
+    expect(setup.homeLook).toEqual({ lookId: "paper", custom: null, customFrom: null });
+    expect(shown(forStyle(setup, true)).id).toBe("paper");
+  });
+
+  it("shows and changes each style's own look", () => {
+    const setup = decodeSetup(file({ homeLook: { lookId: "night" } }));
+    expect(shown(forStyle(setup, false)).id).toBe("paper");
+    expect(shown(forStyle(setup, true)).id).toBe("night");
+    // Aa in Home makes Home's Custom; Office's look stays.
+    const changed = forStyle(edit(forStyle(setup, true), { fontSize: 1.3 }), true);
+    expect(changed.lookId).toBe("paper");
+    expect(changed.custom).toBeNull();
+    expect(changed.homeLook).toMatchObject({ lookId: CUSTOM_ID, customFrom: "night" });
+    expect(shown(forStyle(changed, true)).fontSize).toBe(1.3);
+    expect(decodeSetup(JSON.stringify(changed))).toEqual(changed);
+  });
+
+  it("keeps a look the other style uses", () => {
+    const setup = decodeSetup(file({ homeLook: { lookId: "night" } }));
+    expect(cantRemove(setup, "night")).not.toBeNull();
+    expect(cantRemove(forStyle(setup, true), "paper")).not.toBeNull();
+  });
+
+  it("gives each style Light or Dark chrome: Home Dark, Office as its look was", () => {
+    expect(decodeSetup(file({})).chrome).toEqual({ home: "dark", office: "light" });
+    expect(decodeSetup(file({ lookId: "night" })).chrome).toEqual({ home: "dark", office: "dark" });
+    expect(decodeSetup(file({ chrome: { home: "light", office: "dark" } })).chrome).toEqual({ home: "light", office: "dark" });
   });
 });

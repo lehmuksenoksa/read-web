@@ -13,7 +13,7 @@ import {
 } from "./serials";
 import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
 import { lastReadBook, type LibraryBook, type LibraryItem, type Place, type SortBy } from "./library";
-import type { Setup } from "./looks";
+import type { Chrome, Setup } from "./looks";
 import { h, icon, ICONS } from "./ui";
 import { wordmark } from "./wordmark";
 
@@ -42,6 +42,9 @@ export interface HomeContext {
   /** Home (true) or Office (false): this browser's choice, in ⚙. */
   isHome(): boolean;
   setHome(on: boolean): void;
+  /** Light or Dark around the page, for the style in use: ⚙ › Interface. */
+  chrome(): Chrome;
+  setChrome(chrome: Chrome): void;
   /** The Library or Serials page, from the bar's name while a book is open. */
   showLibrary(side: "books" | "serials"): void;
   /** Add books: reads a file (its title and author, for its line), then adds it to /Books/. */
@@ -213,6 +216,11 @@ export function createHome(ctx: HomeContext): {
       h("div", { class: "lab" }, "Show"),
       h("button", { class: "r", role: "menuitemradio", "aria-checked": String(homeNow), onclick: () => { closeMenu(); if (!homeNow) ctx.setHome(true); } }, "Home", tick(homeNow)),
       h("button", { class: "r", role: "menuitemradio", "aria-checked": String(!homeNow), onclick: () => { closeMenu(); if (homeNow) ctx.setHome(false); } }, "Office", tick(!homeNow)),
+      h("hr"),
+      h("div", { class: "lab" }, "Interface"),
+      ...(["light", "dark"] as const).map(c => h("button", {
+        class: "r", role: "menuitemradio", "aria-checked": String(ctx.chrome() === c), onclick: () => { closeMenu(); ctx.setChrome(c); },
+      }, c === "light" ? "Light" : "Dark", tick(ctx.chrome() === c))),
       h("hr"),
       h("button", { class: "r", role: "menuitem", onclick: () => { closeMenu(); ctx.signOut(); } }, "Sign out")), gear, true);
   });
