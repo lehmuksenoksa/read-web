@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   argb, canRename, canSaveAs, cantRemove, CUSTOM_ID, customInUse, decodeSetup, DEFAULT_SETUP, edit, faceOfFile, fileSafe, hex, isLight, lookNamed, pageText,
   preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, saveCustomAs, saveName, shown,
-  charWidth, forStyle, pageLayout, sidebarWidth, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightsOf, WEB_LOOKS,
+  charWidth, forStyle, inInterface, PAGE_COLOURS, pageBackground, pageLayout, sidebarWidth, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightsOf, WEB_LOOKS, withDefaults,
 } from "../src/looks";
 
 describe("Web's setup", () => {
@@ -315,5 +315,26 @@ describe("Home and Office each have their own look (2026-10-15)", () => {
     expect(decodeSetup(file({})).chrome).toEqual({ home: "dark", office: "light" });
     expect(decodeSetup(file({ lookId: "night" })).chrome).toEqual({ home: "dark", office: "dark" });
     expect(decodeSetup(file({ chrome: { home: "light", office: "dark" } })).chrome).toEqual({ home: "light", office: "dark" });
+  });
+});
+
+describe("the page in the Interface's colours (2026-10-15)", () => {
+  const night = withDefaults({ id: "n", background: "Custom", backgroundColor: -15592942, textColor: -1, fontSize: 1.3 });
+
+  it("takes each style's Light or Dark, whatever the look's own colours", () => {
+    expect(hex(pageBackground(inInterface(night, false, "light")))).toBe("#ffffff");
+    expect(hex(pageText(inInterface(night, false, "light")))).toBe("#1f1f1f");
+    expect(hex(pageBackground(inInterface(night, false, "dark")))).toBe("#121212");
+    expect(hex(pageBackground(inInterface(night, true, "dark")))).toBe("#000000");
+    expect(hex(pageText(inInterface(night, true, "dark")))).toBe("#c9b27c");
+    expect(hex(pageBackground(inInterface(night, true, "light")))).toBe("#fbf8f2");
+  });
+
+  it("keeps the rest of the look", () => {
+    expect(inInterface(night, true, "light").fontSize).toBe(1.3);
+  });
+
+  it("never shows pure white text on dark", () => {
+    for (const style of [PAGE_COLOURS.home.dark, PAGE_COLOURS.office.dark]) expect(style.text | 0).not.toBe(-1);
   });
 });

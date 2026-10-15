@@ -133,10 +133,10 @@ async function showApp() {
     root.className = `app ${homeMode() ? "homeon" : "office"} ${setup.chrome[homeMode() ? "home" : "office"]} ${screen}${NARROW.matches ? " narrow" : ""}${panelOpen && screen === "reader" ? " panelopen" : ""}`;
   };
   NARROW.addEventListener("change", layout);
-  applyLook(shown(setup));
+  applyLook(look.page(shown(setup)));
   layout();
   stopFollowing?.();
-  stopFollowing = look.onChange(next => { setup = next; applyLook(shown(next)); layout(); render(); });
+  stopFollowing = look.onChange(next => { setup = next; applyLook(look.page(shown(next))); layout(); render(); });
 
   // --- The books ---
 

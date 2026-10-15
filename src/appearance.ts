@@ -4,7 +4,7 @@
 
 import { RevConflict, type Dropbox } from "./dropbox";
 import { CATALOGUE, fontIndex, fontIndexName, googleCssUrl, parseGoogleCss, type FontIndex } from "./fonts";
-import { BOOKERLY_FILES, decodeSetup, DEFAULT_SETUP, forStyle, hex, pageBackground, pageText, weightsOf, type FontFileFace, type Look, type Setup } from "./looks";
+import { BOOKERLY_FILES, decodeSetup, DEFAULT_SETUP, forStyle, inInterface, hex, pageBackground, pageText, weightsOf, type FontFileFace, type Look, type Setup } from "./looks";
 import { FONTS_FOLDER, fontPath, WEB_SETUP_PATH } from "./paths";
 import { forgetFiles, keepValue, keptFile, keptValue } from "./store";
 
@@ -52,6 +52,11 @@ export class Appearance {
 
   private view(): Setup {
     return forStyle(this.current, this.home);
+  }
+
+  /** [look] in the style's Interface colours: what the page shows. */
+  page(look: Look): Look {
+    return inInterface(look, this.home, this.current.chrome[this.home ? "home" : "office"]);
   }
 
   /** Home or Office in use: the page takes that style's look (and Aa changes it). */

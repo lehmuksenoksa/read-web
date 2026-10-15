@@ -438,6 +438,21 @@ export function weightName(weight: number): string {
 
 // --- Colours and Readium ---
 
+/**
+ * Read.web's page colours (2026-10-15): the style's Interface, Light or Dark, as its chrome; the
+ * looks' own colours stay in the file but aren't used on the web. Never pure white on dark (DESIGN).
+ */
+export const PAGE_COLOURS: Record<"home" | "office", Record<Chrome, { background: number; text: number }>> = {
+  home: { dark: { background: BLACK, text: 0xffc9b27c | 0 }, light: { background: 0xfffbf8f2 | 0, text: 0xff2b2318 | 0 } },
+  office: { light: { background: WHITE, text: 0xff1f1f1f | 0 }, dark: { background: 0xff121212 | 0, text: 0xffc9c9c9 | 0 } },
+};
+
+/** [look] as the page shows it in Home (true) or Office with [chrome]: its colours the Interface's. */
+export function inInterface(look: Look, home: boolean, chrome: Chrome): Look {
+  const c = PAGE_COLOURS[home ? "home" : "office"][chrome];
+  return { ...look, background: "Custom", backgroundColor: c.background, textColor: c.text };
+}
+
 /** "#rrggbb" of an ARGB integer (alpha dropped: pages are opaque). */
 export function hex(argb: number): string {
   return "#" + ((argb >>> 0) & 0xffffff).toString(16).padStart(6, "0");

@@ -468,6 +468,8 @@ button.r:hover { background: var(--sel); }
   --badge: rgba(18,18,18,.88); --shadow: 0 10px 30px rgba(0,0,0,.5);
 }
 .office .w { color: inherit; }
+/* The book's title in the bar: Office's sans, as the rest of its chrome. */
+.office .httl .bt { font: 600 17px Figtree, system-ui, sans-serif; }
 .office .hzoom, .office .hviews { display: none; }
 .office .home .tag, .office .home .tag.new, .office .home .tag.cu { background: none; color: var(--ink2); font: 500 calc(14px * var(--f)) Figtree, sans-serif; letter-spacing: 0; padding: 0; }
 .office .home .tag.new { color: var(--ink); }

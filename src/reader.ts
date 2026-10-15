@@ -10,7 +10,7 @@ import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
 import { CATALOGUE } from "./fonts";
 import {
-  argb, BASE_FONT_PX, BUILT_IN_FONTS, canRename, charWidth, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, lookNamed, pageBackground, pageLayout, pageText,
+  BASE_FONT_PX, BUILT_IN_FONTS, canRename, charWidth, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, lookNamed, pageBackground, pageLayout, pageText,
   preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, SANS_FONTS,
   saveCustomAs, shown, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightName, type Look, type Setup, type TextPosition, type Steps,
 } from "./looks";
@@ -28,7 +28,7 @@ const GO_TIMEOUT_MS = 8000;
 /** The pages laid out again are shown this long after the last change: a window being resized, or a change in Aa. */
 const SETTLE_MS = { resize: 120, aa: 20 };
 
-type AaTab = "Text" | "Layout" | "Colour" | "Looks";
+type AaTab = "Text" | "Layout" | "Looks";
 
 export interface ReaderProps {
   dropbox: Dropbox;
@@ -423,7 +423,10 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     nav.go(new Locator({ href: entry.href, type: entry.type, locations: new LocatorLocations({ progression: 0, fragments: fragment ? [fragment] : [] }) }), false, () => undefined);
   };
 
-  // --- Aa: Text, Layout, Colour, Looks ---
+  // --- Aa: Text, Layout, Looks (the page's colours are the Interface's, 2026-10-15) ---
+
+  /** The look as the page shows it: in the style's Light or Dark colours. */
+  const seen = () => appearance.page(shown(setup));
 
   const change = (patch: Partial<Look>) => appearance.update(edit(setup, patch));
 
@@ -453,13 +456,6 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       value != null ? () => change({ [key]: stepOptional(steps, value, false) }) : null,
       value == null || value < steps.max - 1e-9 ? () => change({ [key]: stepOptional(steps, value, true) }) : null);
   };
-  const colourRow = (key: string, label: string, value: number, set: (color: number) => void) => {
-    const input = h("input", { type: "color", value: hex(value), "aria-label": label });
-    input.addEventListener("input", () => set(argb(input.value)));
-    return h("div", { class: "r" }, label,
-      h("label", { class: "colour", "data-colour": key }, h("span", { class: "hex" }, hex(value).toUpperCase()), h("span", { class: "dot", style: `background:${hex(value)}` }, input)));
-  };
-  const colours = (look: Look) => ({ background: pageBackground(look), text: pageText(look) });
 
   const fontRow = (family: string, look: Look, ready: string[], toDownload: string[]) => {
     if (ready.includes(family)) {
@@ -481,20 +477,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
 
   const fillAa = async () => {
     const look = shown(setup);
-    // Colour: changed where it is, so a colour picker being dragged stays open.
-    const colourShown = aaTab === "Colour" ? aa.querySelectorAll<HTMLElement>("[data-colour]") : null;
-    if (colourShown?.length) {
-      const now = colours(look);
-      for (const el of colourShown) {
-        const value = hex(now[el.dataset.colour as "background" | "text"]);
-        el.querySelector(".hex")!.textContent = value.toUpperCase();
-        (el.querySelector(".dot") as HTMLElement).style.background = value;
-        const input = el.querySelector("input")!;
-        if (document.activeElement !== input) input.value = value;
-      }
-      return;
-    }
-    const tabs = h("div", { class: "tabs" }, ...(["Text", "Layout", "Colour", "Looks"] as AaTab[]).map(tab =>
+    const tabs = h("div", { class: "tabs" }, ...(["Text", "Layout", "Looks"] as AaTab[]).map(tab =>
       h("button", { class: tab === aaTab ? "cur" : "", onclick: () => { aaTab = tab; aa.replaceChildren(); void fillAa(); } }, tab)));
     let body: HTMLElement;
     switch (aaTab) {
@@ -533,14 +516,6 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
           stepped("Letter spacing", "letterSpacing", v => v.toFixed(2)),
           stepped("Word spacing", "wordSpacing", v => v.toFixed(2)));
         break;
-      case "Colour": {
-        const now = colours(look);
-        body = h("div", { class: "sec" },
-          lab("Page"),
-          colourRow("background", "Background", now.background, color => change({ background: "Custom", backgroundColor: color })),
-          colourRow("text", "Text", now.text, color => change({ textColor: color })));
-        break;
-      }
       case "Looks": {
         const cards = [...setup.looks, ...(setup.custom ? [setup.custom] : [])];
         body = h("div", { class: "sec" },
@@ -548,7 +523,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
             setup.custom ? h("button", { class: "link strong", onclick: (e: Event) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); customMenu(r.right, r.bottom + 4, true); } }, "Save") : null),
           h("div", { class: "cards" }, ...cards.map(l => h("button", {
             class: `card${l.id === setup.lookId ? " inuse" : ""}`,
-            style: `background:${hex(pageBackground(l))};color:${hex(pageText(l))}`,
+            style: `background:${hex(pageBackground(appearance.page(l)))};color:${hex(pageText(appearance.page(l)))}`,
             "aria-pressed": String(l.id === setup.lookId),
             onclick: () => { hideMenu(); appearance.update(useLook(setup, l.id)); },
             oncontextmenu: (e: Event) => {
@@ -795,7 +770,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   // A narrower or wider pane (the window, the sidebar): the page follows, once it has opened
   // (resizing Readium while it loads can leave it never arriving).
   let mounting = false;
-  const resized = new ResizeObserver(() => { if (!mounting) fitPage(shown(setup)); });
+  const resized = new ResizeObserver(() => { if (!mounting) fitPage(seen()); });
   resized.observe(stage);
 
   /**
@@ -810,12 +785,12 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       return await mountNow(at);
     } finally {
       mounting = false;
-      fitPage(shown(setup));
+      fitPage(seen());
     }
   };
   const mountNow = async (at: Locator | null): Promise<boolean> => {
     if (!book) return false;
-    const look = shown(setup);
+    const look = seen();
     const font: PageFont = await appearance.font(look.font);
     await measure(look, font);
     if (nav) {
@@ -853,7 +828,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     restyling = restyling.then(async () => {
       if (!aa.hidden) await fillAa();
       if (!book || !nav) return;
-      const look = shown(setup);
+      const look = seen();
       if (look.font !== mountedFont || look.columns !== mountedColumns || look.scroll !== mountedScroll) {
         await mount(heldPlace());
       } else {
