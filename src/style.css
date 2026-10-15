@@ -30,31 +30,10 @@ button:disabled { opacity: .35; cursor: default; }
 .signin h1 { font-size: 22px; font-weight: 600; }
 
 /* Library */
-.bar { height: 56px; display: flex; align-items: center; gap: 24px; padding: 0 40px; border-bottom: 1px solid var(--rule); }
-.bar h1 { font-size: 20px; font-weight: 600; margin-right: auto; }
-.search { border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; width: 280px; max-width: 40vw; background: var(--ground); color: var(--ink); font: inherit; }
-.search::placeholder { color: var(--ink3); }
 .sel { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: var(--ground); color: var(--ink); font: inherit; }
-/* Columns at least 300 px wide: three in a 1720-pixel window at Windows' 125% (about 1360 px to the page); the list runs down each column. */
-.list { columns: 300px; column-gap: 48px; padding: 8px 40px 40px; }
-.list > .note { column-span: all; padding-left: 0; }
-/* No hairline between rows: each row's progress line separates it from the next. */
-.row { display: grid; grid-template-columns: 1fr auto; padding: 11px 4px 12px; width: 100%; break-inside: avoid; }
-.row:hover { background: var(--sel); }
-.row .t { font-size: 15px; }
-.row .a { grid-row: 2; grid-column: 1; color: var(--ink2); font-size: 13px; margin-top: 2px; }
-.row .p { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: var(--ink3); font-size: 13px; padding-left: 16px; }
-.row .t, .row .a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .line { grid-column: 1 / span 2; height: 2px; background: var(--rule); margin-top: 7px; border-radius: 1px; }
-.row .line i { display: block; height: 2px; background: var(--ink3); border-radius: 1px; }
-.row.series .t::before { content: "▸ "; color: var(--ink3); }
-.row.series.open .t::before { content: "▾ "; }
-.row.child { padding-left: 24px; }
 
 /* Reader */
-.rbar { height: 48px; display: flex; align-items: center; gap: 26px; padding: 0 32px; }
-.rbar .spacer { margin-right: auto; }
-.stage { position: relative; height: calc(100vh - 48px - 40px); display: flex; justify-content: center; }
+.stage { position: relative; height: calc(100% - 40px); margin-top: 8px; display: flex; justify-content: center; }
 /* The page's box is as wide as the look's margins leave (textWidth); the arrows fill the space beside it. */
 .pagebox { height: 100%; flex: none; }
 .page { height: 100%; position: relative; }
@@ -63,7 +42,7 @@ button:disabled { opacity: .35; cursor: default; }
 .side { flex: 1; min-width: 40px; font-size: 24px; color: var(--ink3); text-align: center; }
 .side:hover { color: var(--ink2); }
 .foot { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--ink3); pointer-events: none; }
-.msg { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); padding: 10px 16px; display: flex; gap: 22px; align-items: center; width: min(560px, calc(100% - 32px)); z-index: 6; }
+.msg { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); padding: 10px 16px; display: flex; gap: 22px; align-items: center; width: min(560px, calc(100% - 32px)); z-index: 6; }
 .msg[hidden] { display: none; }
 .msg span { margin-right: auto; }
 
@@ -133,62 +112,10 @@ button.r:hover { background: var(--sel); }
 .toc .item.cur { background: var(--sel); color: var(--ink); font-weight: 600; }
 .toc .item span { margin-left: auto; font-size: 12px; color: var(--ink3); font-weight: 400; }
 
-@media (max-width: 700px) {
-  .bar, .note { padding-left: 16px; padding-right: 16px; }
-  .bar { gap: 12px; }
-  .list { padding: 8px 16px 32px; columns: 1; }
-  .rbar { padding: 0 16px; }
-  .side { flex: 0 0 24px; }
-}
 
-/* The Library as a sidebar beside the reader, like a chat list. */
-.app { display: flex; height: 100vh; overflow: hidden; }
-.sidebar { width: 320px; flex: none; position: relative; display: flex; flex-direction: column; border-right: 1px solid var(--rule); background: color-mix(in srgb, var(--tx) 3%, var(--bg)); }
-.shead { height: 52px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
-.shead h1 { font-size: 18px; font-weight: 600; }
 .ic { display: inline-flex; flex: none; }
 .icon { width: 30px; height: 30px; border-radius: 6px; color: var(--ink2); display: inline-flex; align-items: center; justify-content: center; }
 .icon:hover, .icon[aria-expanded="true"] { background: var(--sel); color: var(--ink); }
-.sfilter { margin: 0 12px 8px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: var(--ground); color: var(--ink3); flex: none; }
-.sfilter .search { flex: 1; min-width: 0; width: auto; max-width: none; border: 0; outline: 0; padding: 7px 0; font-size: 13px; background: none; }
-.sfilter:focus-within { border-color: var(--ink3); }
-/* "All books · 142" and the sort menu. */
-.lhead { display: flex; align-items: center; padding: 8px 10px 4px 20px; flex: none; position: relative; }
-.lhead .count { font-size: 12px; color: var(--ink3); margin-right: auto; }
-.panel.sortmenu { top: 38px; right: 8px; left: auto; width: 210px; padding: 6px; }
-.sortmenu .lab { margin: 6px 10px 4px; }
-.sortmenu .v { display: inline-flex; color: var(--ink2); }
-.sortmenu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
-.sidebar .list { columns: auto; display: block; flex: 1; overflow-y: auto; padding: 0 8px 24px; }
-/* The rows (2026-10-14): the title, % or Read on its line; the author; a line only while in progress;
-   a series' chevron at the right. The open book a soft box (from its indent in a series); hover an outline. */
-.sidebar .row { display: block; position: relative; z-index: 0; padding: 11px 12px 12px; font-variant-numeric: tabular-nums; }
-.sidebar .row:hover { background: none; }
-.sidebar .row .t, .sidebar .row .a { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
-.sidebar .row .t { font-size: 14px; }
-.sidebar .row .x { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.sidebar .row .a { font-size: 12px; color: var(--ink3); margin-top: 3px; }
-.sidebar .row .p { margin-left: auto; padding-left: 0; font-size: 12px; color: var(--ink3); flex: none; }
-.sidebar .row .chev { margin-left: auto; color: var(--ink3); align-self: center; display: inline-flex; }
-.sidebar .row .line { display: block; margin-top: 8px; }
-.sidebar .row .line[hidden] { display: none; }
-.sidebar .row.series .t::before { content: none; }
-.sidebar .row.child { padding-left: 28px; }
-.sidebar .row.cur::before, .sidebar .row:not(.series):not(.cur):hover::before, .sidebar .row:focus-visible::before {
-  content: ""; position: absolute; inset: 2px 0; border-radius: 6px; z-index: -1;
-}
-.sidebar .row.child::before { left: 18px !important; }
-.sidebar .row.cur::before { background: var(--sel); }
-.sidebar .row:not(.series):not(.cur):hover::before { border: 1px solid var(--line); }
-.sidebar .row:focus-visible { outline: none; }
-.sidebar .row:focus-visible::before { box-shadow: 0 0 0 2px var(--ink3); }
-.sidebar .note { padding: 12px 20px; }
-/* A book's ⋯ (its menu) in place of % or Read while hovered; its row keeps the outline while the menu is open. */
-.sidebar .row .more { display: none; margin-left: auto; width: 24px; height: 20px; margin-block: -4px; border-radius: 4px; align-items: center; justify-content: center; color: var(--ink2); flex: none; align-self: center; }
-.sidebar .row:not(.series):hover .p, .sidebar .row.menuon .p { display: none; }
-.sidebar .row:not(.series):hover .more, .sidebar .row.menuon .more { display: inline-flex; }
-.sidebar .row .more:hover { background: var(--sel); color: var(--ink); }
-.sidebar .row.menuon:not(.cur)::before { content: ""; position: absolute; inset: 2px 0; border-radius: 6px; z-index: -1; border: 1px solid var(--line); }
 .panel.bookmenu { position: fixed; top: 0; left: 0; width: 230px; padding: 6px; z-index: 20; }
 .bookmenu .lab { margin: 6px 10px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bookmenu .v { display: inline-flex; color: var(--ink2); }
@@ -207,30 +134,11 @@ button.r:hover { background: var(--sel); }
 .dialog .btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .btn.primary:hover { background: var(--ink); }
-.sfoot { flex: none; border-top: 1px solid var(--rule); padding: 10px 12px 10px 20px; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink2); }
-.sfoot .who { margin-right: auto; display: flex; align-items: center; gap: 8px; }
-.mainwrap { flex: 1; min-width: 0; position: relative; }
 .main { position: relative; height: 100%; }
 .main .empty { position: absolute; top: 45%; width: 100%; text-align: center; }
-/* Contents and Aa beside "Library", or with ◫ over the page's top left; their panels open beside the sidebar, or under these. */
-.shead .tools { margin-left: auto; display: flex; gap: 2px; }
-.floatbar { display: none; position: absolute; top: 10px; left: 10px; z-index: 4; gap: 2px; }
-.floatbar .tools { display: flex; gap: 2px; }
-.app.noside .floatbar, .app.narrow .floatbar { display: flex; }
-.app:not(.noside):not(.narrow) .floatbar .icon:first-child { display: none; }
-.app.noside .main > .panel, .app.noside .main > .toc, .app.narrow .main > .panel, .app.narrow .main > .toc { top: 50px; left: 10px; }
 .icon.tool { width: 30px; height: 30px; }
 .icon.aa { font-family: Literata, Georgia, serif; font-weight: 700; font-size: 16px; line-height: 1; letter-spacing: -.2px; }
-.app.noside .sidebar { display: none; }
-/* The sidebar's edge: drag to resize. */
-.resizer { position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; cursor: col-resize; z-index: 3; }
-.resizer:hover, .dragging .resizer { background: color-mix(in srgb, var(--tx) 14%, transparent); }
-.dragging, .dragging * { cursor: col-resize !important; user-select: none; }
-.dragging iframe { pointer-events: none; }
-.app.narrow .resizer { display: none; }
 
-/* A narrow window: the Library opens over the page. */
-.app.narrow .sidebar { position: absolute; z-index: 7; top: 0; bottom: 0; left: 0; box-shadow: var(--shadow); max-width: 85vw; }
 
 /* ---------------------------------------------------------------------------------------------
    Home: the full Library (WEB.md → Home, agreed 2026-10-15). Dark or Light by the look in use;
@@ -259,16 +167,12 @@ button.r:hover { background: var(--sel); }
   --accent: #C0453B; --seal: #C0453B; --onseal: #FFF6EC; --wax: #2B2318; --badge: rgba(255,252,246,.94);
   --cu-bg: #F1E3BE; --cu-fg: #6A5214; --shadow: 0 14px 40px rgba(60,40,10,.14);
 }
-.home { display: none; }
-#app.homeon > .sidebar, #app.homeon > .mainwrap { display: none; }
-#app.homeon > .home { display: flex; flex-direction: column; width: 100%; height: 100vh; position: relative; background: var(--ground); color: var(--ink); font: 15px/1.4 Figtree, system-ui, sans-serif; }
-#app.homeon .dialog, #app.homeon .bookmenu, #app.homeon .toast { font-family: Figtree, system-ui, sans-serif; }
 #app.homeon .btn.primary { background: var(--seal); border-color: var(--seal); color: var(--onseal); }
 .home .grow { flex: 1; }
 .home .w { color: var(--wax); }
 
 /* The header: the wordmark, search, Home · Office, ⚙. */
-.hhead { padding: 22px 36px 6px; display: flex; align-items: center; gap: 18px; }
+.hhead { flex: none; height: 76px; position: relative; padding: 0 24px 0 36px; display: flex; align-items: center; gap: 18px; }
 .hmark { display: flex; align-items: flex-end; }
 .hmark svg { display: block; }
 .hmark .front path { fill: var(--ink); }
@@ -278,10 +182,6 @@ button.r:hover { background: var(--sel); }
 .hsearch:focus-within { border-color: var(--ink3); }
 .hsearch input { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: none; border: 0; outline: 0; }
 .hsearch input::placeholder { color: var(--ink2); }
-.hswitch { display: flex; background: var(--raised); border-radius: 20px; padding: 3px; font-size: 13px; }
-.hswitch button { padding: 6px 14px; border-radius: 17px; color: var(--ink2); }
-.hswitch button.on { background: var(--well); color: var(--ink); font-weight: 600; cursor: default; }
-.hswitch button:not(.on):hover { color: var(--ink); }
 .hicon { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--ink); }
 .hicon:hover { background: var(--raised); }
 
@@ -453,10 +353,6 @@ button.r:hover { background: var(--sel); }
 .hpanel .prog .pl { flex: 1; }
 .hpanel .pc { font-size: 13px; color: var(--ink2); min-width: 34px; text-align: right; }
 
-/* The sidebar's "Library" goes back to Home's Library (Home only). */
-.shead h1.tohome { cursor: pointer; border-radius: 6px; padding: 2px 6px; margin-left: -6px; }
-.shead h1.tohome:hover { background: var(--sel); }
-.sfoot .link + .link { margin-left: 4px; }
 
 /* Add books (step 2): drop EPUBs on Home or the box, or choose them; a line per file. */
 .hadd { background: var(--seal); color: var(--onseal); border-radius: 12px; padding: 8px 16px; font-weight: 600; margin-left: 6px; }
@@ -498,3 +394,80 @@ button.r:hover { background: var(--sel); }
 .hpanel .word { color: var(--accent); font-weight: 600; padding: 4px 0; }
 .hcont .t.sans { font-family: Figtree, sans-serif; }
 .hcont .k.ch { margin-top: 4px; font: 14px "Home Literata", Georgia, serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------------------------------------------------------------------------------------------
+   One app, two styles (WEB.md, agreed 2026-10-15): Home and Office have the same screens, the
+   Library and the reader, under the same bar. The bar: the name (back to the Library), search on
+   the Library page or the title over the page while reading, ⚙ at the right. The reader: a rail
+   (Contents, Aa), the panel it opens beside the page, the page in the look. */
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: var(--ground); color: var(--ink); font: 15px/1.4 Figtree, system-ui, sans-serif; }
+.app .dialog, .app .bookmenu, .app .toast { font-family: Figtree, system-ui, sans-serif; }
+.app > .home, .app > .readerarea { flex: 1; min-height: 0; }
+.app.reader > .home, .app.library > .readerarea { display: none; }
+.home { display: flex; flex-direction: column; position: relative; }
+.hhead .grow { flex: 1; }
+.hhead .w { color: var(--wax); }
+.hsearch[hidden] { display: none; }
+/* The title over the page: from its left edge; the place at its right edge. */
+.httl { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 24px; min-width: 0; }
+.httl[hidden] { display: none; }
+.httl .bt { font: 600 19px "Home Literata", Georgia, serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.httl .pl2 { color: var(--ink2); font-size: 14px; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+/* Office's name: the words, the side shown in the ink. */
+.hmark .txt { font: 600 19px Figtree, system-ui, sans-serif; color: var(--ink3); padding: 4px 0; }
+.hmark .txt + .txt { margin-left: 22px; }
+.hmark .txt[aria-pressed="true"] { color: var(--ink); }
+.hmark .txt:hover { color: var(--ink); }
+.app.reader .hmark button { cursor: pointer; }
+
+.readerarea { display: flex; position: relative; }
+.rail { flex: none; width: 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 8px; }
+.rail .icon.tool { width: 42px; height: 42px; border-radius: 10px; color: var(--ink2); }
+.rail .icon.tool:hover { background: var(--sel); color: var(--ink); }
+.rail .icon.tool[aria-expanded="true"] { background: var(--well, var(--sel)); color: var(--ink); }
+.rpanel { display: none; flex: none; width: 320px; overflow-y: auto; background: var(--raised); border-radius: 12px 12px 0 0; margin-right: 8px; }
+.app.panelopen .rpanel { display: block; }
+.readerarea > .main { flex: 1; min-width: 0; height: 100%; background: var(--pagebg, var(--bg)); color: var(--pagetx, var(--tx)); border-radius: 12px 12px 0 0; overflow: hidden; }
+.readerarea > .main .side { color: color-mix(in srgb, var(--pagetx, var(--tx)) 45%, transparent); }
+/* Contents and Aa in the panel: its whole height, no box of their own. */
+.rpanel .toc, .rpanel .panel { position: static; width: auto; max-height: none; border: 0; border-radius: 0; box-shadow: none; background: none; overflow: visible; }
+.rpanel .toc { padding: 8px 8px 24px; }
+.rpanel .toc .lab, .rpanel .aapanel > .lab { margin: 8px 12px 8px; font: 700 11px Figtree, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--ink3); }
+.toc .item { align-items: baseline; }
+.toc .item span { margin-left: 0; }
+.toc .item .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: inherit; font-weight: inherit; }
+.toc .item .d { margin-left: auto; flex: none; font-size: 12px; color: var(--ink3); font-weight: 400; }
+.toc .item .nw { flex: none; font: 700 10px Figtree, sans-serif; letter-spacing: .14em; text-transform: uppercase; background: var(--seal, var(--ink)); color: var(--onseal, var(--bg)); border-radius: 4px; padding: 2px 6px; }
+.toc .item.more { color: var(--ink2); font-size: 13px; }
+/* A narrow window: the panel opens over the page, and closes when something is picked. */
+.app.narrow .rail { width: 52px; }
+.app.narrow .rpanel { position: absolute; left: 52px; top: 0; bottom: 0; z-index: 7; width: 320px; max-width: calc(100% - 68px); box-shadow: var(--shadow); border-radius: 12px; }
+.app.narrow .side { flex: 0 0 24px; }
+.app.narrow .hhead { padding: 0 12px 0 16px; }
+.app.narrow .hsearch { width: auto; flex: 1; min-width: 0; }
+
+/* Office: the same Library, quieter. The look's colours (every grey made from them), no wax red;
+   Details only; the tags plain words; Add books a word; Continue a line at the foot. */
+#app.office {
+  --raised: color-mix(in srgb, var(--tx) 4%, var(--bg));
+  --sheet: var(--bg);
+  --bar: var(--bg);
+  --well: color-mix(in srgb, var(--tx) 8%, var(--bg));
+  --accent: var(--tx); --seal: var(--tx); --onseal: var(--bg);
+  --cu-bg: transparent; --cu-fg: var(--ink3);
+  --badge: color-mix(in srgb, var(--bg) 88%, transparent);
+}
+.office .w { color: inherit; }
+.office .hzoom, .office .hviews { display: none; }
+.office .home .tag, .office .home .tag.new, .office .home .tag.cu { background: none; color: var(--ink2); font: 500 calc(14px * var(--f)) Figtree, sans-serif; letter-spacing: 0; padding: 0; }
+.office .home .tag.new { color: var(--ink); }
+.office .hadd { background: none; color: var(--ink2); padding: 4px 0; border-radius: 0; font-weight: 500; }
+.office .hadd:hover { color: var(--ink); }
+.office .toc .item .nw { background: none; color: var(--ink); text-transform: none; letter-spacing: 0; font: 500 12px Figtree, sans-serif; padding: 0; }
+.office .hpanel .seal { background: var(--ink); color: var(--bg); }
+.hcont.quiet { left: 0; right: 0; bottom: 0; width: auto; max-width: none; border-radius: 0; box-shadow: none; background: var(--ground); border-top: 1px solid var(--rule); padding: 12px 36px; gap: 10px; align-items: baseline; font-size: 14px; }
+.hcont.quiet .k { color: var(--ink2); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.hcont.quiet b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.hcont.quiet .go { margin-left: auto; color: var(--ink); font-weight: 600; flex: none; padding-left: 16px; }
+.hcont.quiet:hover .go { text-decoration: underline; text-underline-offset: 3px; }
+.office .hmain { padding-bottom: 80px; }

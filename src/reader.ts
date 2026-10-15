@@ -37,8 +37,20 @@ export interface ReaderProps {
   path: string;
   /** The book's title (the page and the browser tab show none: the tab says "Read.web"). */
   title: string;
-  /** Where Contents and Aa go: the sidebar's top row, or over the page's top left (WEB.md, 2026-10-14). */
+  /** The rail under the bar (WEB.md → One app, 2026-10-15): Contents and Aa go here. */
   tools: HTMLElement;
+  /** Where Contents and Aa open: beside the rail, pushing the page aside. */
+  panelHost: HTMLElement;
+  /** Contents or Aa opened, or both closed: the app makes room (and remembers Contents). */
+  onPanel?: (open: "contents" | "aa" | null) => void;
+  /** Contents open from the start (it was left open). */
+  openContents?: boolean;
+  /** A narrow window: the panels open over the page and close when something is picked. */
+  overlay?: () => boolean;
+  /** Where the reader is now, for the bar: the chapter's title and the book's progress. */
+  onPlace?: (place: { href: string; chapter: string | null; totalProgression: number }) => void;
+  /** The page's box on screen, after each layout: the bar's title lines up with it. */
+  onPageBox?: (box: { left: number; width: number }) => void;
   /** The book's sync file as just uploaded with Web's place: the Library's progress follows. */
   onSaved?: (syncText: string) => void;
   /** A serial (WEB.md → Home, step 3b) instead of an EPUB from /Books/. */
@@ -55,6 +67,15 @@ export interface SerialReading {
   onPastEnd(href: string): void;
   /** The reader is in this chapter now (the next ones are fetched ahead). */
   onChapter(href: string): void;
+  /** Contents' rows, newest first: dates and NEW, as on the phones. */
+  contents(): SerialContentsRow[];
+}
+
+export interface SerialContentsRow {
+  href: string;
+  title: string;
+  date: string;
+  isNew: boolean;
 }
 
 /** The book in [root] (the pane beside the Library); returns how to close it, its place saved first. */
@@ -74,14 +95,12 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const aa = h("div", { class: "panel aapanel", hidden: true });
   const lookMenu = h("div", { class: "panel menu lookmenu", hidden: true });
   root.replaceChildren(
-    h("div", { class: "rbar" }),
     h("div", { class: "stage" }, left, h("div", { class: "pagebox" }, page), right),
-    contents,
-    aa,
     lookMenu,
     prompt,
     status,
   );
+  props.panelHost.replaceChildren(contents, aa);
 
   let book: Book | null = null;
   let nav: EpubNavigator | null = null;
@@ -146,6 +165,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (closed) return;
     closed = true;
     props.tools.replaceChildren();
+    props.panelHost.replaceChildren();
     rulerFont.remove();
     window.clearTimeout(settleTimer);
     stopListening();
@@ -327,24 +347,37 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   // --- Panels ---
 
   const closePanels = () => {
+    const was = !contents.hidden || !aa.hidden;
     lookMenu.hidden = true;
     contents.hidden = true;
     aa.hidden = true;
     contentsButton.setAttribute("aria-expanded", "false");
     aaButton.setAttribute("aria-expanded", "false");
+    if (was) props.onPanel?.(null);
   };
+  /** The rail's icons: one opens its panel beside the page; the open one's closes it. One at a time. */
   const toggle = (panel: HTMLElement, button: HTMLElement, fill: () => void) => {
     const open = panel.hidden;
-    closePanels();
-    if (!open) return;
-    fill();
-    panel.hidden = false;
-    button.setAttribute("aria-expanded", "true");
+    lookMenu.hidden = true;
+    for (const [p, b] of [[contents, contentsButton], [aa, aaButton]] as const) {
+      p.hidden = true;
+      b.setAttribute("aria-expanded", "false");
+    }
+    if (open) {
+      fill();
+      panel.hidden = false;
+      button.setAttribute("aria-expanded", "true");
+    }
+    props.onPanel?.(open ? (panel === contents ? "contents" : "aa") : null);
+    if (open && panel === contents) contents.querySelector(".cur")?.scrollIntoView({ block: "center" });
   };
+  /** Panels beside the page stay open; over it (a narrow window) a click elsewhere closes them. */
+  const overlay = () => props.overlay?.() ?? false;
   const onOutside = (e: MouseEvent) => {
     // The click's path as it was: a panel redrawn by the click no longer holds what was clicked.
     const path = e.composedPath();
     if (!path.includes(lookMenu)) lookMenu.hidden = true;
+    if (!overlay()) return;
     if ([lookMenu, contents, aa, contentsButton, aaButton, prompt].some(el => path.includes(el))) return;
     closePanels();
   };
@@ -352,19 +385,33 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   contentsButton.addEventListener("click", () => toggle(contents, contentsButton, fillContents));
   aaButton.addEventListener("click", () => toggle(aa, aaButton, () => void fillAa()));
 
+  /** The chapter Contents last showed as the current one. */
+  let contentsAt = "";
+  /** A serial's chapters, newest first, read ones down to ten before where you are; the earlier ones behind one row. */
+  let earlierShown = false;
+  const fillSerialContents = (rows: SerialContentsRow[]) => {
+    const at = current ? rows.findIndex(r => r.href === current!.href.split("#")[0]) : -1;
+    const keep = at < 0 || earlierShown ? rows.length : Math.min(rows.length, at + 11);
+    const pick = (href: string) => { if (overlay()) closePanels(); goTo(href); };
+    contents.replaceChildren(h("div", { class: "lab" }, "Chapters"), ...rows.slice(0, keep).map((r, i) => h("button", {
+      class: `item${i === at ? " cur" : at >= 0 && i > at ? " read" : ""}`,
+      onclick: () => pick(r.href),
+    }, h("span", { class: "nm" }, r.title), r.isNew ? h("span", { class: "nw" }, "new") : null, h("span", { class: "d" }, r.date))),
+    ...(keep < rows.length ? [h("button", { class: "item more", onclick: () => { earlierShown = true; fillContents(); } }, `Earlier chapters (${rows.length - keep})`)] : []));
+  };
   const fillContents = () => {
     if (!book) return;
+    if (props.serial) return fillSerialContents(props.serial.contents());
     const flat = flatToc(book.toc);
     const at = current ? currentEntry(flat, book.readingOrder, current.href) : -1;
     const percent = `${Math.round((current?.locations.totalProgression ?? 0) * 100)}%`;
-    contents.replaceChildren(...(flat.length
+    contents.replaceChildren(h("div", { class: "lab" }, "Contents"), ...(flat.length
       ? flat.map(({ entry, depth }, i) => h("button", {
           class: `item${i === at ? " cur" : i < at ? " read" : ""}`,
           style: depth ? `padding-left: ${12 + depth * 20}px` : undefined,
-          onclick: () => { closePanels(); goTo(entry.href); },
-        }, entry.title || "Untitled", i === at ? h("span", {}, percent) : null))
+          onclick: () => { if (overlay()) closePanels(); goTo(entry.href); },
+        }, h("span", { class: "nm" }, entry.title || "Untitled"), i === at ? h("span", { class: "d" }, percent) : null))
       : [h("div", { class: "item" }, "This book has no contents.")]));
-    contents.querySelector(".cur")?.scrollIntoView({ block: "center" });
   };
   const goTo = (href: string) => {
     if (!book || !nav) return;
@@ -626,6 +673,14 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       currentTop = readPageTop();
       props.serial?.onChapter(locator.href);
       showPlace();
+      tellPlace();
+      // Contents open follows the reading: the chapter you're in is the highlighted one, scrolled to when it changes.
+      if (!contents.hidden) {
+        fillContents();
+        const chapter = locator.href.split("#")[0];
+        if (chapter !== contentsAt) contents.querySelector(".cur")?.scrollIntoView({ block: "nearest" });
+        contentsAt = chapter;
+      }
       if (moved) scheduleUpload();
     },
     tap: () => pageClicked(),
@@ -652,8 +707,14 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   };
   /** A click or tap on the text never turns the page: the ‹ › beside it do (2026-10-13). It closes an open panel. */
   const pageClicked = () => {
-    if (!contents.hidden || !aa.hidden) closePanels();
+    if (overlay() && (!contents.hidden || !aa.hidden)) closePanels();
     return true;
+  };
+  /** The chapter and progress, for the bar. */
+  const tellPlace = () => {
+    if (!current || !book) return;
+    const href = current.href.split("#")[0];
+    props.onPlace?.({ href, chapter: book.titles.get(href) ?? current.title ?? null, totalProgression: current.locations.totalProgression ?? 0 });
   };
 
   // --- The page's width: the look's characters per line, measured in its font (2026-10-14) ---
@@ -696,6 +757,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       arrow.disabled = look.scroll;
     }
     applyLook(look);
+    const box = (page.parentElement as HTMLElement).getBoundingClientRect();
+    props.onPageBox?.({ left: box.left, width: box.width });
   };
 
   /**
@@ -819,6 +882,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       keptValue<Position>(`place:${id}`),
     ]);
     book = opened;
+    // Contents left open: open again before the page is laid out, so it lays out beside it.
+    if (props.openContents) toggle(contents, contentsButton, fillContents);
     /** A CAUGHT UP serial whose newer chapters have come opens at the first of them, which becomes the place. */
     const pastCaughtUp = (at: Locator | null): Locator | null => {
       const next = props.serial && book && at ? nextAfterCaughtUp(book.readingOrder.map(h => chapterIdOf(h) ?? ""), chapterIdOf(at.href), props.serial.endChapterId) : null;

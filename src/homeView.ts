@@ -5,7 +5,7 @@
 import {
   ago, BOOK_VIEWS, clickSort, column, DEFAULT_COLUMNS, DEFAULT_SERIAL_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
   menuSort, moveColumn, nextInSeries, SERIAL_VIEWS, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
-  type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
+  viewFor, type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
 } from "./home";
 import {
   chapterDateLabel, lastCheck, lastReadSerial, newChaptersText, numbersOnly, panelChapters, readingOrderOf, searchSerials, serialColumn, sortSerials,
@@ -39,7 +39,11 @@ export interface HomeContext {
   edit(book: LibraryBook): void;
   signOut(): void;
   offline(): boolean;
-  toOffice(): void;
+  /** Home (true) or Office (false): this browser's choice, in ⚙. */
+  isHome(): boolean;
+  setHome(on: boolean): void;
+  /** The Library or Serials page, from the bar's name while a book is open. */
+  showLibrary(side: "books" | "serials"): void;
   /** Add books: reads a file (its title and author, for its line), then adds it to /Books/. */
   readFile(file: File): Promise<{ title: string | null; author: string | null; add: () => Promise<AddOutcome> }>;
   /** The serials (WEB.md → Home, step 3a); null until read. */
@@ -97,44 +101,67 @@ function pct(p: number | null): string {
   return p != null && p > 0 ? `${Math.round(p * 100)}%` : "";
 }
 
-export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => void; isOpen: () => boolean; closePanel: () => void } {
+/** What the bar shows while a book or serial is open: its title over the page, and where you are. */
+export interface ReadingTitle {
+  title: string;
+  place: string;
+  /** The page's box on screen: the title starts at its left edge, the place ends at its right. */
+  left: number;
+  width: number;
+  /** Library in front for a book, Serials for a serial. */
+  side: "books" | "serials";
+}
+
+export function createHome(ctx: HomeContext): {
+  el: HTMLElement; bar: HTMLElement; render: () => void; isOpen: () => boolean; closePanel: () => void;
+  setReading: (title: ReadingTitle | null) => void;
+} {
   let query = "";
   let menuOpen: HTMLElement | null = null;
   /** The panel's book, series or serial; null when closed. */
   let panelFor: { book: LibraryBook } | { series: LibraryBook[] } | { serial: string } | null = null;
 
-  /** Library & Serials: the one in front is the side shown; a click on the other turns to it. */
+  /** Office: the same Library, quieter (WEB.md → One app, 2026-10-15): Details only, plain words. */
+  const quiet = () => !ctx.isHome();
+  /** A book or serial open in the reader: the bar shows its title, and the name goes back to the Library. */
+  let reading: ReadingTitle | null = null;
+
+  /** Library & Serials: the one in front is the side shown; a click on the other turns to it. Office: the words. */
   const markEl = h("div", { class: "hmark", "aria-label": "Library & Serials" });
   const renderMark = (books: boolean) => {
-    const m = wordmark(books, 58);
+    if (quiet()) {
+      markEl.innerHTML = `<button class="lib txt" aria-pressed="${books}">Library</button><button class="ser txt" aria-pressed="${!books}">Serials</button>`;
+      return;
+    }
+    const m = wordmark(books, 40);
     markEl.innerHTML = `<button class="lib" aria-pressed="${books}" title="Library">${m.library}</button><span class="and">${m.ampersand}</span><button class="ser" aria-pressed="${!books}" title="Serials">${m.serials}</button>`;
   };
   markEl.addEventListener("click", e => {
     const side = (e.target as HTMLElement).closest(".lib") ? "books" : (e.target as HTMLElement).closest(".ser") ? "serials" : null;
-    if (!side || side === home().tab) return;
+    if (!side) return;
+    if (reading) return ctx.showLibrary(side);
+    if (side === home().tab) return;
     closePanel();
     setHome({ tab: side });
   });
   const search = h("input", { type: "search", placeholder: "Search title or author", "aria-label": "Search title or author" });
-  const officeButton = h("button", { onclick: () => ctx.toOffice() }, "Office");
+  const searchBox = h("label", { class: "hsearch" }, icon(ICONS.search), search);
   const gear = h("button", { class: "hicon", title: "Settings", "aria-label": "Settings" }, svgEl(GEAR));
-  const header = h("header", { class: "hhead" },
-    markEl,
-    h("span", { class: "grow" }),
-    h("label", { class: "hsearch" }, icon(ICONS.search), search),
-    h("div", { class: "hswitch" }, h("button", { class: "on", "aria-pressed": "true" }, "Home"), officeButton),
-    gear);
+  const titleBt = h("span", { class: "bt" });
+  const titlePlace = h("span", { class: "pl2" });
+  const titleEl = h("div", { class: "httl", hidden: true }, titleBt, titlePlace);
+  const header = h("header", { class: "hhead" }, markEl, h("span", { class: "grow" }), searchBox, gear, titleEl);
   const count = h("button", { class: "hcount", "aria-haspopup": "menu" });
   const zoomLess = h("button", { class: "zb", title: "Smaller", "aria-label": "Smaller" });
   const zoom = h("input", { type: "range", min: "0", max: String(SIZES.length - 1), step: "1", "aria-label": "Size" });
   const zoomMore = h("button", { class: "zb", title: "Larger", "aria-label": "Larger" });
   const views = h("div", { class: "hviews", role: "tablist" });
-  const addButton = h("button", { class: "hadd" }, "+ Add books");
+  const addButton = h("button", { class: "hadd" });
   const status = h("div", { class: "hstatus" }, count, h("span", { class: "grow" }), h("div", { class: "hzoom" }, zoomLess, zoom, zoomMore), views, addButton);
   const main = h("main", { class: "hmain" });
   const cont = h("button", { class: "hcont", hidden: true });
   const panel = h("aside", { class: "hpanel", "aria-label": "Book" });
-  const el = h("div", { class: "home" }, header, status, main, cont, panel);
+  const el = h("div", { class: "home" }, status, main, cont, panel);
 
   const home = () => ctx.setup().home;
   const setHome = (change: Partial<HomeSetup>) => ctx.update({ ...ctx.setup(), home: { ...home(), ...change } });
@@ -152,7 +179,8 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
   const openMenu = (menu: HTMLElement, anchor: HTMLElement, alignRight = false) => {
     closeMenu();
     menu.classList.add("hmenu");
-    el.append(menu);
+    // In the app, beside the bar: the menus show over the reader too.
+    (header.parentElement ?? el).append(menu);
     const r = anchor.getBoundingClientRect();
     const w = menu.getBoundingClientRect().width;
     menu.style.left = `${Math.max(8, Math.min(alignRight ? r.right - w : r.left, window.innerWidth - w - 8))}px`;
@@ -179,8 +207,13 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
   gear.addEventListener("click", e => {
     e.stopPropagation();
     if (menuOpen) return closeMenu();
+    const homeNow = ctx.isHome();
     openMenu(h("div", { role: "menu" },
       ctx.offline() ? h("div", { class: "lab" }, "Dropbox: offline") : null,
+      h("div", { class: "lab" }, "Show"),
+      h("button", { class: "r", role: "menuitemradio", "aria-checked": String(homeNow), onclick: () => { closeMenu(); if (!homeNow) ctx.setHome(true); } }, "Home", tick(homeNow)),
+      h("button", { class: "r", role: "menuitemradio", "aria-checked": String(!homeNow), onclick: () => { closeMenu(); if (homeNow) ctx.setHome(false); } }, "Office", tick(!homeNow)),
+      h("hr"),
       h("button", { class: "r", role: "menuitem", onclick: () => { closeMenu(); ctx.signOut(); } }, "Sign out")), gear, true);
   });
 
@@ -353,12 +386,12 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     latest: ["minmax(200px,1.8fr)", "minmax(200px,1.8fr)"], reading: ["minmax(200px,1.8fr)", "minmax(200px,1.8fr)"], lastread: ["110px", "110px"],
   };
   /** "2 NEW" in the seal's colours; just "2" where Details is crowded. */
-  const newTag = (x: Serial, numbers = false) => x.progress.newCount ? h("span", { class: `tag new${numbers ? " n" : ""}` }, numbers ? String(x.progress.newCount) : `${x.progress.newCount} NEW`) : null;
+  const newTag = (x: Serial, numbers = false) => x.progress.newCount ? h("span", { class: `tag new${numbers ? " n" : ""}` }, numbers ? String(x.progress.newCount) : `${x.progress.newCount} ${quiet() ? "new" : "NEW"}`) : null;
   /** "30 UNREAD" (the unread ones not NEW), or CAUGHT UP; in Details only the number, never CAUGHT UP. */
   const unreadTag = (x: Serial, inDetails = false, numbers = false) => {
     const n = x.progress.olderUnreadCount;
-    if (n) return h("span", { class: `tag${numbers ? " n" : ""}` }, numbers ? String(n) : `${n} UNREAD`);
-    return x.caughtUp && !inDetails ? h("span", { class: "tag cu" }, "CAUGHT UP") : null;
+    if (n) return h("span", { class: `tag${numbers ? " n" : ""}` }, numbers ? String(n) : `${n} ${quiet() ? "unread" : "UNREAD"}`);
+    return x.caughtUp && !inDetails ? h("span", { class: "tag cu" }, quiet() ? "Caught up" : "CAUGHT UP") : null;
   };
   const tagRow = (x: Serial) => h("span", { class: "tagrow" }, ...present(newTag(x), unreadTag(x)));
   const updatedLabel = (x: Serial) => chapterDateLabel(x.latest?.published, Date.now(), true);
@@ -429,7 +462,8 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
   /** The Serials side: its status line, views and size, and the serials found, in Details' sort. */
   const renderSerials = (columnsOpen: boolean) => {
     const ss = serialsSetup();
-    const view: SerialView = ss.view;
+    // Office: Details only.
+    const view: SerialView = viewFor(ss.view, !quiet());
     const all = ctx.serials();
     if (all == null) void ctx.loadSerials().then(renderSoon);
     const shown = sortSerials(searchSerials(all ?? [], query), ss.sort);
@@ -457,7 +491,10 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     // Continue: the serial read last on any device, and its chapter.
     const last = all && lastReadSerial(all);
     cont.hidden = !last;
-    if (last) {
+    if (last && quiet()) {
+      cont.replaceChildren(...quietLine(last.title, [last.current?.title ?? "", last.progress.unreadCount ? `${last.progress.unreadCount} unread` : "Up to date"]));
+      cont.onclick = () => ctx.openSerial(last);
+    } else if (last) {
       cont.replaceChildren(h("span", { class: "ci" }, h("span", { class: "k" }, "Continue"), h("span", { class: "t sans" }, redTitle(last.title)),
         h("span", { class: "k ch" }, last.current?.title ?? "")));
       cont.onclick = () => ctx.openSerial(last);
@@ -469,11 +506,14 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     // ☰'s list stays open while its boxes change the columns; other menus close.
     const columnsOpen = menuOpen?.classList.contains("colmenu") ?? false;
     closeMenu();
-    renderMark(!onSerials());
+    renderMark(reading ? reading.side === "books" : !onSerials());
+    addButton.textContent = quiet() ? "Add books" : "+ Add books";
+    cont.classList.toggle("quiet", quiet());
     if (onSerials()) return renderSerials(columnsOpen);
     count.classList.remove("plain");
     const hs = home();
-    const view = hs.view;
+    // Office: Details only.
+    const view: BookView = viewFor(hs.view, !quiet());
     const all = books();
     const sort = hs.sort;
     const z = SIZES[hs.sizes[view]];
@@ -520,11 +560,23 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
 
   // --- Continue: the book read last on any device ---
 
+  /** Office's Continue: one quiet line, "Continue  Title · Chapter 12 · 43%   Read". */
+  const quietLine = (title: string, rest: string[]) => [
+    h("span", { class: "k" }, "Continue"), h("b", {}, title),
+    h("span", { class: "k" }, rest.filter(Boolean).map(t => `· ${t}`).join(" ")),
+    h("span", { class: "go" }, "Read"),
+  ];
   const renderContinue = () => {
     const last = lastReadBook(ctx.books().filter(b => !b.hidden));
     cont.hidden = !last;
     if (!last) return;
     const p = progressOf(last) ?? 0;
+    if (quiet()) {
+      cont.replaceChildren(...quietLine(last.title, [ctx.places(last.id)?.[0]?.chapter ?? "", p > 0 ? `${Math.round(p * 100)}%` : ""]));
+      cont.onclick = () => ctx.open(last);
+      if (ctx.progress(last.id) == null && last.hasSyncFile) void ctx.load(last).then(renderSoon);
+      return;
+    }
     cont.replaceChildren(cover(last, false),
       h("span", { class: "ci" }, h("span", { class: "k" }, "Continue"), h("span", { class: "t" }, redTitle(last.title)),
         h("span", { class: "pl" }, h("i", { style: `width:${Math.round(p * 100)}%` }))));
@@ -735,20 +787,41 @@ export function createHome(ctx: HomeContext): { el: HTMLElement; render: () => v
     e.stopPropagation();
     ctx.menu(book, e.clientX, e.clientY);
   });
-  // A click outside the panel (and not on a book) closes it; outside a menu closes the menu.
+  // A click outside a menu closes it (in the Library or the reader); outside the panel (and not on a book), the panel.
+  document.addEventListener("click", e => {
+    if (menuOpen && !e.composedPath().includes(menuOpen)) closeMenu();
+  });
   el.addEventListener("click", e => {
     const path = e.composedPath();
-    if (menuOpen && !path.includes(menuOpen)) closeMenu();
     if (!panelFor || path.includes(panel)) return;
     if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .bcard, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark") || x.closest(".bookmenu, .dialog, .toast")))) return;
     closePanel();
   });
   document.addEventListener("keydown", e => {
-    if (e.key !== "Escape" || !el.isConnected || !el.offsetParent) return;
+    if (e.key !== "Escape" || !el.isConnected) return;
     if (menuOpen) closeMenu();
-    else closePanel();
+    else if (el.offsetParent) closePanel();
   });
 
-  return { el, render, isOpen: () => panelFor != null, closePanel };
+  /** A book or serial open (or none): the bar shows its title over the page instead of search. */
+  const setReading = (title: ReadingTitle | null) => {
+    const was = reading;
+    reading = title;
+    searchBox.hidden = title != null;
+    titleEl.hidden = title == null;
+    if (!was !== !title || was?.side !== title?.side) renderMark(title ? title.side === "books" : !onSerials());
+    if (title) {
+      titleBt.replaceChildren(quiet() ? document.createTextNode(title.title) : redTitle(title.title));
+      titlePlace.textContent = title.place;
+      // Over the page, but clear of the name and ⚙ when the page is wider than the gap between them.
+      const bar = header.getBoundingClientRect();
+      const from = Math.max(title.left, markEl.getBoundingClientRect().right + 24) - bar.left;
+      const to = Math.min(title.left + title.width, gear.getBoundingClientRect().left - 16) - bar.left;
+      titleEl.style.left = `${Math.round(from)}px`;
+      titleEl.style.width = `${Math.max(0, Math.round(to - from))}px`;
+    }
+  };
+
+  return { el, bar: header, render, isOpen: () => panelFor != null, closePanel, setReading };
 }
 

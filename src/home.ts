@@ -5,6 +5,11 @@ import { libraryItems, searchBooks, type LibraryBook, type LibraryItem, type Sor
 import { SERIAL_COLUMNS, type SerialColumnKey } from "./serials";
 
 export type BookView = "grid" | "cards" | "details";
+/** The view shown: Office shows Details only, books and serials alike (WEB.md → One app, two styles). */
+export function viewFor<V extends string>(view: V, home: boolean): V | "details" {
+  return home ? view : "details";
+}
+
 export const BOOK_VIEWS: { view: BookView; name: string }[] = [
   { view: "grid", name: "Grid" }, { view: "cards", name: "Cards" }, { view: "details", name: "Details" },
 ];

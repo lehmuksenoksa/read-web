@@ -241,4 +241,7 @@ export function applyLook(look: Look) {
   const root = document.documentElement.style;
   root.setProperty("--bg", hex(pageBackground(look)));
   root.setProperty("--tx", hex(pageText(look)));
+  // The page keeps the look when Home's chrome is Dark around it (WEB.md → One app, two styles).
+  root.setProperty("--pagebg", hex(pageBackground(look)));
+  root.setProperty("--pagetx", hex(pageText(look)));
 }

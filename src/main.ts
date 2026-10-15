@@ -5,12 +5,13 @@ import { parseDetails, parseNumber, withDetails, type BookDetails } from "./deta
 import { Dropbox, RevConflict } from "./dropbox";
 import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
 import { createHome } from "./homeView";
-import { booksToFetch, furthest, lastReadBook, libraryBooks, libraryItems, markedBook, placesOf, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook, type LibraryItem, type SortBy } from "./library";
-import { shown, SIDEBAR, sidebarWidth, type Setup } from "./looks";
+import { contentsRemembered, CONTENTS_KEY, LAST_PLACE_KEY, lastPlaceText, parseLastPlace, type LastPlace } from "./lastPlace";
+import { booksToFetch, furthest, libraryBooks, markedBook, placesOf, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook } from "./library";
+import { shown, type Setup } from "./looks";
 import { backupPath, BOOKS_FOLDER, chapterFolderPath, chapterListPath, CHAPTERS_FOLDER, chapterTextPath, DETAILS_PATH, DEVICES_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { openSerial } from "./serialBook";
 import {
-  chapterIdOf, homeSerials, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, progressLabel, readingOrderOf, searchSerials, sortSerials, withEndMark,
+  chapterDateLabel, chapterHref, chapterIdOf, homeSerials, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, readingOrderOf, withEndMark,
   type ChapterList, type Serial, type Subscription,
 } from "./serials";
 import { keptFile } from "./store";
@@ -30,7 +31,7 @@ let stopFollowing: (() => void) | null = null;
 // The browser tab says "Read.web", with or without a book open (2026-10-14).
 document.title = "Read.web";
 
-/** Closes the sidebar's menus (sort, a book's) on a click outside them or Esc (set while they can be open). */
+/** Closes a book's menu on a click outside it or Esc (set while it can be open). */
 let closeMenu: ((e?: Event) => void) | null = null;
 document.addEventListener("click", e => closeMenu?.(e));
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu?.(); });
@@ -48,6 +49,8 @@ function showSignIn(message?: string) {
   stopFollowing = null;
   document.documentElement.style.removeProperty("--bg");
   document.documentElement.style.removeProperty("--tx");
+  document.documentElement.style.removeProperty("--pagebg");
+  document.documentElement.style.removeProperty("--pagetx");
   appearance?.close();
   appearance = null;
   root.className = "";
@@ -84,12 +87,22 @@ function setHomeMode(on: boolean) {
   try { if (on) localStorage.setItem(HOME_KEY, "1"); else localStorage.removeItem(HOME_KEY); } catch { /* This browser keeps nothing: Office. */ }
 }
 
-// --- The Library beside the reader ---
+// --- This browser's place and Contents (WEB.md → One app, two styles, 2026-10-15) ---
 
-let sortBy: SortBy = "recent";
-let query = "";
+function lastPlace(): LastPlace {
+  try { return parseLastPlace(localStorage.getItem(LAST_PLACE_KEY)); } catch { return { kind: "library" }; }
+}
+function rememberPlace(place: LastPlace) {
+  try { localStorage.setItem(LAST_PLACE_KEY, lastPlaceText(place)); } catch { /* This browser keeps nothing: the Library next time. */ }
+}
+function contentsOpen(): boolean {
+  try { return localStorage.getItem(CONTENTS_KEY) === "1"; } catch { return false; }
+}
+function rememberContents(open: boolean) {
+  try { localStorage.setItem(CONTENTS_KEY, open ? "1" : "0"); } catch { /* Closed next time. */ }
+}
 
-/** A window this narrow (page pixels) shows the Library over the page, not beside it. */
+/** A window this narrow (page pixels) opens Contents and Aa over the page, not beside it. */
 const NARROW = window.matchMedia("(max-width: 900px)");
 
 async function showApp() {
@@ -98,129 +111,30 @@ async function showApp() {
   appearance ??= new Appearance(api);
   const look = appearance;
 
-  const list = h("div", { class: "list" });
-  const note = h("p", { class: "note muted" }, "Loading your books…");
-  // WEB.md → The sidebar (2026-10-14): ◫ Library; search; "All books · 142" with sort and group; the books; Dropbox and Sign out.
-  const search = h("input", { class: "search", type: "search", placeholder: "Search title or author", "aria-label": "Search title or author", value: query });
-  const hideButton = h("button", { class: "icon", title: "Hide the Library", "aria-label": "Hide the Library" }, icon(ICONS.panel));
-  const count = h("span", { class: "count" });
-  const sortButton = h("button", { class: "icon", title: "Sort and group", "aria-label": "Sort and group", "aria-expanded": "false" }, icon(ICONS.sliders));
-  const menu = h("div", { class: "panel menu sortmenu", role: "menu", hidden: true });
-  // The footer (2026-10-15): Home (in Office) and Sign out; "Dropbox: offline" only while Dropbox is out of reach.
-  const dropboxLabel = h("span", { hidden: true }, "Dropbox: offline");
-  const homeLink = h("button", { class: "link", onclick: () => toHome() }, "Home");
-  const heading = h("h1", {}, "Library");
-  const handle = h("div", { class: "resizer", title: "Drag to resize; double-click for the usual width", role: "separator", "aria-orientation": "vertical", "aria-label": "Library width" });
-  const side = h("aside", { class: "sidebar" },
-    handle,
-    h("div", { class: "shead" }, hideButton, heading),
-    h("label", { class: "sfilter" }, icon(ICONS.search), search),
-    h("div", { class: "lhead" }, count, sortButton, menu),
-    note,
-    list,
-    h("div", { class: "sfoot" },
-      h("span", { class: "who" }, dropboxLabel),
-      homeLink,
-      h("button", { class: "link", onclick: () => void signOut(api) }, "Sign out")));
-  const showButton = h("button", { class: "icon", title: "Show the Library", "aria-label": "Show the Library" }, icon(ICONS.panel));
-  // Contents and Aa (the reader puts them here): in the sidebar's top row, or over the page's top left
-  // when the sidebar is hidden or opens over the page (a narrow window).
-  const tools = h("span", { class: "tools" });
-  const floating = h("div", { class: "floatbar" }, showButton);
-  const sideSlot = side.querySelector<HTMLElement>(".shead")!;
-  const pane = h("section", { class: "main" }, h("p", { class: "empty muted" }, ""));
-  root.replaceChildren(side, h("div", { class: "mainwrap" }, floating, pane));
+  // The bar on every screen (Home's), and under it the Library or the reader: the rail (Contents
+  // and Aa), the panel they open, and the page (WEB.md → One app, two styles, 2026-10-15).
+  const tools = h("nav", { class: "rail", "aria-label": "Reading" });
+  const panelHost = h("aside", { class: "rpanel" });
+  const pane = h("section", { class: "main" });
+  const readerArea = h("div", { class: "readerarea" }, tools, panelHost, pane);
+  /** Dropbox out of reach: ⚙ says so. */
+  let offline = false;
 
   let setup: Setup = await look.setup();
-  let toastReady = false;
-  /** On a narrow window the Library opens over the page now and then; it isn't saved. */
-  let overlayOpen = false;
-  /** Home's full Library shows (not the reader). */
-  let homeShown = homeMode();
+  /** The Library (its Library or Serials side) or the reader; at the start, where this browser was. */
+  let screen: "library" | "reader" = lastPlace().kind === "library" ? "library" : "reader";
+  /** Contents or Aa open beside the page. */
+  let panelOpen = false;
   let home: ReturnType<typeof createHome> | null = null;
   const layout = () => {
-    const visible = NARROW.matches ? overlayOpen : setup.sidebar;
-    root.className = homeShown
-      // Home is always Dark for now (2026-10-15); Light waits for choosing the look in Home.
-      ? "app homeon dark"
-      : `app${visible ? "" : " noside"}${NARROW.matches ? " narrow" : ""}`;
-    homeLink.hidden = homeMode();
-    heading.classList.toggle("tohome", homeMode());
-    heading.title = homeMode() ? "Back to the Library" : "";
-    // Messages show over whichever is showing.
-    if (toastReady) (homeShown && home ? home.el : pane.parentElement!).append(toast);
-    (visible && !NARROW.matches ? sideSlot : floating).append(tools);
-    side.style.width = `${setup.sidebarWidth}px`;
+    // Home is always Dark for now (2026-10-15); Office takes the look's colours.
+    root.className = `app ${homeMode() ? "homeon dark" : "office"} ${screen}${NARROW.matches ? " narrow" : ""}${panelOpen && screen === "reader" ? " panelopen" : ""}`;
   };
-  // Dragging the sidebar's edge resizes it; the width is kept in Web's setup when the drag ends.
-  handle.addEventListener("pointerdown", e => {
-    e.preventDefault();
-    handle.setPointerCapture(e.pointerId);
-    root.classList.add("dragging");
-    const left = side.getBoundingClientRect().left;
-    const move = (m: PointerEvent) => { side.style.width = `${sidebarWidth(m.clientX - left)}px`; };
-    const done = () => {
-      handle.removeEventListener("pointermove", move);
-      root.classList.remove("dragging");
-      look.update({ ...setup, sidebarWidth: sidebarWidth(side.getBoundingClientRect().width) });
-    };
-    handle.addEventListener("pointermove", move);
-    handle.addEventListener("pointerup", done, { once: true });
-    handle.addEventListener("pointercancel", done, { once: true });
-  });
-  handle.addEventListener("dblclick", () => look.update({ ...setup, sidebarWidth: SIDEBAR.normal }));
-  const setSidebar = (visible: boolean) => {
-    if (NARROW.matches) overlayOpen = visible;
-    else look.update({ ...setup, sidebar: visible });
-    layout();
-  };
-  hideButton.addEventListener("click", () => setSidebar(false));
-  showButton.addEventListener("click", () => setSidebar(true));
   NARROW.addEventListener("change", layout);
   applyLook(shown(setup));
   layout();
   stopFollowing?.();
-  stopFollowing = look.onChange(next => { setup = next; applyLook(shown(next)); layout(); if (homeShown) home?.render(); });
-
-  // Sort and group: Recent, Title or Author, and Group series.
-  const tick = (on: boolean) => h("span", { class: "v" }, on ? icon(ICONS.check) : null);
-  const fillMenu = () => {
-    const choice = (by: SortBy, name: string) => h("button", {
-      class: "r", role: "menuitemradio", "aria-checked": String(sortBy === by),
-      onclick: () => { sortBy = by; fillMenu(); render(); },
-    }, name, tick(sortBy === by));
-    const on = setup.groupSeries;
-    menu.replaceChildren(
-      h("div", { class: "lab" }, "Sort"),
-      choice("recent", "Recent"), choice("title", "Title"), choice("author", "Author"),
-      h("hr"),
-      h("button", {
-        class: "r", role: "menuitemcheckbox", "aria-checked": String(on),
-        onclick: () => { look.update({ ...setup, groupSeries: !on }); fillMenu(); render(); },
-      }, "Group series", tick(on)),
-      h("hr"),
-      // Hidden books (Hide on any device) are listed apart, to Unhide.
-      h("div", { class: "lab" }, "Show"),
-      h("button", { class: "r", role: "menuitemradio", "aria-checked": String(!showHidden), onclick: () => { showHidden = false; fillMenu(); render(); } }, "All books", tick(!showHidden)),
-      h("button", { class: "r", role: "menuitemradio", "aria-checked": String(showHidden), onclick: () => { showHidden = true; fillMenu(); render(); } }, "Hidden", tick(showHidden)));
-  };
-  /** Show › Hidden: the hidden books instead of the others. Not kept. */
-  let showHidden = false;
-  const closeTheMenu = () => {
-    menu.hidden = true;
-    sortButton.setAttribute("aria-expanded", "false");
-  };
-  sortButton.addEventListener("click", () => {
-    if (!menu.hidden) return closeTheMenu();
-    fillMenu();
-    menu.hidden = false;
-    sortButton.setAttribute("aria-expanded", "true");
-  });
-  closeMenu = (e?: Event) => {
-    const path = e?.composedPath() ?? [];
-    if (!path.some(el => el === menu || el === sortButton)) closeTheMenu();
-    if (!path.includes(bookMenu)) closeBookMenu();
-  };
+  stopFollowing = look.onChange(next => { setup = next; applyLook(shown(next)); layout(); render(); });
 
   // --- The books ---
 
@@ -278,113 +192,20 @@ async function showApp() {
     known.set(id, { at: book.lastRead, p, places: places ?? known.get(id)?.places });
     progress.set(id, Promise.resolve(p));
     saveLibrary();
-    const row = list.querySelector<HTMLElement>(`.row[data-id="${id}"]`);
-    if (row && !book.read) showOn(row, p);
   };
-  /** A book in progress: "38%" on its title line and the line under it; none until started. */
-  const showOn = (row: HTMLElement, p: number) => {
-    const cell = row.querySelector<HTMLElement>(".p");
-    const bar = row.querySelector<HTMLElement>(".line");
-    if (cell) cell.textContent = p > 0 ? `${Math.round(p * 100)}%` : "";
-    if (bar) {
-      bar.hidden = !(p > 0);
-      (bar.firstElementChild as HTMLElement).style.width = `${Math.round(p * 100)}%`;
-    }
-  };
-  // A row's progress is read when it comes into view: "38%" and the line under it ("Read" needs neither).
-  const seen = new IntersectionObserver(entries => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting) continue;
-      seen.unobserve(entry.target);
-      const row = entry.target as HTMLElement;
-      const book = bookById(row.dataset.id);
-      if (!book || book.read) continue;
-      void progressOf(book).then(p => showOn(row, p));
-    }
-  }, { root: list });
-  /** Series opened in this visit. */
-  const open = new Set<string>();
   /** The book or serial in the reader. */
   let currentId: string | null = null;
-  /** What's in the reader: the sidebar lists books, or serials while a serial is open. */
-  let currentKind: "book" | "serial" = "book";
-  /** The book in the reader is the one the page started with, not one picked: a newer last-read book replaces it. */
-  let startedWith = false;
 
-  /** The line under a row: the share read, shown only while in progress. */
-  const line = (fraction: number | null) => h("span", { class: "line", hidden: fraction == null },
-    h("i", { style: `width: ${Math.round((fraction ?? 0) * 100)}%` }));
-  const bookRow = (book: LibraryBook, inSeries: boolean) => {
-    const byline = inSeries
-      ? (book.seriesIndex != null ? `Book ${book.seriesIndex}` : book.author ?? "")
-      : [book.author, book.series && `${book.series}${book.seriesIndex != null ? ` ${book.seriesIndex}` : ""}`].filter(Boolean).join(" · ");
-    const more = h("span", { class: "more", role: "button", title: "More", "aria-label": `More for ${book.title}` }, icon(ICONS.more));
-    more.addEventListener("click", e => {
-      e.stopPropagation();
-      const r = more.getBoundingClientRect();
-      openBookMenu(book, r.right - 8, r.bottom + 4);
-    });
-    return h("button", {
-      class: `row${inSeries ? " child" : ""}${book.id === currentId ? " cur" : ""}${book.id === menuFor ? " menuon" : ""}`, "data-id": book.id,
-      "aria-current": book.id === currentId ? "true" : undefined,
-      onclick: () => void openBook(book),
-    },
-      h("span", { class: "t" }, h("span", { class: "x" }, book.title), h("span", { class: "p" }, book.read ? "Read" : ""), more),
-      h("span", { class: "a" }, byline),
-      line(null));
-  };
-  const seriesRows = (item: Extract<LibraryItem, { kind: "series" }>) => {
-    const key = item.name.toLocaleLowerCase();
-    const opened = open.has(key) || query.trim() !== "";
-    const all = item.read === item.books.length;
-    const head = h("button", {
-      class: `row series${opened ? " open" : ""}`, "aria-expanded": String(opened),
-      onclick: () => { if (open.has(key)) open.delete(key); else open.add(key); render(); },
-    },
-      h("span", { class: "t" }, h("span", { class: "x" }, item.name), h("span", { class: "chev" }, icon(opened ? ICONS.down : ICONS.right))),
-      h("span", { class: "a" }, [item.author, `${item.books.length} books`, `${item.read} read`].filter(Boolean).join(" · ")),
-      line(all || item.read === 0 ? null : item.read / item.books.length));
-    return [head, ...(opened ? item.books.map(b => bookRow(b, true)) : [])];
-  };
-
-  const render = () => {
-    renderSide();
-    if (homeShown) home?.render();
-  };
-  /** A serial's row in the sidebar while a serial is open (WEB.md → Home, step 3b). */
-  const serialRow = (x: Serial) => h("button", {
-    class: `row${x.id === currentId ? " cur" : ""}`, "data-sid": x.id, "aria-current": x.id === currentId ? "true" : undefined,
-    onclick: () => void openSerialNow(x),
-  },
-    h("span", { class: "t" }, h("span", { class: "x" }, x.title)),
-    h("span", { class: "a" }, x.chapters.length ? progressLabel(x.progress) : x.site));
-  const renderSide = () => {
-    sortButton.style.display = currentKind === "serial" ? "none" : "";
-    heading.textContent = currentKind === "serial" ? "Serials" : "Library";
-    if (currentKind === "serial") {
-      const all = serialsNow() ?? [];
-      const found = sortSerials(searchSerials(all, query), { key: "lastread", reversed: false });
-      count.textContent = query.trim() ? `${found.length} found` : `Serials · ${all.length}`;
-      list.replaceChildren(...(found.length ? found.map(serialRow) : [h("p", { class: "note muted" }, all.length ? "No serials match." : "No serials yet.")]));
-      return;
-    }
-    const listed = books.map(marked).filter(b => !!b.hidden === showHidden);
-    const items = libraryItems(listed, sortBy, query, setup.groupSeries);
-    const found = items.reduce((n, item) => n + (item.kind === "book" ? 1 : item.books.length), 0);
-    count.textContent = showHidden ? `Hidden · ${found}` : query.trim() ? `${found} found` : `All books · ${listed.length}`;
-    list.replaceChildren(...items.flatMap(item => (item.kind === "book" ? [bookRow(item.book, false)] : seriesRows(item))));
-    list.querySelectorAll(".row[data-id]").forEach(el => seen.observe(el));
-    if (!items.length && !note.isConnected) list.replaceChildren(h("p", { class: "note muted" }, showHidden ? "No hidden books." : books.length ? "No books match." : "No books in Dropbox's /Books/ yet."));
-  };
-  search.addEventListener("input", () => { query = search.value; render(); });
+  /** Show › Hidden: the hidden books instead of the others. Not kept. */
+  let showHidden = false;
+  /** The Library redrawn (only while it shows: showing it draws it). */
+  const render = () => { if (screen === "library") home?.render(); };
 
   // --- A book's menu: ⋯ on hover, or a right-click (WEB.md → The book menu, 2026-10-14) ---
 
   const bookMenu = h("div", { class: "panel menu bookmenu", role: "menu", hidden: true });
   const toast = h("div", { class: "msg toast", hidden: true });
-  root.append(bookMenu);
-  pane.parentElement!.append(toast);
-  toastReady = true;
+  closeMenu = (e?: Event) => { if (!e?.composedPath().includes(bookMenu)) closeBookMenu(); };
   /** The book whose menu is open: its row keeps the hover outline. */
   let menuFor: string | null = null;
   let toastTimer: number | undefined;
@@ -398,8 +219,8 @@ async function showApp() {
     if (bookMenu.hidden) return;
     bookMenu.hidden = true;
     menuFor = null;
-    list.querySelector(".row.menuon")?.classList.remove("menuon");
   };
+  const tick = (on: boolean) => h("span", { class: "v" }, on ? icon(ICONS.check) : null);
   /** The newer of two read marks. */
   const newer = (a?: ReadMark, b?: ReadMark) => (!a ? b : !b ? a : a.updatedAt >= b.updatedAt ? a : b);
   const fillBookMenu = (book: LibraryBook) => {
@@ -422,7 +243,6 @@ async function showApp() {
   const openBookMenu = (book: LibraryBook, x: number, y: number) => {
     closeMenu?.();
     menuFor = book.id;
-    list.querySelector(`.row[data-id="${book.id}"]`)?.classList.add("menuon");
     fillBookMenu(book);
     bookMenu.hidden = false;
     const r = bookMenu.getBoundingClientRect();
@@ -436,17 +256,6 @@ async function showApp() {
       }).catch(() => undefined);
     }
   };
-  list.addEventListener("contextmenu", e => {
-    const row = (e.target as HTMLElement).closest<HTMLElement>(".row[data-id]");
-    const book = books.find(b => b.id === row?.dataset.id);
-    if (!row || !book) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const r = row.getBoundingClientRect();
-    // A keyboard's menu key has no pointer: under the row's title.
-    openBookMenu(book, e.clientX || r.left + 24, e.clientY || r.top + 24);
-  });
-
   /** Changes a book's marks in its sync file (read first, then written with its revision; tried again if it moved meanwhile). */
   const writeMarks = async (id: string, change: Marks) => {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -581,28 +390,71 @@ async function showApp() {
     titleIn.select();
   };
 
+  // --- The reader ---
+
+  /** The page's box on screen, and what's open: the bar shows its title over the page. */
+  let pageBox = { left: 0, width: 0 };
+  let reading: { title: string; side: "books" | "serials"; place: string } | null = null;
+  const showTitle = () => { if (screen === "reader") home?.setReading(reading && { ...reading, ...pageBox }); };
+  /** The reader in front: the Library's panel closes. */
+  const toReader = () => {
+    if (screen === "reader") return;
+    screen = "reader";
+    home?.closePanel();
+    layout();
+    showTitle();
+  };
+  /** The Library or Serials page, from the bar's name; the book stays open behind it. */
+  const showLibrary = (side: "books" | "serials") => {
+    screen = "library";
+    rememberPlace({ kind: "library" });
+    home?.setReading(null);
+    layout();
+    if (setup.home.tab !== side) look.update({ ...setup, home: { ...setup.home, tab: side } });
+    else render();
+  };
+  /** What every book and serial gives the reader: the rail, the panel beside the page, the bar's title. */
+  const chrome = (title: string, side: "books" | "serials", place: (p: { href: string; chapter: string | null; totalProgression: number }) => string) => {
+    reading = { title, side, place: "" };
+    panelOpen = false;
+    layout();
+    showTitle();
+    return {
+      tools, panelHost,
+      openContents: !NARROW.matches && contentsOpen(),
+      overlay: () => NARROW.matches,
+      onPanel: (open: "contents" | "aa" | null) => {
+        panelOpen = open != null;
+        rememberContents(contentsRemembered(contentsOpen(), open, NARROW.matches));
+        layout();
+      },
+      onPlace: (p: { href: string; chapter: string | null; totalProgression: number }) => {
+        if (reading?.title !== title) return;
+        reading = { ...reading, place: place(p) };
+        showTitle();
+      },
+      onPageBox: (box: { left: number; width: number }) => {
+        if (screen !== "reader" || !box.width) return;
+        pageBox = box;
+        showTitle();
+      },
+    };
+  };
+
   /** A book into the reader: the one open before saves its place and closes first. */
   let opening = Promise.resolve();
-  const openBook = (book: LibraryBook, atStart = false) => {
-    if (homeShown && !atStart) {
-      homeShown = false;
-      home?.closePanel();
-      layout();
-    }
-    startedWith = atStart;
+  const openBook = (book: LibraryBook) => {
+    toReader();
+    rememberPlace({ kind: "book", id: book.id });
     if (book.id === currentId) return opening;
     currentId = book.id;
-    currentKind = "book";
-    // Its series open, so the highlighted row shows.
-    if (book.series) open.add(book.series.toLocaleLowerCase());
-    render();
-    if (NARROW.matches && !atStart) { overlayOpen = false; layout(); }
+    const props = chrome(book.title, "books", p => [p.chapter, `${Math.round(p.totalProgression * 100)}%`].filter(Boolean).join(" · "));
     opening = opening.then(async () => {
       await closeReader?.();
       closeReader = null;
       if (currentId !== book.id) return;
       closeReader = await showReader(pane, {
-        dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title, tools,
+        ...props, dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title,
         onSaved: text => showProgress(book.id, furthest(JSON.parse(text)), placesOf(JSON.parse(text))),
       });
     }).catch(() => undefined); // One book that fails to open doesn't stop the next.
@@ -610,31 +462,31 @@ async function showApp() {
   };
   /** A serial into the reader (WEB.md → Home, step 3b): its chapters from Dropbox, its place in its sync file. */
   const openSerialNow = (x: Serial) => {
-    if (homeShown) {
-      homeShown = false;
-      home?.closePanel();
-      layout();
-    }
-    startedWith = false;
+    toReader();
+    rememberPlace({ kind: "serial", id: x.id });
     if (x.id === currentId) return opening;
     currentId = x.id;
-    currentKind = "serial";
-    render();
-    if (NARROW.matches) { overlayOpen = false; layout(); }
+    const order = readingOrderOf(x.chapters).map(c => c.id);
+    /** The serial as last read (its NEW marks and chapters change while it's open). */
+    const now = () => serialsNow()?.find(s => s.id === x.id) ?? x;
+    const props = chrome(x.title, "serials", p => {
+      // "Chapter 213 · 2 unread": the readable chapters after this one.
+      const at = x.chapters.findIndex(c => c.id === chapterIdOf(p.href));
+      const unread = at < 0 ? 0 : readingOrderOf(x.chapters.slice(at + 1)).length;
+      return [p.chapter, unread ? `${unread} unread` : "Up to date"].filter(Boolean).join(" · ");
+    });
     opening = opening.then(async () => {
       await closeReader?.();
       closeReader = null;
       if (currentId !== x.id) return;
       const [inDropbox, keep] = await Promise.all([chaptersInDropbox(x.id), phonesKeep()]);
       const sub = serialData?.subs.find(s => s.bookId === x.id);
-      const order = readingOrderOf(x.chapters).map(c => c.id);
       const text = (chapterId: string) => keptFile(chapterTextPath(x.id, chapterId), () => api.download(chapterTextPath(x.id, chapterId)).then(f => f?.bytes ?? null))
         .then(bytes => (bytes ? new TextDecoder().decode(bytes) : null));
       closeReader = await showReader(pane, {
-        dropbox: api, appearance: look, id: x.id, path: "", title: x.title, tools,
+        ...props, dropbox: api, appearance: look, id: x.id, path: "", title: x.title,
         onSaved: saved => {
           if (serialData) serialData = { ...serialData, places: { ...serialData.places, [x.id]: JSON.parse(saved) } };
-          render();
         },
         serial: {
           open: () => openSerial({ id: x.id, title: x.title, author: x.author, site: x.site, chapters: x.chapters, inDropbox, keepNotes: keepsNotes(sub, keep), text }),
@@ -648,6 +500,13 @@ async function showApp() {
           onPastEnd: href => {
             const chapterId = chapterIdOf(href);
             if (chapterId && inDropbox.has(chapterId)) void markCaughtUp(x.id, chapterId);
+          },
+          // Contents: newest first, with their dates and NEW, as on the phones.
+          contents: () => {
+            const s = now();
+            const at = Date.now();
+            return s.chapters.map((c, index) => ({ c, index })).filter(r => order.includes(r.c.id)).reverse()
+              .map(({ c, index }) => ({ href: chapterHref(c.id), title: c.title, date: chapterDateLabel(c.published, at, true) ?? "", isNew: s.progress.isNew(index) }));
           },
         },
       });
@@ -696,11 +555,29 @@ async function showApp() {
     }
   };
 
-  /** At the start, the book read last on any device; opening it saves no place. */
-  const startWithLastRead = () => {
-    const last = lastReadBook(books.map(marked).filter(b => !b.hidden));
-    if (last) void openBook(last, true);
-    else if (!currentId) pane.replaceChildren(h("p", { class: "empty muted" }, "Choose a book from the Library."));
+  /** At the start, where this browser was: a book or serial at its place, else the Library (WEB.md → One app). */
+  let restored = false;
+  const restore = (final: boolean) => {
+    if (restored || currentId) return;
+    const place = lastPlace();
+    if (place.kind === "book") {
+      const book = bookById(place.id);
+      // Not in the Library as kept: once Dropbox's is read, or the Library.
+      if (!book && !final) return;
+      restored = true;
+      if (book) void openBook(book);
+      else showLibrary(setup.home.tab);
+    } else if (place.kind === "serial") {
+      restored = true;
+      void loadSerials().then(() => {
+        const x = serialsNow()?.find(s => s.id === place.id);
+        if (currentId) return;
+        if (x) void openSerialNow(x);
+        else showLibrary("serials");
+      });
+    } else {
+      restored = true;
+    }
   };
 
   // --- Home (WEB.md → Home) ---
@@ -736,8 +613,8 @@ async function showApp() {
       }));
       serialData = { subs, lists, places };
     } catch {
-      // The footer says so; the serials as last read stay (none: an empty list).
-      dropboxLabel.hidden = false;
+      // ⚙ says so; the serials as last read stay (none: an empty list).
+      offline = true;
       serialData ??= { subs: [], lists: {}, places: {} };
     }
   })();
@@ -770,8 +647,15 @@ async function showApp() {
     setHidden: (book, hidden) => void setHidden(book, hidden),
     edit: book => editDetails(book),
     signOut: () => void signOut(api),
-    offline: () => !dropboxLabel.hidden,
-    toOffice: () => toOffice(),
+    offline: () => offline,
+    isHome: homeMode,
+    setHome: on => {
+      setHomeMode(on);
+      layout();
+      home?.render();
+      showTitle();
+    },
+    showLibrary,
     readFile: async file => {
       const bytes = new Uint8Array(await file.arrayBuffer());
       let info: BookInfo | null = null;
@@ -821,28 +705,13 @@ async function showApp() {
     void keepBook(got, bytes);
     return { kind: "added", id: got };
   };
-  root.append(home.el);
-  const toHome = () => {
-    setHomeMode(true);
-    homeShown = true;
-    layout();
-    home!.render();
-  };
-  const toOffice = () => {
-    setHomeMode(false);
-    homeShown = false;
-    layout();
-    render();
-    // Office lists books: a serial in the reader gives way to the book read last.
-    if (!currentId || currentKind === "serial") startWithLastRead();
-  };
-  heading.addEventListener("click", () => { if (homeMode()) toHome(); });
+  root.replaceChildren(home.bar, home.el, readerArea, bookMenu, toast);
   layout();
+  if (screen === "library") home.render();
 
   if (kept) {
-    note.remove();
     render();
-    if (!homeShown) startWithLastRead();
+    restore(false);
   }
   try {
     const [files, index, syncFiles, details] = await Promise.all([
@@ -857,13 +726,13 @@ async function showApp() {
     const listed = Object.keys(addedHere).filter(id => (index as Record<string, IndexEntry>)[id]);
     if (listed.length) { for (const id of listed) delete addedHere[id]; void keepValue("added", addedHere); }
   } catch (e) {
-    // The footer says so; the Library as last seen stays.
-    dropboxLabel.hidden = false;
+    // ⚙ says so; the Library as last seen stays.
+    offline = true;
     render();
-    if (!kept) note.textContent = `Couldn't reach Dropbox: ${e instanceof Error ? e.message : e}`;
+    restore(true);
+    if (!kept) tell(`Couldn't reach Dropbox: ${e instanceof Error ? e.message : e}`);
     return;
   }
-  note.remove();
   progress = new Map();
   saveLibrary();
   render();
@@ -885,9 +754,7 @@ async function showApp() {
     saveLibrary();
     render();
   });
-  // Another device may have read another book since: the page starts with that one, unless a book was picked meanwhile.
-  // Home starts with its Library; the reader waits for a book.
-  if (!homeShown && (!currentId || startedWith)) startWithLastRead();
+  restore(true);
   // Then, quietly, the books read last that this browser doesn't have yet, one at a time.
   void opening.then(async () => {
     const kept = new Set((await keptBooks()).map(b => b.id));
