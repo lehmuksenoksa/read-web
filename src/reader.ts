@@ -10,7 +10,7 @@ import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
 import { CATALOGUE } from "./fonts";
 import {
-  BASE_FONT_PX, BUILT_IN_FONTS, QUIET_BOOK_CSS, canRename, charWidth, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, lookNamed, pageBackground, pageLayout, pageText,
+  BASE_FONT_PX, BUILT_IN_FONTS, canRename, charWidth, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, lookNamed, pageBackground, pageLayout, pageText,
   preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, SANS_FONTS,
   saveCustomAs, shown, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightName, type Look, type Setup, type TextPosition, type Steps,
 } from "./looks";
@@ -20,6 +20,7 @@ import { chapterHref, chapterIdOf, nextAfterCaughtUp } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
 import { afterKeptOpening, BOOK_ORDER, openingPlan, positionFromLocator, serialOrder, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
 import { h, icon, ICONS } from "./ui";
+import { QUIET_BOOK_CSS, QUIET_BOOK_SCRIPT } from "./quietBook";
 
 /** Uploads wait this long after the last page turn (the phones wait 5 s). */
 export const UPLOAD_DELAY_MS = 4000;
@@ -813,8 +814,11 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
         rules: [{
           resources: [/.*/],
           prepend: [{ as: "link", rel: "stylesheet", blob: new Blob([font.css], { type: "text/css" }), target: "head" }],
-          // Office: headings at the text's size, no drop caps, no images (2026-10-16).
-          append: mountedQuiet ? [{ as: "link", rel: "stylesheet", blob: new Blob([QUIET_BOOK_CSS], { type: "text/css" }), target: "head" }] : [],
+          // Office: headings at the text's size, no drop caps, no images, no blank lines (2026-10-16).
+          append: mountedQuiet ? [
+            { as: "link", rel: "stylesheet", blob: new Blob([QUIET_BOOK_CSS], { type: "text/css" }), target: "head" },
+            { as: "script", blob: new Blob([QUIET_BOOK_SCRIPT], { type: "text/javascript" }), target: "body" },
+          ] : [],
         }],
         allowedDomains: [],
       },
