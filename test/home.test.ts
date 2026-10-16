@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ago, clickSort, decodeHome, fitColumns, DEFAULT_COLUMNS, DEFAULT_HOME, detailsRows, homeItems, megabytes, menuSort, moveColumn,
+  ago, clickSort, curatedHome, decodeHome, RECENT_DAYS, seriesLine, fitColumns, DEFAULT_COLUMNS, DEFAULT_HOME, detailsRows, homeItems, megabytes, menuSort, moveColumn,
   nextInSeries, shownColumns, sizeStep, sortMenuChoice, sortRows, textScale, titleWord, toggleColumn, type Facts,
 } from "../src/home";
 import type { LibraryBook } from "../src/library";
@@ -180,5 +180,53 @@ describe("Details' columns in a narrow window (2026-10-16)", () => {
 
   it("never drops Title", () => {
     expect(fitColumns(["title", "author"], least, 100, order)).toEqual(["title"]);
+  });
+});
+
+describe("the curated Grid page", () => {
+  const NOW = Date.parse("2026-10-16T12:00:00Z");
+  const days = (n: number) => new Date(NOW - n * 86_400_000).toISOString();
+  const lib = [
+    book("a", "Mage Tank 5", { lastRead: days(0.1), added: days(40) }),
+    book("b", "Excession", { lastRead: days(1), added: days(60) }),
+    book("c", "The Crippled King", { lastRead: days(3), added: days(20) }),
+    book("d", "Spear", { lastRead: days(5), added: days(90) }),
+    book("e", "Will of the Many", { lastRead: days(9), added: days(100) }),
+    book("f", "Katabasis", { added: days(1), hasSyncFile: false }),
+    book("g", "Mouth of Fire", { added: days(2), hasSyncFile: false }),
+    book("h", "Old unread", { added: days(RECENT_DAYS + 5), hasSyncFile: false }),
+    book("i", "Finished", { lastRead: days(0.01), added: days(3), read: true }),
+    book("j", "Hidden one", { lastRead: days(0.02), added: days(1), hidden: true }),
+    book("k", "Not yet known", { lastRead: days(0.03), added: days(1) }),
+  ];
+  const p: Record<string, number | null> = { a: 0.67, b: 0.31, c: 0.12, d: 0.55, e: 0.83, f: 0, g: 0, h: 0, i: 1, j: 0.5, k: null };
+  const progress = (b: LibraryBook) => p[b.id] ?? null;
+
+  it("Reading now is the book in progress read last; Also reading the next three; read, hidden and not yet known books are in neither", () => {
+    const c = curatedHome(lib, progress, NOW);
+    expect(c.now?.id).toBe("a");
+    expect(c.also.map(b => b.id)).toEqual(["b", "c", "d"]);
+  });
+
+  it("Recently added: not started, added in the last sixty days, newest first; never a book in progress", () => {
+    expect(curatedHome(lib, progress, NOW).added.map(b => b.id)).toEqual(["f", "g"]);
+  });
+
+  it("no books in progress: no Reading now, nothing beside it", () => {
+    const c = curatedHome(lib.filter(b => !["a", "b", "c", "d", "e"].includes(b.id)), progress, NOW);
+    expect(c.now).toBeNull();
+    expect(c.also).toEqual([]);
+  });
+
+  it("the series shows unless the title already says it", () => {
+    expect(seriesLine(book("x", "Mage Tank 5", { series: "Mage Tank", seriesIndex: 5 }))).toBe("");
+    expect(seriesLine(book("x", "Excession", { series: "The Culture", seriesIndex: 5 }))).toBe("The Culture · 5");
+    expect(seriesLine(book("x", "Excession"))).toBe("");
+  });
+
+  it("its All has its own sort, Title to start with; an older setup file reads as Title", () => {
+    expect(DEFAULT_HOME.gridSort).toEqual({ key: "title", reversed: false });
+    expect(decodeHome({ sort: { key: "size" } }).gridSort).toEqual({ key: "title", reversed: false });
+    expect(decodeHome({ gridSort: { key: "author", reversed: true } }).gridSort).toEqual({ key: "author", reversed: true });
   });
 });

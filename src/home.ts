@@ -82,8 +82,10 @@ export interface HomeSetup {
   tab: "books" | "serials";
   serials: SerialsSetup;
   view: BookView;
-  /** One sort for all three views. */
+  /** Details' sort (and Grid's when it shows plain matches). */
   sort: HomeSort;
+  /** The curated Grid page's All (2026-10-16): its own sort, Title to start with. */
+  gridSort: HomeSort;
   /** The size step per view: 0 to 4, 2 the middle. */
   sizes: Record<BookView, number>;
   columns: { order: ColumnKey[]; hidden: ColumnKey[] };
@@ -96,6 +98,7 @@ export const DEFAULT_HOME: HomeSetup = {
   serials: DEFAULT_SERIALS,
   view: "grid",
   sort: { key: "last", reversed: false },
+  gridSort: { key: "title", reversed: false },
   sizes: { grid: 2, details: 2 },
   columns: DEFAULT_COLUMNS,
 };
@@ -104,14 +107,16 @@ export const DEFAULT_HOME: HomeSetup = {
 export function decodeHome(raw: unknown): HomeSetup {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof HomeSetup, unknown>>;
   const view = BOOK_VIEWS.some(v => v.view === r.view) ? (r.view as BookView) : DEFAULT_HOME.view;
-  const sortRaw = (r.sort ?? {}) as Partial<HomeSort>;
-  const sort: HomeSort = KEYS.includes(sortRaw.key as ColumnKey) && sortRaw.key !== "cover"
-    ? { key: sortRaw.key as ColumnKey, reversed: sortRaw.reversed === true }
-    : DEFAULT_HOME.sort;
+  const sortOf = (raw: unknown, fallback: HomeSort): HomeSort => {
+    const x = (raw ?? {}) as Partial<HomeSort>;
+    return KEYS.includes(x.key as ColumnKey) && x.key !== "cover" ? { key: x.key as ColumnKey, reversed: x.reversed === true } : fallback;
+  };
+  const sort = sortOf(r.sort, DEFAULT_HOME.sort);
+  const gridSort = sortOf(r.gridSort, DEFAULT_HOME.gridSort);
   const sizesRaw = (r.sizes ?? {}) as Record<string, unknown>;
   const sizes = Object.fromEntries(BOOK_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v])])) as Record<BookView, number>;
   const columns = decodeColumns(r.columns, KEYS, DEFAULT_COLUMNS);
-  return { tab: r.tab === "serials" ? "serials" : "books", serials: decodeSerials(r.serials), view, sort, sizes, columns };
+  return { tab: r.tab === "serials" ? "serials" : "books", serials: decodeSerials(r.serials), view, sort, gridSort, sizes, columns };
 }
 
 function decodeColumns<K extends string>(raw: unknown, keys: K[], fallback: { order: K[]; hidden: K[] }): { order: K[]; hidden: K[] } {
@@ -319,4 +324,37 @@ export function shortDate(iso: string | null): string {
 /** "0.8 MB". */
 export function megabytes(bytes: number | null | undefined): string {
   return bytes == null ? "" : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// --- The curated Grid page (WEB.md → Home; agreed from mockups 2026-10-16) ---
+
+/** Recently added: books added within this many days that haven't been started. */
+export const RECENT_DAYS = 60;
+
+export interface CuratedHome {
+  /** The book in progress read most recently: Reading now. */
+  now: LibraryBook | null;
+  /** The next three in progress: Also reading. */
+  also: LibraryBook[];
+  /** Not started, added in the last [RECENT_DAYS] days, newest first: Recently added. */
+  added: LibraryBook[];
+}
+
+/**
+ * The sections over All. In progress: past 0% and not marked read, most recently read first.
+ * [progress] is null while a book's sync file hasn't been read: such a book is in no section yet.
+ */
+export function curatedHome(books: LibraryBook[], progress: (book: LibraryBook) => number | null, now: number): CuratedHome {
+  const shown = books.filter(b => !b.hidden);
+  const time = (iso: string | null | undefined) => (iso ? Date.parse(iso) || 0 : 0);
+  const reading = shown.filter(b => !b.read && (progress(b) ?? 0) > 0).sort((a, b) => time(b.lastRead) - time(a.lastRead));
+  const since = now - RECENT_DAYS * 86_400_000;
+  const added = shown.filter(b => !b.read && progress(b) === 0 && time(b.added) >= since).sort((a, b) => time(b.added) - time(a.added));
+  return { now: reading[0] ?? null, also: reading.slice(1, 4), added };
+}
+
+/** The series under a featured title, unless the title already says it ("Mage Tank 5" in Mage Tank). */
+export function seriesLine(book: LibraryBook): string {
+  if (!book.series || book.title.toLowerCase().includes(book.series.toLowerCase())) return "";
+  return `${book.series}${book.seriesIndex != null ? ` · ${book.seriesIndex}` : ""}`;
 }

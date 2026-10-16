@@ -31,7 +31,23 @@ test("Office: the Library, a book, Contents, the place saved", async ({ page }) 
 test("Home: Grid, Serials, a serial read, the place saved", async ({ page }) => {
   const dropbox = await standIn(page, true);
   await page.goto("./");
-  await expect(page.locator(".home .cell")).toHaveCount(1);
+  // The curated page (2026-10-16): Reading now is the book in progress; Katabasis, never opened, is
+  // recently added; All has the series as one cover.
+  await expect(page.locator(".cur-now .cur-title")).toHaveText("Emma");
+  await expect(page.locator(".cur .grid.shelf .cell")).toHaveCount(1);
+  await expect(page.locator(".cur .grid:not(.shelf) .cell")).toHaveCount(1);
+  await expect(page.locator(".hhead > .hcont")).toBeHidden();
+  // A search shows the plain grid of matches.
+  await page.fill(".hsearch input", "Kata");
+  await expect(page.locator(".cur")).toHaveCount(0);
+  await expect(page.locator(".home .grid .cell")).toHaveCount(1);
+  await page.fill(".hsearch input", "");
+  await expect(page.locator(".cur-now")).toBeVisible();
+  // Continue opens the book; the name goes back.
+  await page.click(".cur-go");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
+  await page.click(".hmark .lib");
+  await expect(page.locator(".cur-now")).toBeVisible();
   await page.click(".hmark .ser");
   await expect(page.locator(".scard")).toHaveCount(1);
   await page.click(`.scard[data-sid="${SERIAL}"]`);

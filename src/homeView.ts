@@ -3,8 +3,8 @@
 // actions (the book menu, Edit details, opening a book) are the page's own, passed in.
 
 import {
-  ago, BOOK_VIEWS, clickSort, column, DEFAULT_COLUMNS, DEFAULT_SERIAL_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
-  fitColumns, menuSort, moveColumn, nextInSeries, SERIAL_VIEWS, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
+  ago, BOOK_VIEWS, clickSort, column, curatedHome, DEFAULT_COLUMNS, DEFAULT_SERIAL_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
+  fitColumns, menuSort, moveColumn, nextInSeries, SERIAL_VIEWS, seriesLine, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
   viewFor, type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
 } from "./home";
 import {
@@ -17,7 +17,7 @@ import type { Chrome, Setup } from "./looks";
 import { NO_SELECTION, pruneSelection, toggleAll, toggleRow, type Selection } from "./select";
 import { styleFor } from "./styleTokens";
 import { parseNumber, type DetailsEdit } from "./details";
-import { bookState, furthestPlace, goLabel, seriesLine, statusAction } from "./panelState";
+import { bookState, furthestPlace, goLabel, seriesLine as seriesProgress, statusAction } from "./panelState";
 import { h, icon, ICONS, type Child } from "./ui";
 import { WORDMARK_BASELINE, wordmark } from "./wordmark";
 
@@ -214,9 +214,10 @@ export function createHome(ctx: HomeContext): {
     menuOpen = menu;
   };
   const tick = (on: boolean) => h("span", { class: "v" }, on ? icon(ICONS.check) : null);
-  const sortMenu = () => {
-    const now = sortMenuChoice(home().sort);
-    const choice = (by: SortBy, name: string) => h("button", { class: "r", role: "menuitemradio", "aria-checked": String(now === by), onclick: () => { closeMenu(); setHome({ sort: menuSort(by) }); } }, name, tick(now === by));
+  /** The sort menu, for Details' sort or the curated page's All ([which]). */
+  const sortMenu = (which: "sort" | "gridSort" = "sort") => {
+    const now = sortMenuChoice(home()[which]);
+    const choice = (by: SortBy, name: string) => h("button", { class: "r", role: "menuitemradio", "aria-checked": String(now === by), onclick: () => { closeMenu(); setHome({ [which]: menuSort(by) }); } }, name, tick(now === by));
     const hidden = ctx.showHidden();
     const group = ctx.setup().groupSeries;
     return h("div", { role: "menu" },
@@ -654,14 +655,20 @@ export function createHome(ctx: HomeContext): {
     main.style.setProperty("--f", String(textScale(z)));
     main.className = `hmain v-${view}`;
     // The status line: the count, the sort's name, Series grouped (not in Details).
-    const sortName = column(sort.key).sortName + (sort.reversed ? " ▴" : "");
+    // Grid without a search or Hidden is the curated page (2026-10-16): its All has its own sort.
+    const curated = view === "grid" && !query.trim() && !ctx.showHidden();
+    const listSort = curated ? hs.gridSort : sort;
+    const sortName = column(listSort.key).sortName + (listSort.reversed ? " ▴" : "");
     const shown = view === "details" ? detailsRows(all, sort, query, facts) : null;
     visibleIds = shown ? shown.map(b => b.id) : [];
     selected = pruneSelection(selected, visibleIds);
-    const items = view === "details" ? null : homeItems(all, sort, query, ctx.setup().groupSeries, facts);
+    const items = view === "details" ? null : homeItems(all, listSort, query, ctx.setup().groupSeries, facts);
     const n = shown ? shown.length : items!.reduce((k, i) => k + (i.kind === "book" ? 1 : i.books.length), 0);
     const what = ctx.showHidden() ? `${n} hidden` : query.trim() ? `${n} found` : `${n} books`;
     count.textContent = [what, sortName, view !== "details" && ctx.setup().groupSeries ? "Series grouped" : ""].filter(Boolean).join(" · ");
+    // On the curated page the count and sort head All instead.
+    count.style.visibility = curated ? "hidden" : "";
+    hideContinue = false;
     // The size: a small and a large cover, or A and A in Details.
     const covers = view !== "details";
     const shape = (w: number, ht: number) => `<svg width="20" height="20" viewBox="0 0 20 20"><rect x="${10 - w / 2}" y="${10 - ht / 2}" width="${w}" height="${ht}" rx="1.5" fill="currentColor"/></svg>`;
@@ -680,6 +687,9 @@ export function createHome(ctx: HomeContext): {
       if ((sort.key === "progress" || sort.key === "on") && shown.some(b => b.hasSyncFile && ctx.progress(b.id) == null)) {
         void Promise.all(shown.filter(b => b.hasSyncFile && ctx.progress(b.id) == null).map(b => ctx.load(b))).then(renderSoon);
       }
+    } else if (curated && items!.length) {
+      main.replaceChildren(...curatedPage(all, items!, `${count.textContent}`));
+      renderSelBar();
     } else {
       const box = h("div", { class: "grid" }, ...items!.map(gridItem));
       main.replaceChildren(items!.length ? box : empty());
@@ -693,6 +703,59 @@ export function createHome(ctx: HomeContext): {
     renderContinue();
     renderPanel();
   };
+  // --- The curated Grid page (WEB.md → Home; agreed from mockups 2026-10-16) ---
+
+  /** The bar's Continue steps aside while Reading now shows the same book. */
+  let hideContinue = false;
+  /** Reading now, Also reading, Recently added, then All (its count and sort in its heading). */
+  const curatedPage = (all: LibraryBook[], items: LibraryItem[], allLine: string): HTMLElement[] => {
+    const progressNow = (b: LibraryBook) => (b.hasSyncFile ? ctx.progress(b.id) : 0);
+    // Which books are in progress needs their sync files: the recently synced ones are read, once.
+    const unknown = all.filter(b => !b.hidden && b.hasSyncFile && ctx.progress(b.id) == null)
+      .sort((a, b) => (b.lastRead ?? "").localeCompare(a.lastRead ?? "")).slice(0, 40);
+    if (unknown.length) void Promise.all(unknown.map(b => ctx.load(b))).then(renderSoon);
+    const c = curatedHome(all, progressNow, Date.now());
+    const head = (title: string, extra: HTMLElement | string | null = null) =>
+      h("div", { class: "cur-head" }, h("h2", {}, title), typeof extra === "string" ? h("span", { class: "n" }, extra) : extra);
+    const bar = (p: number) => h("span", { class: "pl" }, h("i", { style: `width:${Math.round(p * 100)}%` }));
+    /** A cover with its title, author and a bar with the percentage (Also reading). */
+    const reading = (b: LibraryBook) => {
+      const cell = gridItem({ kind: "book", book: b });
+      cell.querySelector(".badge")?.remove();
+      const p = progressNow(b) ?? 0;
+      cell.append(h("span", { class: "cbar" }, bar(p), h("span", { class: "cp" }, pct(p))));
+      return cell;
+    };
+    const out: HTMLElement[] = [];
+    if (c.now) {
+      const f = c.now;
+      const p = progressNow(f) ?? 0;
+      const far = furthestPlace(ctx.places(f.id) ?? []);
+      const series = seriesLine(f);
+      hideContinue = true;
+      out.push(h("section", { class: "cur cur-top" },
+        h("div", { class: "cur-now" }, head("Reading now"),
+          h("div", { class: "cur-feat" },
+            h("button", { class: "cur-cover", "data-id": f.id, onclick: () => openBook(f), "aria-label": `${f.title}: details` }, cover(f, true)),
+            h("div", { class: "cur-info" },
+              h("button", { class: "cur-title", onclick: () => ctx.open(f) }, redTitle(f.title)),
+              h("div", { class: "cur-by" }, f.author ?? ""),
+              series ? h("div", { class: "cur-series" }, series) : null,
+              h("div", { class: "cur-bar" }, bar(p)),
+              h("div", { class: "cur-place" }, [pct(p), far?.chapter ?? ""].filter(Boolean).join(" · ")),
+              h("button", { class: "cur-go", onclick: () => ctx.open(f) }, h("span", { class: "play", "aria-hidden": "true" }, "▶"), "Continue")))),
+        c.also.length ? h("div", { class: "cur-also" }, head("Also reading"), h("div", { class: "cur-alsorow" }, ...c.also.map(reading))) : null));
+    }
+    if (c.added.length) {
+      out.push(h("section", { class: "cur" }, head("Recently added", String(c.added.length)),
+        h("div", { class: "grid shelf" }, ...c.added.map(b => gridItem({ kind: "book", book: b })))));
+    }
+    const sortButton = h("button", { class: "n sortby", "aria-haspopup": "menu" }, allLine);
+    sortButton.addEventListener("click", e => { e.stopPropagation(); if (menuOpen) closeMenu(); else openMenu(sortMenu("gridSort"), sortButton); });
+    out.push(h("section", { class: "cur" }, head("All", sortButton), h("div", { class: "grid" }, ...items.map(gridItem))));
+    return out;
+  };
+
   const empty = () => h("p", { class: "hempty" }, ctx.showHidden() ? "No hidden books." : ctx.books().length ? "No books match." : "No books in Dropbox's /Books/ yet.");
 
   // --- Continue: the book read last on any device ---
@@ -707,7 +770,7 @@ export function createHome(ctx: HomeContext): {
   );
   const renderContinue = () => {
     const last = lastReadBook(ctx.books().filter(b => !b.hidden));
-    cont.hidden = !last;
+    cont.hidden = !last || (hideContinue && !onSerials() && !reading);
     if (!last) return;
     const p = progressOf(last) ?? 0;
     cont.replaceChildren(...quietLine(last.title, [ctx.places(last.id)?.[0]?.chapter ?? "", p > 0 ? `${Math.round(p * 100)}%` : ""]));
@@ -837,7 +900,7 @@ export function createHome(ctx: HomeContext): {
       const name = ms[0]?.series ?? "";
       const next = nextInSeries(ms, id => ctx.progress(id));
       top.append(h("span", { class: "grow" }), closeButton);
-      const line = seriesLine(ms, next, id => ctx.progress(id));
+      const line = seriesProgress(ms, next, id => ctx.progress(id));
       // The first covers small and fanned, beside the name.
       const fan = h("div", { class: "scov" }, ...ms.slice(0, 3).reverse().map((m, i, arr) => h("div", { class: "cvb", style: `left:${(arr.length - 1 - i) * 14}px` }, cover(m, true))));
       const bookRows = ms.map(m => {
