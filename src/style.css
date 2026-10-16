@@ -608,3 +608,18 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
   .cur-info { min-width: 0; }
 }
 #app.light .cur-cover .cv { box-shadow: 0 14px 32px rgba(43,35,24,.22); }
+/* Reading now at two-thirds (the user, 2026-10-16: "HUGE"); Also reading follows through --fw. */
+.cur-top { --fw: clamp(120px, 11.6vw, 167px); }
+.cur-feat { gap: 26px; }
+.cur-cover .cv { box-shadow: 0 14px 34px rgba(0,0,0,.42); --f: .7; }
+#app.light .cur-cover .cv { box-shadow: 0 10px 24px rgba(43,35,24,.2); }
+.cur-info { min-width: 200px; max-width: 320px; gap: 4px; }
+.cur-title { font-size: clamp(22px, 1.8vw, 28px); }
+.cur-by { font-size: 15px; }
+.cur-bar { margin-top: 14px; }
+.cur-place { font-size: 13px; }
+.cur-go { margin-top: 12px; gap: 8px; }
+.cur-go .play { width: 28px; height: 28px; font-size: 10px; }
+.home .cur-alsorow .cell .t { font-size: 14px; }
+.home .cur-alsorow .cell .a { font-size: 12.5px; }
+@media (max-width: 700px) { .cur-top { --fw: 110px; } }
