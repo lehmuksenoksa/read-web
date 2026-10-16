@@ -752,8 +752,9 @@ export function createHome(ctx: HomeContext): {
               h("div", { class: "cur-bar" }, bar(p)),
               h("div", { class: "cur-place" }, [pct(p), far?.chapter ?? ""].filter(Boolean).join(" · ")),
               h("button", { class: "cur-go", onclick: () => ctx.open(f) }, h("span", { class: "play", "aria-hidden": "true" }, "▶"), "Continue")))),
-        beside ? h("div", { class: "cur-also" }, head(beside.title, beside.kind === "added" ? String(beside.books.length) : null),
-          h("div", { class: `cur-alsorow ${beside.kind}` }, ...beside.books.map(b => (beside.kind === "also" ? reading(b) : added(b))))) : null));
+        // The books beside it sit in the grid's own columns, as the covers below do (2026-10-16).
+        beside ? h("div", { class: `cur-also ${beside.kind}` }, head(beside.title, beside.kind === "added" ? String(beside.books.length) : null),
+          ...beside.books.map(b => (beside.kind === "also" ? reading(b) : added(b)))) : null));
     }
     // Recently added gets its own row unless it already sits beside Reading now.
     if (c.added.length && beside?.kind !== "added") {

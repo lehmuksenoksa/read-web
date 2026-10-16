@@ -638,3 +638,31 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
 .cur-top { --fw: calc(180px * max(var(--z), .875)); }
 .cur-alsorow { flex-wrap: wrap; align-content: flex-start; row-gap: 60px; }
 @media (max-width: 1100px) { .cur-alsorow { height: calc(var(--fw) * 1.5); } }
+
+/* The top section on the page's grid (2026-10-16): the same columns as the covers below, so the books beside
+   Reading now line up with the next row. Reading now spans the first three columns; its cover is one column
+   plus a little, so it ends where the books beside it do (their cover, title, author and bar). The books
+   beside it are a subgrid of the remaining columns; one that doesn't fit waits on a hidden second row. */
+.cur-top { --g: calc(26px * var(--z)); display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(150px * var(--z)), 1fr)); column-gap: var(--g); row-gap: 0; align-items: start; }
+.cur-now { grid-column: 1 / span 3; min-width: 0; container-type: inline-size; }
+.cur-feat { gap: var(--g); }
+.cur-cover { width: min(calc((100cqw - 2 * var(--g)) / 3 + 46px), calc(240px * var(--z))); }
+.cur-also { grid-column: 4 / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: auto auto; grid-auto-rows: 0; overflow: hidden; min-width: 0; }
+.cur-also > .cur-head { grid-column: 1 / -1; }
+.home .cur-also .cell { width: auto; }
+.home .cur-also .cell .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home .cur-also .cell .cadded { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+@media (max-width: 1100px) {
+  .cur-now, .cur-also { grid-column: 1 / -1; }
+  .cur-also { margin-top: 40px; }
+}
+@media (max-width: 1100px) { .cur-cover { width: calc(150px * var(--z) + 46px); } }
+/* Titles in the row beside Reading now wrap as they do in All (the user, 2026-10-16); the covers keep the shared top edge. */
+.home .cur-also .cell .t { white-space: normal; overflow: visible; text-overflow: clip; }
+.home .cur-also .cell .t, .home .cur-also .cell .a { font-size: calc(16px * var(--f)); }
+.home .cur-also .cell .a { font-size: calc(14px * var(--f)); }
+/* The bars and "Added …" lines line up across the row (the user, 2026-10-16): each book is as tall as the
+   tallest caption in the row, and the line sits at its foot. */
+.cur-also { align-items: stretch; }
+.home .cur-also .cell { align-self: stretch; }
+.home .cur-also .cell .cbar { margin-top: auto; padding-top: 8px; }
