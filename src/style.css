@@ -88,24 +88,6 @@ button.r:hover { background: var(--sel); }
 .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--raised); }
 .switch.on { background: var(--ink); }
 .switch.on::after { left: 19px; }
-.colour { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; color: var(--ink2); font-variant-numeric: tabular-nums; cursor: pointer; }
-.colour .dot { width: 24px; height: 24px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tx) 25%, transparent); position: relative; overflow: hidden; }
-.colour input { position: absolute; inset: -8px; width: 40px; height: 40px; opacity: 0; cursor: pointer; }
-.lookhead { display: flex; align-items: center; margin: 12px 0 8px; }
-.lookhead span { color: var(--ink3); font-size: 12px; margin-right: auto; }
-.lookhead button { font-size: 13px; }
-.cards { display: flex; flex-wrap: wrap; gap: 8px; }
-.card { width: 72px; height: 92px; border-radius: 12px; border: 1px solid var(--rule); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 9px 6px; text-align: center; }
-.card .s { font-family: Literata, Georgia, serif; font-size: 24px; }
-.card .n { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card.inuse { border: 2px solid var(--ink); }
-.card:hover:not(.inuse) { border-color: var(--line); }
-.panel.lookmenu { position: fixed; top: 0; left: 0; width: 220px; padding: 6px; z-index: 20; }
-.lookmenu .lab { margin: 6px 10px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lookmenu input { width: calc(100% - 8px); margin: 4px; font: inherit; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
-.lookmenu input:focus { outline: none; border-color: var(--ink3); }
-.lookmenu .btns { display: flex; justify-content: flex-end; padding: 4px; }
-.lookmenu .btn { padding: 5px 14px; }
 .toc .item { padding: 8px 12px; border-radius: 6px; color: var(--ink2); display: flex; gap: 12px; width: 100%; }
 .toc .item:hover { background: var(--sel); }
 .toc .item.read { color: var(--ink3); }

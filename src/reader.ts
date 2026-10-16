@@ -10,9 +10,9 @@ import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
 import { CATALOGUE } from "./fonts";
 import {
-  BASE_FONT_PX, BUILT_IN_FONTS, canRename, charWidth, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, lookNamed, pageBackground, pageLayout, pageText,
-  preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, SANS_FONTS,
-  saveCustomAs, shown, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightName, type Look, type Setup, type TextPosition, type Steps,
+  BASE_FONT_PX, BUILT_IN_FONTS, charWidth, edit, pageLayout,
+  preferences, removeFont, restoreFont, SANS_FONTS,
+  shown, step, stepOptional, STEPS, stepWeight, weightName, type Look, type Setup, type TextPosition, type Steps,
 } from "./looks";
 import { pageTop, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
@@ -29,7 +29,7 @@ const GO_TIMEOUT_MS = 8000;
 /** The pages laid out again are shown this long after the last change: a window being resized, or a change in Aa. */
 const SETTLE_MS = { resize: 120, aa: 20 };
 
-type AaTab = "Text" | "Layout" | "Looks";
+type AaTab = "Text" | "Layout";
 
 export interface ReaderProps {
   dropbox: Dropbox;
@@ -94,10 +94,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   props.tools.replaceChildren(contentsButton, aaButton);
   const contents = h("div", { class: "toc", hidden: true });
   const aa = h("div", { class: "panel aapanel", hidden: true });
-  const lookMenu = h("div", { class: "panel menu lookmenu", hidden: true });
   root.replaceChildren(
     h("div", { class: "stage" }, left, h("div", { class: "pagebox" }, page), right),
-    lookMenu,
     prompt,
     status,
   );
@@ -242,7 +240,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (onward) turn(onward === "next");
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") return lookMenu.hidden ? closePanels() : void (lookMenu.hidden = true);
+    if (e.key === "Escape") return closePanels();
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
@@ -351,7 +349,6 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
 
   const closePanels = () => {
     const was = !contents.hidden || !aa.hidden;
-    lookMenu.hidden = true;
     contents.hidden = true;
     aa.hidden = true;
     contentsButton.setAttribute("aria-expanded", "false");
@@ -361,7 +358,6 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   /** The rail's icons: one opens its panel beside the page; the open one's closes it. One at a time. */
   const toggle = (panel: HTMLElement, button: HTMLElement, fill: () => void) => {
     const open = panel.hidden;
-    lookMenu.hidden = true;
     for (const [p, b] of [[contents, contentsButton], [aa, aaButton]] as const) {
       p.hidden = true;
       b.setAttribute("aria-expanded", "false");
@@ -379,9 +375,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const onOutside = (e: MouseEvent) => {
     // The click's path as it was: a panel redrawn by the click no longer holds what was clicked.
     const path = e.composedPath();
-    if (!path.includes(lookMenu)) lookMenu.hidden = true;
     if (!overlay()) return;
-    if ([lookMenu, contents, aa, contentsButton, aaButton, prompt].some(el => path.includes(el))) return;
+    if ([contents, aa, contentsButton, aaButton, prompt].some(el => path.includes(el))) return;
     closePanels();
   };
   document.addEventListener("click", onOutside);
@@ -426,7 +421,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     nav.go(new Locator({ href: entry.href, type: entry.type, locations: new LocatorLocations({ progression: 0, fragments: fragment ? [fragment] : [] }) }), false, () => undefined);
   };
 
-  // --- Aa: Text, Layout, Looks (the page's colours are the Interface's, 2026-10-15) ---
+  // --- Aa: Text and Layout (the page's colours are the Interface's, 2026-10-15; no Looks on the web, 2026-10-16) ---
 
   /** The look as the page shows it: in the style's Light or Dark colours. */
   const seen = () => appearance.page(shown(setup));
@@ -480,7 +475,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
 
   const fillAa = async () => {
     const look = shown(setup);
-    const tabs = h("div", { class: "tabs" }, ...(["Text", "Layout", "Looks"] as AaTab[]).map(tab =>
+    const tabs = h("div", { class: "tabs" }, ...(["Text", "Layout"] as AaTab[]).map(tab =>
       h("button", { class: tab === aaTab ? "cur" : "", onclick: () => { aaTab = tab; aa.replaceChildren(); void fillAa(); } }, tab)));
     let body: HTMLElement;
     switch (aaTab) {
@@ -519,25 +514,6 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
           stepped("Letter spacing", "letterSpacing", v => v.toFixed(2)),
           stepped("Word spacing", "wordSpacing", v => v.toFixed(2)));
         break;
-      case "Looks": {
-        const cards = [...setup.looks, ...(setup.custom ? [setup.custom] : [])];
-        body = h("div", { class: "sec" },
-          h("div", { class: "lookhead" }, h("span", {}, "Click to use · right-click for options"),
-            setup.custom ? h("button", { class: "link strong", onclick: (e: Event) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); customMenu(r.right, r.bottom + 4, true); } }, "Save") : null),
-          h("div", { class: "cards" }, ...cards.map(l => h("button", {
-            class: `card${l.id === setup.lookId ? " inuse" : ""}`,
-            style: `background:${hex(pageBackground(appearance.page(l)))};color:${hex(pageText(appearance.page(l)))}`,
-            "aria-pressed": String(l.id === setup.lookId),
-            onclick: () => { hideMenu(); appearance.update(useLook(setup, l.id)); },
-            oncontextmenu: (e: Event) => {
-              e.preventDefault();
-              const at = e as MouseEvent;
-              if (l.id === CUSTOM_ID) customMenu(at.clientX, at.clientY);
-              else lookOptions(l.id, at.clientX, at.clientY);
-            },
-          }, h("span", { class: "s" }, "Aa"), h("span", { class: "n" }, l.name)))));
-        break;
-      }
     }
     aa.replaceChildren(tabs, body);
   };
@@ -565,74 +541,6 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     appearance.update(done.setup);
     void appearance.forget(family);
     tell(`Removed ${family}`, { label: "Undo", run: () => appearance.update(restoreFont(setup, family, done.switched)) });
-  };
-
-  // A look's options (right-click), and Custom's (right-click or Save): a small menu by the pointer.
-
-  const hideMenu = () => { lookMenu.hidden = true; };
-  const showMenu = (x: number, y: number, alignRight: boolean, ...children: (HTMLElement | null)[]) => {
-    lookMenu.replaceChildren(...children.filter((c): c is HTMLElement => c != null));
-    lookMenu.hidden = false;
-    const box = lookMenu.getBoundingClientRect();
-    const left = alignRight ? x - box.width : x;
-    lookMenu.style.left = `${Math.max(8, Math.min(left, window.innerWidth - box.width - 8))}px`;
-    lookMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - box.height - 8))}px`;
-  };
-  const item = (label: string, run: () => void) => h("button", { class: "r", onclick: run }, label);
-  /** A name to type: [label] on the button, or what [buttonLabel] says for the name typed; null when it can't be used. */
-  const nameForm = (title: string, name: string, buttonLabel: (name: string) => string | null, done: (name: string) => void, x: number, y: number) => {
-    const input = h("input", { value: name, "aria-label": title, spellcheck: "false" });
-    const button = h("button", { class: "btn primary" }, "");
-    const check = () => {
-      const label = buttonLabel(input.value);
-      button.textContent = label ?? buttonLabel(name) ?? "Save";
-      button.disabled = label == null;
-    };
-    const submit = () => { if (!button.disabled) { hideMenu(); done(input.value.trim()); } };
-    input.addEventListener("input", check);
-    input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); if (e.key === "Escape") { e.stopPropagation(); hideMenu(); } });
-    button.addEventListener("click", submit);
-    check();
-    showMenu(x, y, false, lab(title), input, h("div", { class: "btns" }, button));
-    input.focus();
-    input.select();
-  };
-  const lookOptions = (id: string, x: number, y: number) => {
-    const look = setup.looks.find(l => l.id === id);
-    if (!look) return;
-    showMenu(x, y, false,
-      lab(look.name),
-      setup.custom ? item("Replace with Custom", () => { hideMenu(); appearance.update(replaceWithCustom(setup, id)); }) : null,
-      item("Rename", () => {
-        const at = lookMenu.getBoundingClientRect();
-        nameForm("Rename", look.name, name => canRename(setup, id, name) ? "Rename" : null, name => appearance.update(renameLook(setup, id, name)), at.left, at.top);
-      }),
-      cantRemove(setup, id) ? null : item("Remove", () => { hideMenu(); remove(id); }));
-  };
-  const customMenu = (x: number, y: number, alignRight = false) => {
-    if (!setup.custom) return;
-    showMenu(x, y, alignRight,
-      lab(CUSTOM_NAME),
-      item("Save as…", () => {
-        const at = lookMenu.getBoundingClientRect();
-        nameForm("Save as", suggestedName(setup), name => !canSaveAs(name) ? null : lookNamed(setup, name) ? "Replace" : "Save", name => appearance.update(saveCustomAs(setup, name)), at.left, at.top);
-      }),
-      item("Remove", () => {
-        hideMenu();
-        const done = removeCustom(setup);
-        if (!done) return;
-        appearance.update(done.setup);
-        tell("Removed Custom", { label: "Undo", run: () => appearance.update(restoreCustom(setup, done.removed)) });
-      }));
-  };
-
-  const remove = (lookId: string) => {
-    const why = cantRemove(setup, lookId);
-    if (why) return tell(why);
-    const done = removeLook(setup, lookId);
-    if (!done) return;
-    appearance.update(done.setup);
-    tell(`Removed “${done.removed.name}”`, { label: "Undo", run: () => appearance.update(restoreLook(setup, done.removed, done.index)) });
   };
 
   // --- The book's pages ---
