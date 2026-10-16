@@ -89,6 +89,8 @@ export interface HomeSetup {
   /** The size step per view: 0 to 4, 2 the middle. */
   sizes: Record<BookView, number>;
   columns: { order: ColumnKey[]; hidden: ColumnKey[] };
+  /** 2: the steps are on the scale of 2026-10-16 (SIZES); a file without it has its steps moved up by two once. */
+  sizeScale: 2;
 }
 
 export const DEFAULT_COLUMNS: HomeSetup["columns"] = { order: KEYS, hidden: ["cover", "added", "size"] };
@@ -101,6 +103,7 @@ export const DEFAULT_HOME: HomeSetup = {
   gridSort: { key: "title", reversed: false },
   sizes: { grid: 2, details: 2 },
   columns: DEFAULT_COLUMNS,
+  sizeScale: 2,
 };
 
 /** The setup file's `home`, read leniently: anything missing or unknown is the default. */
@@ -113,10 +116,11 @@ export function decodeHome(raw: unknown): HomeSetup {
   };
   const sort = sortOf(r.sort, DEFAULT_HOME.sort);
   const gridSort = sortOf(r.gridSort, DEFAULT_HOME.gridSort);
+  const oldScale = (r as { sizeScale?: unknown }).sizeScale !== 2;
   const sizesRaw = (r.sizes ?? {}) as Record<string, unknown>;
-  const sizes = Object.fromEntries(BOOK_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v])])) as Record<BookView, number>;
+  const sizes = Object.fromEntries(BOOK_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v], oldScale)])) as Record<BookView, number>;
   const columns = decodeColumns(r.columns, KEYS, DEFAULT_COLUMNS);
-  return { tab: r.tab === "serials" ? "serials" : "books", serials: decodeSerials(r.serials), view, sort, gridSort, sizes, columns };
+  return { tab: r.tab === "serials" ? "serials" : "books", serials: decodeSerials(r.serials, oldScale), view, sort, gridSort, sizes, columns, sizeScale: 2 };
 }
 
 function decodeColumns<K extends string>(raw: unknown, keys: K[], fallback: { order: K[]; hidden: K[] }): { order: K[]; hidden: K[] } {
@@ -129,7 +133,7 @@ function decodeColumns<K extends string>(raw: unknown, keys: K[], fallback: { or
   };
 }
 
-function decodeSerials(raw: unknown): SerialsSetup {
+function decodeSerials(raw: unknown, oldScale: boolean): SerialsSetup {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof SerialsSetup, unknown>>;
   const view = SERIAL_VIEWS.some(v => v.view === r.view) ? (r.view as SerialView) : DEFAULT_SERIALS.view;
   const sortRaw = (r.sort ?? {}) as { key?: unknown; reversed?: unknown };
@@ -137,17 +141,22 @@ function decodeSerials(raw: unknown): SerialsSetup {
     ? { key: sortRaw.key as SerialColumnKey, reversed: sortRaw.reversed === true }
     : DEFAULT_SERIALS.sort;
   const sizesRaw = (r.sizes ?? {}) as Record<string, unknown>;
-  const sizes = Object.fromEntries(SERIAL_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v])])) as Record<SerialView, number>;
+  const sizes = Object.fromEntries(SERIAL_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v], oldScale)])) as Record<SerialView, number>;
   return { view, sort, sizes, columns: decodeColumns(r.columns, SERIAL_KEYS, DEFAULT_SERIAL_COLUMNS) };
 }
 
 // --- Size ---
 
-/** The five sizes as a share of the middle one: covers, Details' rows. */
-export const SIZES = [0.75, 0.875, 1, 1.15, 1.3];
+/**
+ * The five sizes of covers and Details' rows (2026-10-16, the user: the useful ones were the smallest to the middle):
+ * the middle is the old smallest, the largest the old middle.
+ */
+export const SIZES = [0.6, 0.675, 0.75, 0.875, 1];
 
-export function sizeStep(value: unknown): number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value < SIZES.length ? value : 2;
+/** A saved step, or the middle. A step saved on the old scale (before `sizeScale: 2`) moves up by two, so the size stays. */
+export function sizeStep(value: unknown, oldScale = false): number {
+  if (!(typeof value === "number" && Number.isInteger(value) && value >= 0 && value < SIZES.length)) return 2;
+  return oldScale ? Math.min(value + 2, SIZES.length - 1) : value;
 }
 
 /** Text grows with the covers, by less. */

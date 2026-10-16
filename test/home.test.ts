@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ago, besideReadingNow, clickSort, curatedHome, decodeHome, RECENT_DAYS, seriesLine, fitColumns, DEFAULT_COLUMNS, DEFAULT_HOME, detailsRows, homeItems, megabytes, menuSort, moveColumn,
-  nextInSeries, shownColumns, sizeStep, sortMenuChoice, sortRows, textScale, titleWord, toggleColumn, type Facts,
+  nextInSeries, shownColumns, sizeStep, SIZES, sortMenuChoice, sortRows, textScale, titleWord, toggleColumn, type Facts,
 } from "../src/home";
 import type { LibraryBook } from "../src/library";
 import { placesOf } from "../src/library";
@@ -22,7 +22,7 @@ describe("Home's setup", () => {
 
   it("keeps what it knows and drops what it doesn't; Title is never hidden; new columns join at the end", () => {
     const home = decodeHome({
-      view: "details", sort: { key: "size", reversed: true }, sizes: { grid: 4, details: 0 },
+      view: "details", sort: { key: "size", reversed: true }, sizes: { grid: 4, details: 0 }, sizeScale: 2,
       columns: { order: ["author", "title", "nope"], hidden: ["title", "series"] },
     });
     expect(home.view).toBe("details");
@@ -161,6 +161,21 @@ describe("Words and sizes", () => {
     expect(sizeStep(5)).toBe(2);
     expect(textScale(1.3)).toBeCloseTo(1.21);
     expect(textScale(0.75)).toBeCloseTo(0.825);
+  });
+
+  it("the middle is the old smallest (2026-10-16); steps saved on the old scale move up by two, once", () => {
+    expect(SIZES[2]).toBe(0.75);
+    expect(SIZES[0]).toBe(0.6);
+    expect(SIZES[4]).toBe(1);
+    // The old file: the smallest Covers, the second Details, the largest Serials' Expanded.
+    const old = decodeHome({ sizes: { grid: 0, details: 1 }, serials: { sizes: { expanded: 4 } } });
+    expect(old.sizes).toEqual({ grid: 2, details: 3 });
+    expect(old.serials.sizes).toEqual({ compact: 2, expanded: 4, details: 2 });
+    expect(old.sizeScale).toBe(2);
+    // Saved again, it reads the same: no second move.
+    expect(decodeHome(JSON.parse(JSON.stringify(old)))).toEqual(old);
+    // Nothing saved: the middle.
+    expect(decodeHome({}).sizes).toEqual({ grid: 2, details: 2 });
   });
 });
 
