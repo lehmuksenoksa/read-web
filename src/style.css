@@ -500,13 +500,11 @@ button.r:hover { background: var(--sel); }
 /* Office's Continue: a small pill in the middle of the bar, on the Library and Serials pages (C1, 2026-10-16). */
 .hcont.pill { left: 50%; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: auto; max-width: min(460px, calc(100% - 2 * 380px)); border: 1px solid var(--line); border-radius: 18px; box-shadow: none; background: var(--raised); padding: 6px 16px; gap: 8px; align-items: baseline; font-size: 13px; z-index: 2; }
 .app.reader .hcont.pill { display: none; }
-/* Home: no edges on the black (2026-10-16): the pill, search and the panels are a lighter black. */
-#app.homeon .hcont.pill { border-color: transparent; }
+/* Home on the black (2026-10-16): the pill, search and the panels are a lighter black with a faint edge. */
 #app.homeon .hcont.pill b { font: 600 15px "Home Literata", Georgia, serif; }
 #app.homeon .hcont.pill:hover { background: var(--well); }
-#app.homeon .hsearch { border-color: transparent; background: var(--raised); }
-#app.homeon .hsearch:focus-within { border-color: var(--line); }
-#app.homeon .hpanel, #app.homeon .rpanel { top: 10px; right: 14px; bottom: 14px; width: 400px; max-width: calc(100% - 28px); border: 0; border-radius: 18px; box-shadow: none; background: var(--raised); }
+#app.homeon .hsearch { background: var(--raised); }
+#app.homeon .hpanel, #app.homeon .rpanel { top: 10px; right: 14px; bottom: 14px; width: 400px; max-width: calc(100% - 28px); border: 1px solid var(--rule); border-radius: 18px; box-shadow: none; background: var(--raised); }
 #app.homeon .hpanel { padding: 20px 26px 32px; }
 /* The Library makes room for the card: the status line and the books stop at its edge. */
 @media (min-width: 901px) {
