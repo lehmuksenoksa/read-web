@@ -416,7 +416,7 @@ button.r:hover { background: var(--sel); }
 /* Office's name: the words, the side shown in the ink. */
 .hmark .txt { font: 600 19px Figtree, system-ui, sans-serif; color: var(--ink3); padding: 4px 0; }
 /* A small upright ampersand between, close (2026-10-16). */
-.hmark .amp { font: 400 14px Figtree, system-ui, sans-serif; color: var(--ink3); margin: 0 5px; align-self: center; }
+.hmark .amp { font: 400 11px Figtree, system-ui, sans-serif; color: var(--ink3); margin: 0 4px; align-self: center; }
 .hmark .txt[aria-pressed="true"] { color: var(--ink); }
 .hmark .txt:hover { color: var(--ink); }
 .app.reader .hmark button { cursor: pointer; }
@@ -428,6 +428,8 @@ button.r:hover { background: var(--sel); }
 .htools .icon.tool { width: 40px; height: 40px; border-radius: 50%; color: var(--ink); }
 .htools .icon.tool:hover { background: var(--raised); }
 .htools .icon.tool[aria-expanded="true"] { background: var(--well, var(--sel)); }
+/* Office's Aa in its sans. */
+.office .icon.aa { font: 600 16px Figtree, system-ui, sans-serif; letter-spacing: 0; }
 /* The panel opens over the page, which stays where it is (the user's pick, 2026-10-15). */
 /* Their panel at the right, over the page, like the Library's book panel (2026-10-16). */
 .rpanel { display: none; position: absolute; right: 0; top: 0; bottom: 0; z-index: 7; width: 420px; max-width: 100%; overflow-y: auto; background: var(--sheet, var(--raised)); border-left: 1px solid var(--rule); box-shadow: var(--shadow); }
