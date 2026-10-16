@@ -416,7 +416,7 @@ button.r:hover { background: var(--sel); }
 /* Office's name: the words, the side shown in the ink. */
 .hmark .txt { font: 600 19px Figtree, system-ui, sans-serif; color: var(--ink3); padding: 4px 0; }
 /* A small upright ampersand between, close (2026-10-16). */
-.hmark .amp { font: 400 11px Figtree, system-ui, sans-serif; color: var(--ink3); margin: 0 4px; align-self: center; }
+.hmark .amp { font: 700 11px Figtree, system-ui, sans-serif; color: var(--ink3); margin: 0 4px; align-self: center; }
 .hmark .txt[aria-pressed="true"] { color: var(--ink); }
 .hmark .txt:hover { color: var(--ink); }
 .app.reader .hmark button { cursor: pointer; }
@@ -483,8 +483,9 @@ button.r:hover { background: var(--sel); }
 .office .hpanel .cvb, .office .hpanel .scov, .office .hpanel .cv0 { display: none; }
 .office .hpanel h1 { font: 600 24px/1.25 Figtree, system-ui, sans-serif; margin-top: 8px; }
 /* Office's bar: a hairline under it, on every screen; the panels hang from it (2026-10-16). */
-.office .hhead { border-bottom: 1px solid var(--rule); }
+.office .hhead { border-bottom: 1px solid var(--rule); height: 56px; padding: 0 16px 0 36px; }
 .office .hstatus { padding-top: 14px; }
+.office .hsearch { padding: 6px 14px; }
 /* Office's panels as a list of facts (P2, 2026-10-16): the title and its one button, label and value rows, quiet words at the foot. */
 .office .hpanel { width: 380px; box-shadow: none; border-left: 1px solid var(--rule); padding: 14px 26px 32px; font-size: 14px; }
 .office .hpanel .sec { margin-top: 22px; }
