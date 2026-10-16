@@ -111,12 +111,12 @@ async function showApp() {
   appearance ??= new Appearance(api);
   const look = appearance;
 
-  // The bar on every screen (Home's), and under it the Library or the reader: the rail (Contents
-  // and Aa), the panel they open, and the page (WEB.md → One app, two styles, 2026-10-15).
-  const tools = h("nav", { class: "rail", "aria-label": "Reading" });
+  // The bar on every screen (Home's), and under it the Library or the reader: Contents and Aa beside
+  // ⚙, the panel they open at the right, and the page (WEB.md → One app, two styles).
+  const tools = h("span", { class: "htools", role: "group", "aria-label": "Reading" });
   const panelHost = h("aside", { class: "rpanel" });
   const pane = h("section", { class: "main" });
-  const readerArea = h("div", { class: "readerarea" }, tools, panelHost, pane);
+  const readerArea = h("div", { class: "readerarea" }, panelHost, pane);
   /** Dropbox out of reach: ⚙ says so. */
   let offline = false;
 
@@ -711,6 +711,8 @@ async function showApp() {
     void keepBook(got, bytes);
     return { kind: "added", id: got };
   };
+  // Contents and Aa beside ⚙ while reading (2026-10-16).
+  home.gear.before(tools);
   root.replaceChildren(home.bar, home.el, readerArea, bookMenu, toast);
   layout();
   if (screen === "library") home.render();

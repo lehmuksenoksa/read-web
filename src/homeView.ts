@@ -116,7 +116,7 @@ export interface ReadingTitle {
 }
 
 export function createHome(ctx: HomeContext): {
-  el: HTMLElement; bar: HTMLElement; render: () => void; isOpen: () => boolean; closePanel: () => void;
+  el: HTMLElement; bar: HTMLElement; gear: HTMLElement; render: () => void; isOpen: () => boolean; closePanel: () => void;
   setReading: (title: ReadingTitle | null) => void;
 } {
   let query = "";
@@ -135,7 +135,7 @@ export function createHome(ctx: HomeContext): {
   const markEl = h("div", { class: "hmark", "aria-label": "Library & Serials" });
   const renderMark = (books: boolean) => {
     if (quiet()) {
-      markEl.innerHTML = `<button class="lib txt" aria-pressed="${books}">Library</button><button class="ser txt" aria-pressed="${!books}">Serials</button>`;
+      markEl.innerHTML = `<button class="lib txt" aria-pressed="${books}">Library</button><span class="amp">&amp;</span><button class="ser txt" aria-pressed="${!books}">Serials</button>`;
       return;
     }
     const m = wordmark(books, 40);
@@ -520,7 +520,12 @@ export function createHome(ctx: HomeContext): {
     closeMenu();
     renderMark(reading ? reading.side === "books" : !onSerials());
     addButton.textContent = quiet() ? "Add books" : "+ Add books";
+    // Serials can't be added here: the phones subscribe (2026-10-16).
+    addButton.style.display = onSerials() ? "none" : "";
     cont.classList.toggle("quiet", quiet());
+    // Office's Continue is a small pill in the middle of the bar (C1, 2026-10-16); Home's stays at the foot.
+    if (quiet() && cont.parentElement !== header) header.append(cont);
+    else if (!quiet() && cont.parentElement !== el) el.insertBefore(cont, panel);
     if (onSerials()) return renderSerials(columnsOpen);
     count.classList.remove("plain");
     const hs = home();
@@ -576,7 +581,7 @@ export function createHome(ctx: HomeContext): {
   const quietLine = (title: string, rest: string[]) => [
     h("span", { class: "k" }, "Continue"), h("b", {}, title),
     h("span", { class: "k" }, rest.filter(Boolean).map(t => `· ${t}`).join(" ")),
-    h("span", { class: "go" }, "Read"),
+    h("span", { class: "go", "aria-hidden": "true" }, "›"),
   ];
   const renderContinue = () => {
     const last = lastReadBook(ctx.books().filter(b => !b.hidden));
@@ -874,13 +879,16 @@ export function createHome(ctx: HomeContext): {
       titlePlace.textContent = title.place;
       // Over the page, but clear of the name and ⚙ when the page is wider than the gap between them.
       const bar = header.getBoundingClientRect();
+      // The right end: Contents and Aa beside ⚙ while reading, else ⚙.
+      const tools = gear.previousElementSibling?.getBoundingClientRect();
+      const rightEdge = tools && tools.width > 0 ? tools.left : gear.getBoundingClientRect().left;
       const from = Math.max(title.left, markEl.getBoundingClientRect().right + 24) - bar.left;
-      const to = Math.min(title.left + title.width, gear.getBoundingClientRect().left - 16) - bar.left;
+      const to = Math.min(title.left + title.width, rightEdge - 16) - bar.left;
       titleEl.style.left = `${Math.round(from)}px`;
       titleEl.style.width = `${Math.max(0, Math.round(to - from))}px`;
     }
   };
 
-  return { el, bar: header, render, isOpen: () => panelFor != null, closePanel, setReading };
+  return { el, bar: header, gear, render, isOpen: () => panelFor != null, closePanel, setReading };
 }
 
