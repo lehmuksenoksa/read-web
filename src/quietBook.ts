@@ -13,7 +13,9 @@ h1, h2, h3, h4, h5, h6 { font-size: 1em !important; font-weight: 600 !important;
 img, svg, picture, video, image { display: none !important; }
 br + br { display: none !important; }
 p:empty, div:empty { display: none !important; }
-section, article, body > div, :is(section, article, body > div) > :first-child { margin-top: 0 !important; margin-bottom: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; }
+[data-read-break] { display: block !important; text-align: center !important; text-indent: 0 !important; margin: 1em 0 !important; }
+[data-read-break]::before { content: "* * *"; }
+section, article, body > div, :is(section, article, body > div) > :first-child { margin-top: 0 !important; padding-top: 0 !important; }
 `;
 
 /** A character that shows: anything but spaces, no-break spaces and zero-width characters. */
@@ -41,9 +43,11 @@ export const QUIET_BOOK_HIDE = `(function () {
 /**
  * Last thing in each chapter's page (every one Readium loads, those kept ready beside it too), once
  * the book's styles have loaded: the page as it comes out, whatever the book calls things, made
- * quiet (2026-10-16). Blank paragraphs and blocks go (a divider stays: a scene break); anything
+ * quiet (2026-10-16). Blank paragraphs and blocks go (a divider stays: a scene break; a picture
+ * between paragraphs, often an ornament, shows as "* * *"); anything
  * larger than the text is the text's size; floated letters go back into the line; more than about
- * two lines of space above or below a block becomes one; a deep indent on a short line (a title)
+ * two lines of space above or below a block becomes one, and a block kept taller than that by a
+ * minimum height loses it; a deep indent on a short line (a title)
  * goes, but not in quotes and lists. Then the page is shown.
  */
 export const QUIET_BOOK_SCRIPT = `(function () {
@@ -52,8 +56,14 @@ export const QUIET_BOOK_SCRIPT = `(function () {
   var set = function (el, prop, value) { el.style.setProperty(prop, value, "important"); };
   try {
     var rem = px(getComputedStyle(document.documentElement).fontSize) || 16;
+    // A picture between paragraphs is a scene break (an ornament) or an illustration: "* * *" marks it.
+    var texts = [].filter.call(document.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6"), function (e) { return visible.test(e.textContent || ""); });
+    var first = texts[0], last = texts[texts.length - 1];
+    var between = function (el) { return first && last && (first.compareDocumentPosition(el) & 4) && (el.compareDocumentPosition(last) & 4); };
     document.querySelectorAll("p, div").forEach(function (el) {
-      if (!visible.test(el.textContent || "") && !el.querySelector("hr")) set(el, "display", "none");
+      if (visible.test(el.textContent || "") || el.querySelector("hr")) return;
+      if (el.querySelector("img, svg, image") && between(el) && !el.parentElement.closest("[data-read-break]")) el.setAttribute("data-read-break", "");
+      else if (!el.closest("[data-read-break]")) set(el, "display", "none");
     });
     var all = document.body ? document.body.querySelectorAll("*") : [];
     for (var i = 0; i < all.length; i++) {
@@ -67,7 +77,13 @@ export const QUIET_BOOK_SCRIPT = `(function () {
       ["margin-top", "margin-bottom", "padding-top", "padding-bottom"].forEach(function (p) {
         if (px(cs.getPropertyValue(p)) > rem * 2.25) set(el, p, "1em");
       });
+      // A title's box kept tall by the book (Mage Tank 5: min-height 12em) gives a gap however small the title is.
+      if (px(cs.minHeight) > rem * 2.25) set(el, "min-height", "0");
       var short = (el.textContent || "").trim().length < 80;
+      // A title, or the box around one, starts at the text's edge (Mage Tank 5: margin 6%).
+      if (short && (/^h[1-6]$/i.test(el.localName) || el.querySelector("h1, h2, h3, h4, h5, h6"))) {
+        ["margin-left", "margin-right", "padding-left", "padding-right", "text-indent"].forEach(function (p) { set(el, p, "0"); });
+      }
       if (short && !el.closest("blockquote, ul, ol, dl, table")) {
         if (px(cs.marginLeft) + px(cs.paddingLeft) >= rem * 2.5) { set(el, "margin-left", "0"); set(el, "padding-left", "0"); }
         if (px(cs.textIndent) > rem * 3.25) set(el, "text-indent", "0");
