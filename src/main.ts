@@ -4,7 +4,8 @@ import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./aut
 import { parseDetails, parseNumber, withDetails, withDetailsMany, type BookDetails, type DetailsBase, type DetailsEdit } from "./details";
 import { Dropbox, RevConflict } from "./dropbox";
 import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
-import { createHome } from "./homeView";
+import { coverPath, largeCover, loadSharpCovers } from "./covers";
+import { createHome, showSharpCover } from "./homeView";
 import { contentsRemembered, CONTENTS_KEY, LAST_PLACE_KEY, lastPlaceText, parseLastPlace, type LastPlace } from "./lastPlace";
 import { booksToFetch, furthest, libraryBooks, markedBook, placesOf, readAt, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook } from "./library";
 import { shown, type Setup } from "./looks";
@@ -816,6 +817,8 @@ async function showApp() {
     if (got === undefined) return { kind: "failed" };
     if (got === null) return { kind: "name-taken", name };
     const cover = info?.cover ? await thumbnail(info.cover) : null;
+    // Its sharp cover beside the phones' (never over one there).
+    if (info?.cover) void largeCover(info.cover).then(large => large && api.addFile(coverPath(got), large)).catch(() => undefined);
     const entry: IndexEntry = {
       title: info?.title || titleFromFileName(name),
       ...(info?.author ? { author: info.author } : {}),
@@ -869,6 +872,8 @@ async function showApp() {
   progress = new Map();
   saveLibrary();
   render();
+  // Sharp covers, the books read last first (covers.ts).
+  void loadSharpCovers(api, [...books].sort((a, b) => (b.lastRead ?? "").localeCompare(a.lastRead ?? "")).map(b => b.id), showSharpCover);
   // Back to this tab after a while: other devices may have read meanwhile, and their progress shows.
   let hiddenAt = 0;
   document.addEventListener("visibilitychange", async () => {

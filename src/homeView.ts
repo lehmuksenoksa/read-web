@@ -2,6 +2,7 @@
 // series' panel at the right, the size control, Details' columns and Continue. The data and the
 // actions (the book menu, Edit details, opening a book) are the page's own, passed in.
 
+import { sharpCover } from "./covers";
 import {
   ago, besideReadingNow, BOOK_VIEWS, clickSort, column, curatedHome, DEFAULT_COLUMNS, DEFAULT_SERIAL_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
   fitColumns, menuSort, moveColumn, nextInSeries, SERIAL_VIEWS, seriesLine, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
@@ -101,11 +102,15 @@ function toneOf(id: string): string[] {
   return TONES[n % TONES.length];
 }
 
-/** A book's cover: the phones' small JPEG, or a plain one with its title in its colours. */
+/**
+ * A book's cover: its sharp one when it's here (covers.ts), else the phones' small JPEG, or a plain one with
+ * its title in its colours. Marked with the book's id, so a sharp cover arriving later takes its place.
+ */
 function cover(book: LibraryBook, withText: boolean): HTMLElement {
-  if (book.cover) return h("div", { class: "cv" }, h("img", { src: `data:image/jpeg;base64,${book.cover}`, alt: "" }));
+  const src = sharpCover(book.id) ?? (book.cover ? `data:image/jpeg;base64,${book.cover}` : null);
+  if (src) return h("div", { class: "cv", "data-cover": book.id }, h("img", { src, alt: "" }));
   const [bg, fg] = toneOf(book.id);
-  return h("div", { class: "cv", style: `background:${bg};color:${fg}` },
+  return h("div", { class: "cv", "data-cover": book.id, style: `background:${bg};color:${fg}` },
     withText ? h("span", { class: "ct" }, book.title) : null,
     withText && book.author ? h("span", { class: "ca" }, book.author) : null);
 }
@@ -1118,3 +1123,16 @@ export function createHome(ctx: HomeContext): {
   return { el, bar: header, gear, render, isOpen: () => panelFor != null, closePanel, setReading };
 }
 
+
+/** A sharp cover just arrived (covers.ts): it takes the place of the small or plain one wherever the book is shown. */
+export function showSharpCover(id: string, url: string): void {
+  for (const cv of document.querySelectorAll<HTMLElement>(`.cv[data-cover="${id}"]`)) {
+    const img = cv.querySelector("img");
+    if (img) {
+      img.src = url;
+      continue;
+    }
+    cv.removeAttribute("style");
+    cv.replaceChildren(h("img", { src: url, alt: "" }));
+  }
+}

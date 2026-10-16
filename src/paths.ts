@@ -60,10 +60,11 @@ export const fontPath = (name: string) => `${FONTS_FOLDER}/${name}`;
 /**
  * Files the web version may add (never overwrite or remove): a downloaded font's files and its
  * list of files in `/Apps/Read/Fonts/` (Bookerly's .ttf files there are never touched), and since
- * Home's Add books (2026-10-15) an EPUB straight in `/Books/` (CLAUDE.md: only add new ones the user adds).
+ * Home's Add books (2026-10-15) an EPUB straight in `/Books/` (CLAUDE.md: only add new ones the user adds),
+ * and its sharp cover in `/Apps/Read/Sync/covers/` (2026-10-16).
  */
 export function isAddablePath(path: string): boolean {
-  return /^\/Apps\/Read\/Fonts\/[A-Za-z0-9-]+\.(woff2|json)$/.test(path) || isNewBookPath(path);
+  return /^\/Apps\/Read\/Fonts\/[A-Za-z0-9-]+\.(woff2|json)$/.test(path) || isNewBookPath(path) || /^\/Apps\/Read\/Sync\/covers\/[0-9a-f]{64}\.jpg$/.test(path);
 }
 
 /** An EPUB straight in /Books/ (not in a folder in it), its name without "..". */

@@ -29,6 +29,9 @@ describe("where the web version may write", () => {
   it("adds only downloaded font files in /Apps/Read/Fonts/ and new EPUBs straight in /Books/, nothing else", () => {
     expect(isAddablePath(fontPath("Newsreader-r-latin-1.woff2"))).toBe(true);
     expect(isAddablePath(fontPath("Newsreader.json"))).toBe(true);
+    expect(isAddablePath(`/Apps/Read/Sync/covers/${"ab".repeat(32)}.jpg`)).toBe(true);
+    expect(isAddablePath("/Apps/Read/Sync/covers/../library.json")).toBe(false);
+    expect(isAddablePath("/Apps/Read/Sync/covers/x.jpg")).toBe(false);
     expect(isAddablePath("/Books/Piranesi.epub")).toBe(true);
     expect(isAddablePath("/Books/The Hobbit (1937).EPUB")).toBe(true);
     for (const path of [
@@ -81,7 +84,7 @@ describe("where the web version may write", () => {
       }
       if (file !== "dropbox.ts") expect(text.includes("files/upload"), `${file} uploads`).toBe(false);
       for (const call of text.matchAll(/\.writeText\(([^,]+),/g)) expect(call[1].trim(), `${file}: ${call[0]}`).toMatch(/^(syncFilePath\(|syncPath$|WEB_SETUP_PATH$|DETAILS_PATH$|SUBSCRIPTIONS_PATH$)/);
-      for (const call of text.matchAll(/\.addFile\(([^,]+),/g)) expect(call[1].trim(), `${file}: ${call[0]}`).toMatch(/^fontPath\(/);
+      for (const call of text.matchAll(/\.addFile\(([^,]+),/g)) expect(call[1].trim(), `${file}: ${call[0]}`).toMatch(/^(fontPath|coverPath)\(/);
       for (const call of text.matchAll(/\.addBook\(([^,]+),/g)) expect(call[1].trim(), `${file}: ${call[0]}`).toMatch(/^bookPath\(/);
     }
   });
