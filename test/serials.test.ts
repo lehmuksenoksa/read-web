@@ -3,7 +3,7 @@ import { decodeHome, DEFAULT_SERIALS, moveColumn, shownColumns } from "../src/ho
 import { chapterListPath, isSerialId, isWritablePath, serialSyncPath } from "../src/paths";
 import {
   chapterDateLabel, chapterHref, currentChapterIndex, estimatedLengths, freshIndexes, furthestPlace, homeSerials, keepsNotes, lastCheck, lastReadSerial,
-  missingChapterPage, NEW_FOR_MS, newChaptersText, nextAfterCaughtUp, numbersOnly, panelChapters, parseChapterList, parseSubscriptions, phonesKeepNotes,
+  missingChapterPage, NEW_FOR_MS, newChaptersText, nextAfterCaughtUp, numbersOnly, panelChapters, parseChapterList, shortChapter, parseSubscriptions, phonesKeepNotes,
   progressLabel, readingOrderOf, searchSerials, sortSerials, storyProgress, withEndMark,
   type ChapterList, type SharedChapter, type Subscription,
 } from "../src/serials";
@@ -154,7 +154,34 @@ describe("Serials on Home", () => {
     const [s] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, { "rr-1": { positions: { a: place("ch/1027.xhtml", 0, 1, "S23") } } }, {}, NOW);
     expect(panelChapters(s).map(r => r.index)).toEqual([29, 28, 27, 26, 25]);
     const [fresh] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, {}, {}, NOW);
-    expect(panelChapters(fresh)).toHaveLength(12);
+    // Not started with more than twelve: the newest four, the rest left out, then the first three.
+    expect(panelChapters(fresh).map(r => ("more" in r ? `+${r.more}` : r.index))).toEqual([29, 28, 27, 26, "+23", 2, 1, 0]);
+  });
+
+  it("a long backlog: the newest four, N more, then the next three, the current and the one before; expanded, all", () => {
+    const cs = chapters(215);
+    const places = { "rr-1": { positions: { a: place("ch/1160.xhtml", 0.5, 1, "S23") } } };
+    const [s] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, places, {}, NOW);
+    expect(s.progress.currentIndex).toBe(159);
+    expect(panelChapters(s).map(r => ("more" in r ? `+${r.more}` : r.index))).toEqual([214, 213, 212, 211, "+48", 162, 161, 160, 159, 158]);
+    expect(panelChapters(s, true)).toHaveLength(57);
+    expect(panelChapters(s, true).every(r => !("more" in r))).toBe(true);
+  });
+
+  it("Continue names the chapter it opens: the current, the next after one read to its end, the first, none when caught up", () => {
+    const cs = chapters(30);
+    const at = (file: string) => ({ "rr-1": { positions: { a: place(file, 0.5, 1, "S23") } } });
+    const [mid] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, at("ch/1027.xhtml"), {}, NOW);
+    expect(mid.upNext?.id).toBe(mid.current?.id);
+    const [ended] = homeSerials([sub("rr-1", "X", { endChapterId: mid.current!.id })], { "rr-1": list("rr-1", cs) }, at("ch/1027.xhtml"), {}, NOW);
+    expect(ended.upNext?.id).toBe(cs[mid.progress.currentIndex! + 1].id);
+    const [fresh] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, {}, {}, NOW);
+    expect(fresh.upNext?.id).toBe(cs[0].id);
+    const last = cs[29].id;
+    const [caught] = homeSerials([sub("rr-1", "X", { endChapterId: last })], { "rr-1": list("rr-1", cs) }, at(`ch/${last}.xhtml`), {}, NOW);
+    expect(caught.caughtUp).toBe(true);
+    expect(caught.upNext).toBeNull();
+    expect([shortChapter("Chapter 213: Ink and Stone"), shortChapter("Ch. 4 - Up"), shortChapter("Interlude: Ryoka")]).toEqual(["Chapter 213", "Ch. 4", "Interlude: Ryoka"]);
   });
 
   it("sorts as Details' columns do, nothing to sort by last, and finds by title or author", () => {

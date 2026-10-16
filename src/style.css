@@ -541,3 +541,16 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
 .t-tight .bp-acts { margin-top: 20px; }
 .t-tight .bp-chaps, .t-tight .bp-books { margin-top: 24px; }
 .t-tight .bp-fine { margin-top: 26px; }
+
+/* A serial's panel (from mockups, 2026-10-16): the site as a link after the author; the button says the
+   state (Caught up: an outline, as readable as text, not a button); "Chapters" with the counts over the
+   list; "N more" between the newest and where you pick up. */
+.bp-sitelink { color: var(--ink2); text-decoration: none; white-space: nowrap; }
+.bp-sitelink:hover { color: var(--ink); }
+.bp-go { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-go.off, .bp-go.off:hover, .t-ink .bp-go.off { opacity: 1; background: none; border: 1px solid var(--line); color: var(--ink2); filter: none; cursor: default; padding: 8px 19px; }
+.t-ink .bp-go.off { padding: 6px 16px; }
+.bp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid var(--rule); color: var(--ink2); }
+.bp-head .c { color: var(--ink3); font-size: 14px; }
+.hpanel .chap .chapmore { text-align: left; color: var(--ink3); font: 14px Figtree, system-ui, sans-serif; padding: 4px 0; }
+.hpanel .chap .chapmore:hover { color: var(--ink); }

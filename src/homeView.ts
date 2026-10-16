@@ -8,7 +8,7 @@ import {
   viewFor, type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
 } from "./home";
 import {
-  chapterDateLabel, lastCheck, lastReadSerial, newChaptersText, numbersOnly, panelChapters, readingOrderOf, searchSerials, serialColumn, sortSerials,
+  chapterDateLabel, lastCheck, lastReadSerial, newChaptersText, numbersOnly, panelChapters, readingOrderOf, searchSerials, serialColumn, shortChapter, sortSerials,
   type Serial, type SerialColumnKey,
 } from "./serials";
 import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
@@ -722,6 +722,7 @@ export function createHome(ctx: HomeContext): {
     if (!ctx.places(b.id) && b.hasSyncFile) void ctx.load(b).then(() => { if (panelFor && "book" in panelFor && panelFor.book.id === b.id) renderPanel(); });
   };
   const openSerial = (x: Serial) => {
+    if (!(panelFor && "serial" in panelFor && panelFor.serial === x.id)) chaptersOpen = false;
     panelFor = { serial: x.id };
     main.querySelectorAll(".scard.on, .tr.on").forEach(e => e.classList.remove("on"));
     main.querySelectorAll(`[data-sid="${x.id}"]`).forEach(e => e.classList.add("on"));
@@ -747,6 +748,8 @@ export function createHome(ctx: HomeContext): {
 
   /** The device list under a book's line: open after a click on the line, until another book's panel. */
   let devicesOpen = false;
+  /** A serial's whole chapter list, after a click on "N more", until another serial's panel. */
+  let chaptersOpen = false;
 
   /**
    * Text that turns into fields on a click: Enter or a click away saves, Esc puts it back. [save] gets the
@@ -803,28 +806,28 @@ export function createHome(ctx: HomeContext): {
       top.append(h("span", { class: "grow" }), closeButton);
       const now = Date.now();
       const link = (c: { title: string; url: string }, cls = "") => h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", class: cls }, c.title);
-      const rows = panelChapters(x);
-      const chapters = rows.length ? h("div", { class: "chap" }, ...rows.flatMap(({ chapter: c, index }) => {
+      // The list (2026-10-16): with a long backlog, the newest and where you pick up, "N more" between.
+      const rows = panelChapters(x, chaptersOpen);
+      const chapters = rows.length ? h("div", { class: "chap" }, ...rows.flatMap(r => {
+        if ("more" in r) return [h("button", { class: "chapmore", onclick: () => { chaptersOpen = true; renderPanel(); } }, `··· ${r.more} more`), h("span", {})];
+        const { chapter: c, index } = r;
         const cls = [index === x.progress.currentIndex ? "cur" : "", x.progress.isRead(index) ? "read" : "", c.locked ? "locked" : ""].filter(Boolean).join(" ");
         return [h("span", {}, link(c, cls), x.progress.isNew(index) ? h("span", { class: "nw" }, badges() ? "NEW" : "new") : null), h("span", { class: "d" }, chapterDateLabel(c.published, now, true) ?? "")];
       })) : null;
       const checked = x.checkedAt && x.device ? [`Checked ${ago(new Date(x.checkedAt).toISOString(), now)} on ${x.device}`, inDropbox(x)].filter(Boolean).join(" · ") : "No chapters from the phones yet.";
-      const order = readingOrderOf(x.chapters);
-      const at = x.current ? order.findIndex(c => c.id === x.current!.id) + 1 : 0;
-      const unread = x.progress.unreadCount;
-      const left = x.current ? (x.current.title.match(/^(Chapter \d+[^:]*)/)?.[1] ?? x.current.title) : order.length ? "Not started" : "";
-      const right = x.caughtUp ? "Caught up" : unread ? `${unread} unread` : "";
+      const counts = [x.progress.unreadCount ? `${x.progress.unreadCount} unread` : "", x.progress.newCount ? `${x.progress.newCount} new` : ""].filter(Boolean).join(" · ");
+      // The button says the state: Start, Continue Chapter 213, or Caught up (not a button then).
+      const go = x.caughtUp
+        ? h("button", { class: "bp-go off", disabled: "true" }, "Caught up")
+        : x.upNext ? h("button", { class: "bp-go", onclick: () => ctx.openSerial(x) }, x.current ? `Continue ${shortChapter(x.upNext.title)}` : "Start") : null;
       panel.replaceChildren(...present(top, h("div", { class: "bp" },
         hero(null,
           editable(panelTitle(x.title), "bp-title", [{ value: x.title, label: "Title" }], ([title]) => { if (title) ctx.saveSerial(x, title, x.author); }),
           h("div", { class: "bp-sub" },
             editable(x.author ?? "", "bp-by", [{ value: x.author ?? "", label: "Author" }], ([author]) => ctx.saveSerial(x, x.title, author || null)),
-            h("span", { class: "bp-site" }, `· ${x.site}`))),
-        order.length ? lineAndBar(lineRow(left, right), order.length ? at / order.length : 0) : null,
-        h("div", { class: "bp-acts" },
-          order.length ? h("button", { class: "bp-go", onclick: () => ctx.openSerial(x) }, x.current ? "Continue" : "Read") : null,
-          h("a", { class: "bp-word", href: x.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${x.site} ↗`)),
-        chapters ? h("div", { class: "bp-chaps" }, chapters) : null,
+            h("span", { class: "bp-site" }, "· ", h("a", { class: "bp-sitelink", href: x.url, target: "_blank", rel: "noopener noreferrer", title: `Open on ${x.site}` }, `${x.site} ↗`)))),
+        go ? h("div", { class: "bp-acts" }, go) : null,
+        chapters ? h("div", { class: "bp-chaps" }, h("div", { class: "bp-head" }, h("span", {}, "Chapters"), h("span", { class: "c" }, counts)), chapters) : null,
         h("div", { class: "bp-fine" }, checked))));
     } else if ("series" in panelFor) {
       fromSeries = panelFor.series;

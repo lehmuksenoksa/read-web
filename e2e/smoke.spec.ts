@@ -35,6 +35,10 @@ test("Home: Grid, Serials, a serial read, the place saved", async ({ page }) => 
   await page.click(".hmark .ser");
   await expect(page.locator(".scard")).toHaveCount(1);
   await page.click(`.scard[data-sid="${SERIAL}"]`);
+  // The serial's panel: the button names the chapter it opens; the counts over the chapters.
+  await expect(page.locator(".hpanel .bp-go")).toHaveText("Continue Chapter 212");
+  await expect(page.locator(".hpanel .bp-head")).toContainText("3 unread · 1 new");
+  await expect(page.locator(".hpanel .bp-sitelink")).toHaveAttribute("href", /royalroad\.com/);
   await page.click(".hpanel .bp-go");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Paragraph 1.");
   await expect(page.locator(".httl .pl2")).toContainText("unread");

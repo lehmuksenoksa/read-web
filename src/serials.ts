@@ -201,6 +201,11 @@ export interface Serial {
   /** The chapter being read (the furthest place on any device). */
   current: SharedChapter | null;
   caughtUp: boolean;
+  /**
+   * The chapter Continue opens: the current one, or the next when the current was read to its end
+   * (the reader's own rule, nextAfterCaughtUp); the first when not started; null when caught up.
+   */
+  upNext: SharedChapter | null;
   /** The newest chapter that can be read. */
   latest: SharedChapter | null;
   /** When the newest readable chapter was posted (epoch ms). */
@@ -230,6 +235,10 @@ export function homeSerials(subs: Subscription[], lists: Record<string, ChapterL
     const progress = storyProgress(chapters.length, place?.index ?? null, unreadable, freshIndexes(chapters, now, sub.seen));
     const current = place ? chapters[place.index] : null;
     const latest = [...chapters].reverse().find(readable) ?? null;
+    const order = chapters.filter(readable);
+    const caughtUp = current != null && progress.unreadCount === 0 && sub.endChapterId === current.id;
+    const afterEnd = current ? nextAfterCaughtUp(order.map(c => c.id), current.id, sub.endChapterId) : null;
+    const upNext = caughtUp ? null : !current ? order[0] ?? null : order.find(c => c.id === afterEnd) ?? current;
     const edited = details[sub.bookId];
     const updated = Date.parse(latest?.published ?? "");
     return {
@@ -242,7 +251,8 @@ export function homeSerials(subs: Subscription[], lists: Record<string, ChapterL
       progress,
       current,
       // Caught up: the current chapter was read to its end and nothing readable comes after it.
-      caughtUp: current != null && progress.unreadCount === 0 && sub.endChapterId === current.id,
+      caughtUp,
+      upNext,
       latest,
       updated: Number.isFinite(updated) ? updated : null,
       lastRead: lastReadAt(syncFile),
@@ -272,12 +282,30 @@ export function newChaptersText(serials: Serial[]): string {
   return n === 0 ? "No new chapters" : n === 1 ? "1 new chapter" : `${n} new chapters`;
 }
 
-/** The chapters the panel lists: newest first down to the one before the current chapter, at most [max]; empty posts left out. */
-export function panelChapters(serial: Serial, max = 12): { chapter: SharedChapter; index: number }[] {
+/** A row of the panel's chapter list: a chapter, or "··· 48 more" standing for the ones left out. */
+export type PanelRow = { chapter: SharedChapter; index: number } | { more: number };
+
+/**
+ * The chapters the panel lists, newest first down to the one before the current chapter (empty posts
+ * left out). More than [fits] (2026-10-16): the four newest, "N more", then the next three, the current
+ * chapter and the one before it, so both what's new and where you pick up show; [expanded] lists them all.
+ * Not started: the newest, then the first chapters.
+ */
+export function panelChapters(serial: Serial, expanded = false, fits = 12): PanelRow[] {
   const rows = serial.chapters.map((chapter, index) => ({ chapter, index })).filter(r => !r.chapter.empty).reverse();
-  const stop = serial.progress.currentIndex == null ? -1 : serial.progress.currentIndex - 1;
-  const upTo = rows.filter(r => r.index >= stop);
-  return (upTo.length ? upTo : rows).slice(0, max);
+  const at = serial.progress.currentIndex ?? -1;
+  const upTo = rows.filter(r => r.index >= at - 1);
+  if (!upTo.length) return rows.slice(0, fits);
+  if (expanded || upTo.length <= fits) return upTo;
+  const bottom = upTo.filter(r => r.index <= at + 3);
+  const top = upTo.slice(0, 4).filter(r => !bottom.includes(r));
+  const more = upTo.length - top.length - bottom.length;
+  return more > 0 ? [...top, { more }, ...bottom] : [...top, ...bottom];
+}
+
+/** A chapter's name in the button: "Chapter 213" out of "Chapter 213: Ink and Stone"; other titles whole. */
+export function shortChapter(title: string): string {
+  return title.match(/^((?:chapter|ch\.?|book|part|episode|ep\.?)\s*[\d.]+[a-z]?)\b/i)?.[1] ?? title;
 }
 
 // --- Details' columns for serials ---
