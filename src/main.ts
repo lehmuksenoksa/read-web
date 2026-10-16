@@ -6,7 +6,7 @@ import { Dropbox, RevConflict } from "./dropbox";
 import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
 import { createHome } from "./homeView";
 import { contentsRemembered, CONTENTS_KEY, LAST_PLACE_KEY, lastPlaceText, parseLastPlace, type LastPlace } from "./lastPlace";
-import { booksToFetch, furthest, libraryBooks, markedBook, placesOf, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook } from "./library";
+import { booksToFetch, furthest, libraryBooks, markedBook, placesOf, readAt, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook } from "./library";
 import { shown, type Setup } from "./looks";
 import { backupPath, BOOKS_FOLDER, chapterFolderPath, chapterListPath, CHAPTERS_FOLDER, chapterTextPath, DETAILS_PATH, DEVICES_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { openSerial } from "./serialBook";
@@ -742,7 +742,8 @@ async function showApp() {
     indexedAt: 0, cover: null, lastRead: null, hasSyncFile: false,
   });
   home = createHome({
-    books: () => books.map(marked),
+    // Last read is when a device read it, not when its sync file last changed (readAt, 2026-10-16).
+    books: () => books.map(b => ({ ...marked(b), lastRead: readAt(b, known.get(b.id)) })),
     showHidden: () => showHidden,
     setShowHidden: on => { showHidden = on; render(); },
     setup: () => setup,
@@ -752,7 +753,8 @@ async function showApp() {
     load: async book => {
       // A kept entry from before Home has no places: read the file again.
       if (knownNow(book.id) && !knownNow(book.id)!.places) { known.delete(book.id); progress.delete(book.id); }
-      await progressOf(book);
+      // The book as listed, with its sync file's own time: the Library's carries the reading time.
+      await progressOf(books.find(b => b.id === book.id) ?? book);
     },
     open: book => void openBook(book),
     menu: (book, x, y) => openBookMenu(book, x, y),

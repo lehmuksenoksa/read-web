@@ -123,8 +123,10 @@ test("Office: the book's panel: the title edited in place, the devices, Mark as 
   await page.keyboard.press("Escape");
   await expect(page.locator(".hpanel .bp-by").first()).toHaveText("Jane Austen");
   await expect(page.locator(".hpanel")).toHaveClass(/open/);
-  // The one status word: Mark as read.
+  // The one status word: Mark as read. Continue offered this book; a book marked read isn't continued.
+  await expect(page.locator(".hhead > .hcont")).toContainText("Emma, Revised");
   await page.click(".hpanel .bp-word");
+  await expect(page.locator(".hhead > .hcont")).toBeHidden();
   await expect(page.locator(".hpanel .bp-line .bp-l")).toHaveText("Read");
   await expect(page.locator(".hpanel .bp-word")).toHaveText("Mark as unread");
   await expect.poll(() => dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/${EMMA}.json` && u.text.includes('"read":true'))).toBe(true);

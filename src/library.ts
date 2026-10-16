@@ -237,7 +237,19 @@ export function libraryItems(books: LibraryBook[], by: SortBy, query: string, gr
 
 /** The book read last on any device (its sync file changed last), to open at the start; null before any reading. */
 export function lastReadBook(books: LibraryBook[]): LibraryBook | null {
-  return books.filter(b => b.lastRead).sort((a, b) => b.lastRead!.localeCompare(a.lastRead!))[0] ?? null;
+  // A book marked read has nothing to continue (2026-10-16).
+  return books.filter(b => b.lastRead && !b.read).sort((a, b) => b.lastRead!.localeCompare(a.lastRead!))[0] ?? null;
+}
+
+/**
+ * When a book was last read, for Continue, Recent and Last read: its newest place, which only a device
+ * reading moves. Its sync file's time also moves with Mark as read, unread, Hide and Unhide (2026-10-16),
+ * so that time stands in only until the file's places are known; a changed file is read again anyway.
+ */
+export function readAt(book: LibraryBook, known: KnownProgress | undefined): string | null {
+  if (!known?.places || known.at !== book.lastRead) return book.lastRead;
+  const newest = known.places.reduce((t, p) => Math.max(t, p.at), 0);
+  return newest > 0 ? new Date(newest).toISOString() : known.places.length ? book.lastRead : null;
 }
 
 /** A book's furthest place as this browser last read it, with its sync file's time then. */

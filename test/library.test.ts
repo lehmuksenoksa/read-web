@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry } from "../src/dropbox";
-import { furthest, lastReadBook, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem, stillKnown, booksToFetch, withSyncTimes } from "../src/library";
+import { furthest, lastReadBook, readAt, libraryBooks, libraryItems, searchBooks, sortBooks, titleFromFileName, type LibraryBook, type LibraryItem, stillKnown, booksToFetch, withSyncTimes } from "../src/library";
 
 const hash = (c: string) => c.repeat(64);
 const file = (name: string, id: string, folder = "/Books"): FileEntry => ({ path: `${folder}/${name}`, pathLower: `${folder}/${name}`.toLowerCase(), name, contentHash: id, size: 1, modified: "2026-10-01T10:00:00Z" });
@@ -85,6 +85,8 @@ describe("the start", () => {
   it("opens nothing before any reading", () => {
     expect(lastReadBook([b("a", null)])).toBeNull();
     expect(lastReadBook([])).toBeNull();
+    // A book marked read has nothing to continue: the one read before it comes up.
+    expect(lastReadBook([b("a", "2026-10-01T10:00:00Z"), { ...b("b", "2026-10-12T09:00:00Z"), read: true }])!.id).toBe("a");
   });
 });
 
@@ -131,5 +133,27 @@ describe("progress after a book was started over", () => {
     expect(furthest({ positions })).toBe(0.6);
     expect(furthest({ positions, reset: { at: 200 } })).toBe(0.05);
     expect(furthest({ positions, reset: { at: 400 } })).toBe(0);
+  });
+});
+
+describe("when a book was last read", () => {
+  const book = (lastRead: string | null): LibraryBook => ({
+    id: "x", path: "/Books/x.epub", title: "X", author: null, series: null, seriesIndex: null, read: false, hidden: false,
+    indexedAt: 0, cover: null, lastRead, hasSyncFile: true,
+  });
+  it("is the newest place, not the sync file's time, which marks move too", () => {
+    // Marked read today: the file changed today, but the last reading was days ago.
+    const file = "2026-10-16T09:00:00Z";
+    const places = [{ device: "S23", p: 0.4, chapter: "Chapter 3", at: Date.parse("2026-10-10T20:00:00Z") }, { device: "Web", p: 0.2, chapter: null, at: Date.parse("2026-10-05T08:00:00Z") }];
+    expect(readAt(book(file), { at: file, p: 0.4, places })).toBe("2026-10-10T20:00:00.000Z");
+  });
+  it("is the file's time until its places are known, or when the file changed since they were read", () => {
+    expect(readAt(book("2026-10-16T09:00:00Z"), undefined)).toBe("2026-10-16T09:00:00Z");
+    expect(readAt(book("2026-10-16T09:00:00Z"), { at: "2026-10-01T00:00:00Z", p: 0.1, places: [{ device: "S23", p: 0.1, chapter: null, at: 5 }] })).toBe("2026-10-16T09:00:00Z");
+    // A kept entry from before places were kept.
+    expect(readAt(book("2026-10-16T09:00:00Z"), { at: "2026-10-16T09:00:00Z", p: 0.1 })).toBe("2026-10-16T09:00:00Z");
+  });
+  it("is nothing after Mark as unread took every place away", () => {
+    expect(readAt(book("2026-10-16T09:00:00Z"), { at: "2026-10-16T09:00:00Z", p: 0, places: [] })).toBeNull();
   });
 });
