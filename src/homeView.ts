@@ -503,12 +503,8 @@ export function createHome(ctx: HomeContext): {
     // Continue: the serial read last on any device, and its chapter.
     const last = all && lastReadSerial(all);
     cont.hidden = !last;
-    if (last && quiet()) {
+    if (last) {
       cont.replaceChildren(...quietLine(last.title, [last.current?.title ?? "", last.progress.unreadCount ? `${last.progress.unreadCount} unread` : "Up to date"]));
-      cont.onclick = () => ctx.openSerial(last);
-    } else if (last) {
-      cont.replaceChildren(h("span", { class: "ci" }, h("span", { class: "k" }, "Continue"), h("span", { class: "t sans" }, redTitle(last.title)),
-        h("span", { class: "k ch" }, last.current?.title ?? "")));
       cont.onclick = () => ctx.openSerial(last);
     }
     renderPanel();
@@ -562,10 +558,9 @@ export function createHome(ctx: HomeContext): {
     addButton.textContent = quiet() ? "Add books" : "+ Add books";
     // Serials can't be added here: the phones subscribe (2026-10-16).
     addButton.style.display = onSerials() ? "none" : "";
-    cont.classList.toggle("quiet", quiet());
-    // Office's Continue is a small pill in the middle of the bar (C1, 2026-10-16); Home's stays at the foot.
-    if (quiet() && cont.parentElement !== header) header.append(cont);
-    else if (!quiet() && cont.parentElement !== el) el.insertBefore(cont, panel);
+    // Continue is a small pill in the middle of the bar (Office's C1, then Home's too, 2026-10-16).
+    cont.classList.add("pill");
+    if (cont.parentElement !== header) header.append(cont);
     if (onSerials()) return renderSerials(columnsOpen);
     count.classList.remove("plain");
     const hs = home();
@@ -617,9 +612,9 @@ export function createHome(ctx: HomeContext): {
 
   // --- Continue: the book read last on any device ---
 
-  /** Office's Continue: one quiet line, "Continue  Title · Chapter 12 · 43%   Read". */
+  /** Continue as a pill in the bar (Office, then Home, 2026-10-16): "Continue Title · Chapter 12 · 43% ›". */
   const quietLine = (title: string, rest: string[]) => [
-    h("span", { class: "k" }, "Continue"), h("b", {}, title),
+    h("span", { class: "k" }, "Continue"), h("b", {}, panelTitle(title)),
     h("span", { class: "k" }, rest.filter(Boolean).map(t => `· ${t}`).join(" ")),
     h("span", { class: "go", "aria-hidden": "true" }, "›"),
   ];
@@ -628,15 +623,7 @@ export function createHome(ctx: HomeContext): {
     cont.hidden = !last;
     if (!last) return;
     const p = progressOf(last) ?? 0;
-    if (quiet()) {
-      cont.replaceChildren(...quietLine(last.title, [ctx.places(last.id)?.[0]?.chapter ?? "", p > 0 ? `${Math.round(p * 100)}%` : ""]));
-      cont.onclick = () => ctx.open(last);
-      if (ctx.progress(last.id) == null && last.hasSyncFile) void ctx.load(last).then(renderSoon);
-      return;
-    }
-    cont.replaceChildren(cover(last, false),
-      h("span", { class: "ci" }, h("span", { class: "k" }, "Continue"), h("span", { class: "t" }, redTitle(last.title)),
-        h("span", { class: "pl" }, h("i", { style: `width:${Math.round(p * 100)}%` }))));
+    cont.replaceChildren(...quietLine(last.title, [ctx.places(last.id)?.[0]?.chapter ?? "", p > 0 ? `${Math.round(p * 100)}%` : ""]));
     cont.onclick = () => ctx.open(last);
     if (ctx.progress(last.id) == null && last.hasSyncFile) void ctx.load(last).then(renderSoon);
   };
@@ -747,10 +734,13 @@ export function createHome(ctx: HomeContext): {
           opGrid([["Author", ms.find(m => m.author)?.author ?? ""], ["Books", `${ms.length} books · ${read} read`]]),
           h("div", { class: "sec" }, h("h3", {}, "Books"), ...bookRows)));
       } else panel.replaceChildren(...present(top,
-        h("div", { class: "scov" }, ...ms.slice(0, 3).reverse().map((m, i, arr) => h("div", { class: "cvb", style: `left:${(arr.length - 1 - i) * 22}px` }, cover(m, true)))),
-        h("h1", {}, panelTitle(name)),
-        h("div", { class: "by" }, ms.find(m => m.author)?.author ?? ""),
-        h("div", { class: "ser" }, `${ms.length} books · ${read} read`),
+        // The covers small, beside the name (2026-10-16).
+        h("div", { class: "hhero" },
+          h("div", { class: "scov" }, ...ms.slice(0, 3).reverse().map((m, i, arr) => h("div", { class: "cvb", style: `left:${(arr.length - 1 - i) * 14}px` }, cover(m, true)))),
+          h("div", { class: "info" },
+            h("h1", {}, panelTitle(name)),
+            h("div", { class: "by" }, ms.find(m => m.author)?.author ?? ""),
+            h("div", { class: "ser" }, `${ms.length} books · ${read} read`))),
         next ? h("div", { class: "acts" }, h("button", { class: "seal", onclick: () => ctx.open(next) }, nextName)) : null,
         h("div", { class: "sec" }, h("h3", {}, "Books"), ...bookRows)));
     } else {
@@ -784,10 +774,13 @@ export function createHome(ctx: HomeContext): {
           ]),
           opLinks(h("button", { onclick: () => ctx.edit(b) }, "Edit details…"), hide)));
       } else panel.replaceChildren(...present(top,
-        h("div", { class: "cvb" }, cover(b, true)),
-        h("h1", {}, panelTitle(b.title)),
-        h("div", { class: "by" }, b.author ?? ""),
-        b.series ? h("div", { class: "ser" }, `${b.series}${b.seriesIndex != null ? ` · ${b.seriesIndex}` : ""}`) : null,
+        // The cover small, beside the title (2026-10-16).
+        h("div", { class: "hhero" },
+          h("div", { class: "cvb" }, cover(b, true)),
+          h("div", { class: "info" }, ...present(
+            h("h1", {}, panelTitle(b.title)),
+            h("div", { class: "by" }, b.author ?? ""),
+            b.series ? h("div", { class: "ser" }, `${b.series}${b.seriesIndex != null ? ` · ${b.seriesIndex}` : ""}`) : null))),
         h("div", { class: "acts" },
           h("button", { class: "seal", onclick: () => ctx.open(b) }, p > 0 && !b.read ? "Continue" : "Read"),
           h("button", { class: "well", onclick: () => ctx.edit(b) }, "Edit details…")),
