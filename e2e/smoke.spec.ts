@@ -60,7 +60,13 @@ test("Office: two rows ticked, Set details… puts the series on both in one wri
   await page.goto("./");
   await expect(page.locator(".home .tbl .tr[data-id]")).toHaveCount(2);
   // Clicks in the box's cell, beside the box, as a mouse does: the first one anchors a text selection in the browser.
-  const boxCell = async (id: string) => { const b = (await page.locator(`.home .tr[data-id="${id}"] .td.chk`).boundingBox())!; return [b.x + 3, b.y + b.height / 2] as const; };
+  // The table is drawn again when Emma's progress comes in: wait for it, then measure until the cell is there.
+  await expect(page.locator(`.home .tr[data-id="${EMMA}"]`)).toContainText("43%");
+  const boxCell = async (id: string) => {
+    let b: { x: number; y: number; height: number } | null = null;
+    await expect.poll(async () => (b = await page.locator(`.home .tr[data-id="${id}"] .td.chk`).boundingBox())).not.toBeNull();
+    return [b!.x + 3, b!.y + b!.height / 2] as const;
+  };
   const [x1, y1] = await boxCell(KATABASIS);
   await page.mouse.click(x1, y1);
   const [x2, y2] = await boxCell(EMMA);
