@@ -34,7 +34,10 @@ test("Home: Grid, Serials, a serial read, the place saved", async ({ page }) => 
   // The curated page (2026-10-16): Reading now is the book in progress; Katabasis, never opened, is
   // recently added; All has the series as one cover.
   await expect(page.locator(".cur-now .cur-title")).toHaveText("Emma");
-  await expect(page.locator(".cur .grid.shelf .cell")).toHaveCount(1);
+  // No other book in progress: Recently added sits beside Reading now, and has no row of its own.
+  await expect(page.locator(".cur-also .cur-head h2")).toHaveText("Recently added");
+  await expect(page.locator(".cur-also .cell")).toHaveCount(1);
+  await expect(page.locator(".cur .grid.shelf")).toHaveCount(0);
   await expect(page.locator(".cur .grid:not(.shelf) .cell")).toHaveCount(1);
   await expect(page.locator(".hhead > .hcont")).toBeHidden();
   // A search shows the plain grid of matches.

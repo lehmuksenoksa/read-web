@@ -358,3 +358,11 @@ export function seriesLine(book: LibraryBook): string {
   if (!book.series || book.title.toLowerCase().includes(book.series.toLowerCase())) return "";
   return `${book.series}${book.seriesIndex != null ? ` · ${book.seriesIndex}` : ""}`;
 }
+
+/** What sits beside Reading now: the other books in progress, or, with none, the recently added (2026-10-16). */
+export function besideReadingNow(c: CuratedHome): { title: string; books: LibraryBook[]; kind: "also" | "added" } | null {
+  if (!c.now) return null;
+  if (c.also.length) return { title: "Also reading", books: c.also, kind: "also" };
+  if (c.added.length) return { title: "Recently added", books: c.added, kind: "added" };
+  return null;
+}

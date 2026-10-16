@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ago, clickSort, curatedHome, decodeHome, RECENT_DAYS, seriesLine, fitColumns, DEFAULT_COLUMNS, DEFAULT_HOME, detailsRows, homeItems, megabytes, menuSort, moveColumn,
+  ago, besideReadingNow, clickSort, curatedHome, decodeHome, RECENT_DAYS, seriesLine, fitColumns, DEFAULT_COLUMNS, DEFAULT_HOME, detailsRows, homeItems, megabytes, menuSort, moveColumn,
   nextInSeries, shownColumns, sizeStep, sortMenuChoice, sortRows, textScale, titleWord, toggleColumn, type Facts,
 } from "../src/home";
 import type { LibraryBook } from "../src/library";
@@ -216,6 +216,14 @@ describe("the curated Grid page", () => {
     const c = curatedHome(lib.filter(b => !["a", "b", "c", "d", "e"].includes(b.id)), progress, NOW);
     expect(c.now).toBeNull();
     expect(c.also).toEqual([]);
+  });
+
+  it("beside Reading now: the other books in progress, or the recently added when there are none", () => {
+    expect(besideReadingNow(curatedHome(lib, progress, NOW))?.kind).toBe("also");
+    const alone = curatedHome(lib.filter(b => !["b", "c", "d", "e"].includes(b.id)), progress, NOW);
+    expect(besideReadingNow(alone)).toMatchObject({ title: "Recently added", kind: "added" });
+    expect(besideReadingNow(alone)!.books.map(b => b.id)).toEqual(["f", "g"]);
+    expect(besideReadingNow(curatedHome(lib.filter(b => b.id === "a"), progress, NOW))).toBeNull();
   });
 
   it("the series shows unless the title already says it", () => {

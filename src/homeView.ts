@@ -3,7 +3,7 @@
 // actions (the book menu, Edit details, opening a book) are the page's own, passed in.
 
 import {
-  ago, BOOK_VIEWS, clickSort, column, curatedHome, DEFAULT_COLUMNS, DEFAULT_SERIAL_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
+  ago, besideReadingNow, BOOK_VIEWS, clickSort, column, curatedHome, DEFAULT_COLUMNS, DEFAULT_SERIAL_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
   fitColumns, menuSort, moveColumn, nextInSeries, SERIAL_VIEWS, seriesLine, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
   viewFor, type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
 } from "./home";
@@ -726,6 +726,14 @@ export function createHome(ctx: HomeContext): {
       cell.append(h("span", { class: "cbar" }, bar(p), h("span", { class: "cp" }, pct(p))));
       return cell;
     };
+    /** A recently added book beside Reading now: when it came, where the others show their progress. */
+    const added = (b: LibraryBook) => {
+      const cell = gridItem({ kind: "book", book: b });
+      cell.querySelector(".badge")?.remove();
+      cell.append(h("span", { class: "cbar" }, h("span", { class: "cadded" }, `Added ${ago(b.added ?? null, Date.now())}`)));
+      return cell;
+    };
+    const beside = besideReadingNow(c);
     const out: HTMLElement[] = [];
     if (c.now) {
       const f = c.now;
@@ -744,9 +752,11 @@ export function createHome(ctx: HomeContext): {
               h("div", { class: "cur-bar" }, bar(p)),
               h("div", { class: "cur-place" }, [pct(p), far?.chapter ?? ""].filter(Boolean).join(" · ")),
               h("button", { class: "cur-go", onclick: () => ctx.open(f) }, h("span", { class: "play", "aria-hidden": "true" }, "▶"), "Continue")))),
-        c.also.length ? h("div", { class: "cur-also" }, head("Also reading"), h("div", { class: "cur-alsorow" }, ...c.also.map(reading))) : null));
+        beside ? h("div", { class: "cur-also" }, head(beside.title, beside.kind === "added" ? String(beside.books.length) : null),
+          h("div", { class: `cur-alsorow ${beside.kind}` }, ...beside.books.map(b => (beside.kind === "also" ? reading(b) : added(b))))) : null));
     }
-    if (c.added.length) {
+    // Recently added gets its own row unless it already sits beside Reading now.
+    if (c.added.length && beside?.kind !== "added") {
       out.push(h("section", { class: "cur" }, head("Recently added", String(c.added.length)),
         h("div", { class: "grid shelf" }, ...c.added.map(b => gridItem({ kind: "book", book: b })))));
     }

@@ -623,3 +623,18 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
 .home .cur-alsorow .cell .t { font-size: 14px; }
 .home .cur-alsorow .cell .a { font-size: 12.5px; }
 @media (max-width: 700px) { .cur-top { --fw: 110px; } }
+
+/* Reading now follows the size slider (2026-10-16): a little larger than the covers below at every size. */
+.cur-top { --fw: calc(180px * var(--z)); }
+.cur-title { font-size: clamp(22px, calc(26px * var(--z)), 34px); }
+@media (max-width: 700px) { .cur-top { --fw: min(calc(180px * var(--z)), 34vw); } }
+/* Recently added beside Reading now (no other books in progress): as many as fit, when each came under it. */
+.cur-alsorow.added { overflow: hidden; }
+.home .cell .cbar .cadded { color: var(--ink3); font-size: 12.5px; line-height: 16px; }
+/* The row beside Reading now takes the room left of it (as many covers as fit), and goes below only when that's under about 400 px. */
+.cur-also { flex: 1 1 400px; min-width: 0; }
+.cur-alsorow { overflow: hidden; }
+/* Not smaller than the second step, so the books beside it stay readable; a cover that doesn't fit whole waits on a hidden second line. */
+.cur-top { --fw: calc(180px * max(var(--z), .875)); }
+.cur-alsorow { flex-wrap: wrap; align-content: flex-start; row-gap: 60px; }
+@media (max-width: 1100px) { .cur-alsorow { height: calc(var(--fw) * 1.5); } }
