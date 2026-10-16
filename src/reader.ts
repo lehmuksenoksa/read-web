@@ -20,7 +20,7 @@ import { chapterHref, chapterIdOf, nextAfterCaughtUp } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
 import { afterKeptOpening, BOOK_ORDER, openingPlan, positionFromLocator, serialOrder, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
 import { h, icon, ICONS } from "./ui";
-import { QUIET_BOOK_CSS, QUIET_BOOK_SCRIPT } from "./quietBook";
+import { QUIET_BOOK_CSS, QUIET_BOOK_HIDE, QUIET_BOOK_SCRIPT } from "./quietBook";
 
 /** Uploads wait this long after the last page turn (the phones wait 5 s). */
 export const UPLOAD_DELAY_MS = 4000;
@@ -813,7 +813,11 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       injectables: {
         rules: [{
           resources: [/.*/],
-          prepend: [{ as: "link", rel: "stylesheet", blob: new Blob([font.css], { type: "text/css" }), target: "head" }],
+          prepend: [
+            { as: "link", rel: "stylesheet", blob: new Blob([font.css], { type: "text/css" }), target: "head" },
+            // Office: the chapter stays hidden until it's been made quiet.
+            ...(mountedQuiet ? [{ as: "script" as const, blob: new Blob([QUIET_BOOK_HIDE], { type: "text/javascript" }), target: "head" as const }] : []),
+          ],
           // Office: headings at the text's size, no drop caps, no images, no blank lines (2026-10-16).
           append: mountedQuiet ? [
             { as: "link", rel: "stylesheet", blob: new Blob([QUIET_BOOK_CSS], { type: "text/css" }), target: "head" },
