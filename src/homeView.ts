@@ -126,6 +126,8 @@ export function createHome(ctx: HomeContext): {
 
   /** Office: the same Library, quieter (WEB.md → One app, 2026-10-15): Details only, plain words. */
   const quiet = () => !ctx.isHome();
+  /** A panel's title: Home's first word in wax red; Office's plain. */
+  const panelTitle = (title: string): Node => (quiet() ? document.createTextNode(title) : redTitle(title));
   /** A book or serial open in the reader: the bar shows its title, and the name goes back to the Library. */
   let reading: ReadingTitle | null = null;
 
@@ -236,6 +238,7 @@ export function createHome(ctx: HomeContext): {
     const t = table();
     const menu = h("div", { role: "menu", class: "colmenu" }, h("div", { class: "lab" }, "Columns"));
     for (const key of t.cols.order) {
+      if (quiet() && key === "cover") continue;
       const fixed = key === FIXED;
       const box = h("input", { type: "checkbox", "aria-label": t.name(key) });
       box.checked = !t.cols.hidden.includes(key);
@@ -357,7 +360,8 @@ export function createHome(ctx: HomeContext): {
   };
 
   const details = (list: LibraryBook[]) => {
-    const cols = shownColumns(home().columns);
+    // Office has no covers: no Cover column (WEB.md → One app, two styles).
+    const cols = shownColumns(home().columns).filter(k => !quiet() || k !== "cover");
     const sort = home().sort;
     const table = h("div", { class: "tbl", role: "table", style: `grid-template-columns:${cols.map(widthOf).join(" ")} 40px` });
     const headings = h("div", { class: "tr hd", role: "row" },
@@ -632,7 +636,7 @@ export function createHome(ctx: HomeContext): {
       const link = (c: { title: string; url: string }, cls = "") => h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", class: cls }, c.title);
       const rows = panelChapters(x);
       panel.replaceChildren(...present(top,
-        h("h1", { class: "sans" }, redTitle(x.title)),
+        h("h1", { class: "sans" }, panelTitle(x.title)),
         h("div", { class: "by" }, bySite(x)),
         h("div", { class: "stline" }, ...present(newTag(x), unreadTag(x)), updated ? h("span", {}, `Updated ${updated}`) : null),
         h("div", { class: "acts" },
@@ -661,7 +665,7 @@ export function createHome(ctx: HomeContext): {
       top.append(h("span", { class: "grow" }), closeButton);
       panel.replaceChildren(...present(top,
         h("div", { class: "scov" }, ...ms.slice(0, 3).reverse().map((m, i, arr) => h("div", { class: "cvb", style: `left:${(arr.length - 1 - i) * 22}px` }, cover(m, true)))),
-        h("h1", {}, redTitle(name)),
+        h("h1", {}, panelTitle(name)),
         h("div", { class: "by" }, ms.find(m => m.author)?.author ?? ""),
         h("div", { class: "ser" }, `${ms.length} books · ${read} read`),
         next ? h("div", { class: "acts" }, h("button", { class: "seal", onclick: () => ctx.open(next) }, `${(ctx.progress(next.id) ?? 0) > 0 ? "Continue" : "Read"}${next.seriesIndex != null ? ` · Book ${next.seriesIndex}` : ""}`)) : null,
@@ -685,7 +689,7 @@ export function createHome(ctx: HomeContext): {
       const choice = (name: string, on: boolean, action: () => void) => h("button", { class: on ? "on" : "", "aria-pressed": String(on), onclick: action }, name);
       panel.replaceChildren(...present(top,
         h("div", { class: "cvb" }, cover(b, true)),
-        h("h1", {}, redTitle(b.title)),
+        h("h1", {}, panelTitle(b.title)),
         h("div", { class: "by" }, b.author ?? ""),
         b.series ? h("div", { class: "ser" }, `${b.series}${b.seriesIndex != null ? ` · ${b.seriesIndex}` : ""}`) : null,
         h("div", { class: "acts" },

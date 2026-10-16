@@ -470,6 +470,10 @@ button.r:hover { background: var(--sel); }
 .office .w { color: inherit; }
 /* The book's title in the bar: Office's sans, as the rest of its chrome. */
 .office .httl .bt { font: 600 17px Figtree, system-ui, sans-serif; }
+/* Office's panels and Add books: no covers, the sans (2026-10-16). */
+.office .hpanel .cvb, .office .hpanel .scov, .office .hpanel .cv0 { display: none; }
+.office .hpanel h1 { font: 600 24px/1.25 Figtree, system-ui, sans-serif; margin-top: 8px; }
+.office .hpanel .chap, .office .addhead h2, .office .adddrop b { font-family: Figtree, system-ui, sans-serif; }
 .office .hzoom, .office .hviews { display: none; }
 .office .home .tag, .office .home .tag.new, .office .home .tag.cu { background: none; color: var(--ink2); font: 500 calc(14px * var(--f)) Figtree, sans-serif; letter-spacing: 0; padding: 0; }
 .office .home .tag.new { color: var(--ink); }
