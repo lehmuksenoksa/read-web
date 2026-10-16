@@ -10,7 +10,7 @@ import { RevConflict, type Dropbox } from "./dropbox";
 import { currentEntry, flatToc, openBook, startPosition, type Book } from "./epub";
 import { CATALOGUE } from "./fonts";
 import {
-  BASE_FONT_PX, BUILT_IN_FONTS, canRename, charWidth, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, lookNamed, pageBackground, pageLayout, pageText,
+  BASE_FONT_PX, BUILT_IN_FONTS, QUIET_BOOK_CSS, canRename, charWidth, canSaveAs, cantRemove, CUSTOM_ID, CUSTOM_NAME, edit, hex, lookNamed, pageBackground, pageLayout, pageText,
   preferences, removeCustom, removeFont, removeLook, renameLook, replaceWithCustom, restoreCustom, restoreFont, restoreLook, SANS_FONTS,
   saveCustomAs, shown, step, stepOptional, STEPS, stepWeight, suggestedName, useLook, weightName, type Look, type Setup, type TextPosition, type Steps,
 } from "./looks";
@@ -118,6 +118,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   let mountedScroll = false;
   /** What of the look lays out the pages, as last set up. */
   let mountedLayout = "";
+  /** The page was set up quiet (Office): switching style sets it up again. */
+  let mountedQuiet = false;
   let aaTab: AaTab = "Text";
   /** Fonts being downloaded now. */
   const downloading = new Set<string>();
@@ -801,13 +803,19 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     mountedFont = look.font;
     mountedColumns = look.columns;
     mountedScroll = look.scroll;
+    mountedQuiet = appearance.quietBook();
     mountedLayout = textLayout(look);
     const entry = at ? startPosition(book.positions, at) : null;
     nav = new EpubNavigator(page, book.publication, listeners as EpubNavigatorListeners, book.positions, entry ?? undefined, {
       preferences: preferences(look, font.family),
       defaults: {},
       injectables: {
-        rules: [{ resources: [/.*/], prepend: [{ as: "link", rel: "stylesheet", blob: new Blob([font.css], { type: "text/css" }), target: "head" }] }],
+        rules: [{
+          resources: [/.*/],
+          prepend: [{ as: "link", rel: "stylesheet", blob: new Blob([font.css], { type: "text/css" }), target: "head" }],
+          // Office: headings at the text's size, no drop caps, no images (2026-10-16).
+          append: mountedQuiet ? [{ as: "link", rel: "stylesheet", blob: new Blob([QUIET_BOOK_CSS], { type: "text/css" }), target: "head" }] : [],
+        }],
         allowedDomains: [],
       },
     });
@@ -829,7 +837,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       if (!aa.hidden) await fillAa();
       if (!book || !nav) return;
       const look = seen();
-      if (look.font !== mountedFont || look.columns !== mountedColumns || look.scroll !== mountedScroll) {
+      if (look.font !== mountedFont || look.columns !== mountedColumns || look.scroll !== mountedScroll || appearance.quietBook() !== mountedQuiet) {
         await mount(heldPlace());
       } else {
         const font = await appearance.font(look.font);

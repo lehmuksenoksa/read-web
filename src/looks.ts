@@ -439,6 +439,17 @@ export function weightName(weight: number): string {
 // --- Colours and Readium ---
 
 /**
+ * Office's quiet book (2026-10-16): headings at the text's size, drop caps back to a letter, no
+ * images. Laid over the book's own styles; Home keeps them.
+ */
+export const QUIET_BOOK_CSS = `
+h1, h2, h3, h4, h5, h6 { font-size: 1em !important; font-weight: 600 !important; text-align: start !important; margin: 1.2em 0 .8em !important; padding: 0 !important; line-height: inherit !important; letter-spacing: normal !important; text-transform: none !important; font-variant: normal !important; }
+::first-letter { font-size: inherit !important; float: none !important; }
+[class*="drop" i], [class*="initial" i], [class*="firstletter" i], [class*="first-letter" i] { font-size: inherit !important; float: none !important; line-height: inherit !important; margin: 0 !important; }
+img, svg, picture, video, image { display: none !important; }
+`;
+
+/**
  * Read.web's page colours (2026-10-15): the style's Interface, Light or Dark, as its chrome; the
  * looks' own colours stay in the file but aren't used on the web. Never pure white on dark (DESIGN).
  */

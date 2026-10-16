@@ -54,6 +54,11 @@ export class Appearance {
     return forStyle(this.current, this.home);
   }
 
+  /** Office: the book's pages quiet (QUIET_BOOK_CSS). */
+  quietBook(): boolean {
+    return !this.home;
+  }
+
   /** [look] in the style's Interface colours: what the page shows. */
   page(look: Look): Look {
     return inInterface(look, this.home, this.current.chrome[this.home ? "home" : "office"]);
