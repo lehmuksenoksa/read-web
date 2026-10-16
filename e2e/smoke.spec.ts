@@ -35,7 +35,7 @@ test("Home: Grid, Serials, a serial read, the place saved", async ({ page }) => 
   await page.click(".hmark .ser");
   await expect(page.locator(".scard")).toHaveCount(1);
   await page.click(`.scard[data-sid="${SERIAL}"]`);
-  await page.click(".hpanel .acts .seal");
+  await page.click(".hpanel .opbtn");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Paragraph 1.");
   await expect(page.locator(".httl .pl2")).toContainText("unread");
   for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowRight");

@@ -19,6 +19,7 @@ import { showReader } from "./reader";
 import { marksOf, withMarks, type Marks, type ReadMark } from "./sync";
 import { forgetAll, keepBook, keptBooks, keepValue, keptValue } from "./store";
 import { sharedValue } from "./select";
+import { styleFor, tokenClasses } from "./styleTokens";
 import { h, icon, ICONS } from "./ui";
 
 const root = document.getElementById("app")!;
@@ -131,7 +132,8 @@ async function showApp() {
   let home: ReturnType<typeof createHome> | null = null;
   const layout = () => {
     // Light or Dark around the page: each style its own (2026-10-15).
-    root.className = `app ${homeMode() ? "homeon" : "office"} ${setup.chrome[homeMode() ? "home" : "office"]} ${screen}${NARROW.matches ? " narrow" : ""}${panelOpen && screen === "reader" ? " panelopen" : ""}`;
+    // The style's palette class (homeon / office), then one class per token (styleTokens.ts, 2026-10-16).
+    root.className = `app ${homeMode() ? "homeon" : "office"} ${tokenClasses(styleFor(homeMode())).join(" ")} ${setup.chrome[homeMode() ? "home" : "office"]} ${screen}${NARROW.matches ? " narrow" : ""}${panelOpen && screen === "reader" ? " panelopen" : ""}`;
   };
   NARROW.addEventListener("change", layout);
   applyLook(look.page(shown(setup)));

@@ -149,7 +149,7 @@ button.r:hover { background: var(--sel); }
   --accent: #C0453B; --seal: #C0453B; --onseal: #FFF6EC; --wax: #2B2318; --badge: rgba(255,252,246,.94);
   --cu-bg: #F1E3BE; --cu-fg: #6A5214; --shadow: 0 14px 40px rgba(60,40,10,.14);
 }
-#app.homeon .btn.primary { background: var(--seal); border-color: var(--seal); color: var(--onseal); }
+#app.t-accent .btn.primary { background: var(--seal); border-color: var(--seal); color: var(--onseal); }
 .home .grow { flex: 1; }
 .home .w { color: var(--wax); }
 
@@ -316,27 +316,13 @@ button.r:hover { background: var(--sel); }
 .hpanel .top { display: flex; align-items: center; min-height: 40px; }
 .hpanel .back { color: var(--ink2); padding: 6px 8px 6px 0; }
 .hpanel .back:hover { color: var(--ink); }
-.hpanel .cvb .cv { width: 150px; aspect-ratio: 2 / 3; margin: 4px 0 18px; --f: 1.1; }
-.hpanel .scov { position: relative; height: 170px; margin: 4px 0 18px; }
 .hpanel .scov .cvb { position: absolute; top: 0; }
-.hpanel .scov .cv { width: 110px; aspect-ratio: 2 / 3; margin: 0; box-shadow: -6px 0 14px rgba(0,0,0,.35); }
-.hpanel h1 { font: 600 30px/1.15 "Home Literata", Georgia, serif; }
-.hpanel .by { color: var(--ink2); margin-top: 6px; }
-.hpanel .ser { color: var(--ink2); font-size: 14px; margin-top: 2px; }
-.hpanel .acts { display: flex; gap: 10px; margin: 20px 0 6px; }
-.hpanel .seal { background: var(--seal); color: var(--onseal); border-radius: 12px; padding: 9px 18px; font-weight: 600; }
-.hpanel .well { background: var(--well); color: var(--ink); border-radius: 12px; padding: 9px 18px; font-weight: 500; }
-.hpanel .sec { margin-top: 24px; padding: 0; display: block; }
+.hpanel .scov .cv { width: 76px; aspect-ratio: 2 / 3; margin: 0; box-shadow: -6px 0 14px rgba(0,0,0,.35); }
+.hpanel .sec { margin-top: 22px; padding: 0; display: block; }
 .hpanel h3 { font: 600 12px Figtree, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--ink3); margin-bottom: 10px; }
-.hpanel .place { display: grid; grid-template-columns: 64px 1fr auto; gap: 4px 12px; align-items: center; padding: 6px 0; }
-.hpanel .place .dv { font-weight: 600; }
-.hpanel .place .pct { font-variant-numeric: tabular-nums; }
-.hpanel .place .when { color: var(--ink2); font-size: 13px; grid-column: 2 / 4; }
 .hpanel .choice { display: flex; gap: 16px; }
 .hpanel .choice button { color: var(--ink2); padding: 4px 0; }
 .hpanel .choice button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
-.hpanel .file { color: var(--ink2); font-size: 13px; word-break: break-word; }
-.hpanel .word { color: var(--accent); font-weight: 600; }
 .hpanel .sbook { display: flex; gap: 14px; align-items: center; padding: 8px 6px; margin: 0 -6px; border-radius: 10px; width: calc(100% + 12px); text-align: left; }
 .hpanel .sbook:hover { background: var(--raised); }
 .hpanel .sbook .cv { width: 34px; height: 50px; border-radius: 3px; }
@@ -371,9 +357,7 @@ button.r:hover { background: var(--sel); }
 
 /* A serial's panel: the site, its chapters (each opens on the site), when a phone last checked. */
 .hpanel { --f: 1; }
-.hpanel h1.sans { font-family: Figtree, sans-serif; }
-.hpanel .stline { display: flex; gap: 8px; align-items: center; color: var(--ink2); font-size: 14px; margin-top: 6px; }
-.hpanel a.seal, .hpanel a.well { display: inline-block; text-decoration: none; }
+.hpanel .stline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--ink2); }
 .hpanel .chap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 14px; font: 15px "Home Literata", Georgia, serif; }
 .hpanel .chap a { color: var(--ink); text-decoration: none; }
 .hpanel .chap a:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -383,9 +367,6 @@ button.r:hover { background: var(--sel); }
 .hpanel .chap .dim { color: var(--ink2); }
 .hpanel .chap .d { color: var(--ink2); text-align: right; font-size: 13px; align-self: center; font-family: Figtree, sans-serif; }
 .hpanel .chap .nw { font: 700 10px Figtree, sans-serif; letter-spacing: .14em; color: var(--onseal); background: var(--seal); border-radius: 4px; padding: 2px 6px; margin-left: 8px; vertical-align: 2px; }
-.hpanel .foot2 { color: var(--ink3); font-size: 13px; margin-top: 28px; }
-.hpanel a.well { display: inline-block; text-decoration: none; }
-.hpanel .word { color: var(--accent); font-weight: 600; padding: 4px 0; }
 .hcont .t.sans { font-family: Figtree, sans-serif; }
 .hcont .k.ch { margin-top: 4px; font: 14px "Home Literata", Georgia, serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -425,12 +406,12 @@ button.r:hover { background: var(--sel); }
 .htools .icon.tool { width: 40px; height: 40px; border-radius: 50%; color: var(--ink); }
 .htools .icon.tool:hover { background: var(--raised); }
 .htools .icon.tool[aria-expanded="true"] { background: var(--well, var(--sel)); }
-/* Office's Aa in its sans. */
-.office .icon.aa { font: 600 16px Figtree, system-ui, sans-serif; letter-spacing: 0; }
+/* The sans face's Aa in its sans. */
+.t-sans .icon.aa { font: 600 16px Figtree, system-ui, sans-serif; letter-spacing: 0; }
 /* The panel opens over the page, which stays where it is (the user's pick, 2026-10-15). */
 /* Their panel at the right, over the page, like the Library's book panel (2026-10-16). */
 .rpanel { display: none; position: absolute; right: 0; top: 0; bottom: 0; z-index: 7; width: 420px; max-width: 100%; overflow-y: auto; background: var(--sheet, var(--raised)); border-left: 1px solid var(--rule); box-shadow: var(--shadow); }
-.office .rpanel { width: 380px; box-shadow: none; }
+.t-hairline .rpanel { width: 380px; box-shadow: none; }
 /* The › stays beside the page while a panel is open. */
 .app.panelopen .stage > .side:last-child { text-align: left; padding-left: 18px; }
 .app.panelopen .rpanel { display: block; }
@@ -472,24 +453,34 @@ button.r:hover { background: var(--sel); }
   --accent: #C9C9C9; --seal: #C9C9C9; --onseal: #121212; --cu-bg: transparent; --cu-fg: var(--ink3);
   --badge: rgba(18,18,18,.88); --shadow: 0 10px 30px rgba(0,0,0,.5);
 }
-.office .w { color: inherit; }
-/* The book's title in the bar: Office's sans, as the rest of its chrome. */
-/* Office's bar title steps back while reading: medium, smaller, the chapter's grey (2026-10-16). */
-.office .httl .bt { font: 500 15px Figtree, system-ui, sans-serif; color: var(--ink2); }
+/* Without the accent a title's first word is the title's colour. */
+.t-ink .w { color: inherit; }
+/* The sans face's bar title steps back while reading: medium, smaller, the chapter's grey (2026-10-16). */
+.t-sans .httl .bt { font: 500 15px Figtree, system-ui, sans-serif; color: var(--ink2); }
 /* Office's panels and Add books: no covers, the sans (2026-10-16). */
-.office .hpanel .cvb, .office .hpanel .scov, .office .hpanel .cv0 { display: none; }
-.office .hpanel h1 { font: 600 24px/1.25 Figtree, system-ui, sans-serif; margin-top: 8px; }
-/* Office's bar: a hairline under it, on every screen; the panels hang from it (2026-10-16). */
-.office .hhead { border-bottom: 1px solid var(--rule); height: 56px; padding: 0 16px 0 36px; }
-.office .hstatus { padding-top: 14px; }
-.office .hsearch { padding: 6px 14px; }
-/* Office's panels as a list of facts (P2, 2026-10-16): the title and its one button, label and value rows, quiet words at the foot. */
-.office .hpanel { width: 380px; box-shadow: none; border-left: 1px solid var(--rule); padding: 14px 26px 32px; font-size: 14px; }
-.office .hpanel .sec { margin-top: 22px; }
-.ophead { display: flex; align-items: baseline; gap: 12px; margin: 2px 0 16px; }
+/* The hairline surface: a line under the bar, on every screen; the panels hang from it (2026-10-16). Tight: the short bar. */
+.t-hairline .hhead { border-bottom: 1px solid var(--rule); }
+.t-tight .hhead { height: 56px; padding: 0 16px 0 36px; }
+.t-hairline .hstatus { padding-top: 14px; }
+.t-tight .hsearch { padding: 6px 14px; }
+/* The panels as a list of facts, in both styles (P2, then one layout, 2026-10-16): the title and its one button
+   (the cover beside them with covers), label and value rows, quiet words at the foot. */
+.t-hairline .hpanel { width: 380px; box-shadow: none; border-left: 1px solid var(--rule); padding: 14px 26px 32px; }
+.t-tight .hpanel { font-size: 14px; }
+.ophead { display: flex; align-items: flex-start; gap: 18px; margin: 2px 0 16px; }
+.opinfo { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 12px; }
 .opt { flex: 1; min-width: 0; font: 600 17px/1.3 Figtree, system-ui, sans-serif; }
+.t-serif .opt { font: 600 22px/1.2 "Home Literata", Georgia, serif; }
 .opbtn { flex: none; font-weight: 600; border: 1px solid var(--line); border-radius: 8px; padding: 5px 14px; }
 .opbtn:hover { background: var(--sel); }
+/* With the accent the one button is filled, as Home's buttons are. */
+.t-accent .opbtn { background: var(--seal); border-color: var(--seal); color: var(--onseal); border-radius: 12px; padding: 8px 18px; }
+.t-accent .opbtn:hover { background: var(--seal); filter: brightness(1.12); }
+/* With covers: the cover beside the title, the button under it. */
+.t-covers .opinfo { flex-direction: column; align-items: flex-start; gap: 14px; padding-top: 2px; }
+.t-covers .opt { flex: none; }
+.hpanel .ophead .cvb .cv { width: 84px; aspect-ratio: 2 / 3; margin: 0; --f: .55; }
+.hpanel .ophead .scov { position: relative; height: 120px; width: 112px; flex: none; }
 .opgrid { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px 14px; border-top: 1px solid var(--rule); padding-top: 14px; }
 .opgrid .pk { color: var(--ink3); }
 .opgrid .pv { line-height: 1.5; min-width: 0; overflow-wrap: anywhere; }
@@ -499,39 +490,32 @@ button.r:hover { background: var(--sel); }
 .opgrid .choice button { padding: 0; }
 .oplinks { display: flex; gap: 18px; margin-top: 22px; border-top: 1px solid var(--rule); padding-top: 14px; color: var(--ink2); }
 .oplinks a { color: inherit; text-decoration: none; }
-.office .hpanel .chap .nw { background: none; color: var(--ink); font: 500 12px Figtree, system-ui, sans-serif; letter-spacing: 0; padding: 0; margin-left: 8px; }
+.t-tight .hpanel .chap .nw { background: none; color: var(--ink); font: 500 12px Figtree, system-ui, sans-serif; letter-spacing: 0; padding: 0; margin-left: 8px; }
 .oplinks > *:hover { color: var(--ink); }
-.office .hpanel .chap, .office .addhead h2, .office .adddrop b { font-family: Figtree, system-ui, sans-serif; }
-.office .hzoom, .office .hviews { display: none; }
-.office .home .tag, .office .home .tag.new, .office .home .tag.cu { background: none; color: var(--ink2); font: 500 calc(14px * var(--f)) Figtree, sans-serif; letter-spacing: 0; padding: 0; }
-.office .home .tag.new { color: var(--ink); }
-.office .hadd { background: none; color: var(--ink2); padding: 4px 0; border-radius: 0; font-weight: 500; }
-.office .hadd:hover { color: var(--ink); }
-.office .toc .item .nw { background: none; color: var(--ink); text-transform: none; letter-spacing: 0; font: 500 12px Figtree, sans-serif; padding: 0; }
-.office .hpanel .seal { background: var(--ink); color: var(--bg); }
+.t-sans .hpanel .chap, .t-sans .addhead h2, .t-sans .adddrop b { font-family: Figtree, system-ui, sans-serif; }
+.t-oneview .hzoom, .t-oneview .hviews { display: none; }
+.t-tight .home .tag, .t-tight .home .tag.new, .t-tight .home .tag.cu { background: none; color: var(--ink2); font: 500 calc(14px * var(--f)) Figtree, sans-serif; letter-spacing: 0; padding: 0; }
+.t-tight .home .tag.new { color: var(--ink); }
+.t-tight .hadd { background: none; color: var(--ink2); padding: 4px 0; border-radius: 0; font-weight: 500; }
+.t-tight .hadd:hover { color: var(--ink); }
+.t-tight .toc .item .nw { background: none; color: var(--ink); text-transform: none; letter-spacing: 0; font: 500 12px Figtree, sans-serif; padding: 0; }
 /* Office's Continue: a small pill in the middle of the bar, on the Library and Serials pages (C1, 2026-10-16). */
 .hcont.pill { left: 50%; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: auto; max-width: min(460px, calc(100% - 2 * 380px)); border: 1px solid var(--line); border-radius: 18px; box-shadow: none; background: var(--raised); padding: 6px 16px; gap: 8px; align-items: baseline; font-size: 13px; z-index: 2; }
 .app.reader .hcont.pill { display: none; }
 /* Home on the black (2026-10-16): the pill, search and the panels are a lighter black with a faint edge. */
-#app.homeon .hcont.pill b { font: 600 15px "Home Literata", Georgia, serif; }
-#app.homeon .hcont.pill:hover { background: var(--well); }
-#app.homeon .hsearch { background: var(--raised); }
-#app.homeon .hpanel, #app.homeon .rpanel { top: 10px; right: 14px; bottom: 14px; width: 400px; max-width: calc(100% - 28px); border: 1px solid var(--rule); border-radius: 18px; box-shadow: none; background: var(--raised); }
-#app.homeon .hpanel { padding: 20px 26px 32px; }
+#app.t-serif .hcont.pill b { font: 600 15px "Home Literata", Georgia, serif; }
+#app.t-cards .hcont.pill:hover { background: var(--well); }
+#app.t-cards .hsearch { background: var(--raised); }
+#app.t-cards .hpanel, #app.t-cards .rpanel { top: 10px; right: 14px; bottom: 14px; width: 400px; max-width: calc(100% - 28px); border: 1px solid var(--rule); border-radius: 18px; box-shadow: none; background: var(--raised); }
+#app.t-cards .hpanel { padding: 20px 26px 32px; }
 /* A panel open (2026-10-16): the status line makes room for it, so the slider, the views and Add books
    stay in view; the books keep their size and place under it (a Details table makes room too, refitting
    its columns: half-hidden it can't be read). */
-#app.homeon { --panelw: 414px; }
-#app.office { --panelw: 380px; }
+#app.t-cards { --panelw: 414px; }
+#app.t-hairline { --panelw: 380px; }
 @media (min-width: 901px) {
   .home:has(> .hpanel.open) .hstatus, .home:has(> .hpanel.open) .hmain:has(> .tbl) { padding-right: calc(var(--panelw) + 36px); }
 }
-.hhero { display: flex; gap: 18px; align-items: flex-start; margin: 2px 0 4px; }
-.hhero .info { min-width: 0; padding-top: 4px; }
-.hhero h1 { font-size: 22px !important; line-height: 1.2 !important; }
-.hpanel .hhero .cvb .cv { width: 84px; margin: 0; --f: .55; }
-.hpanel .hhero .scov { height: 120px; width: 112px; margin: 0; flex: none; }
-.hpanel .hhero .scov .cv { width: 76px; margin: 0; }
 .hcont.pill .k { color: var(--ink2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .hcont.pill b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
 .hcont.pill .go { color: var(--ink); font-weight: 600; flex: none; margin-left: 4px; }
