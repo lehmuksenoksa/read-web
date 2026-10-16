@@ -14,7 +14,7 @@ const book = (id: string, title: string, more: Partial<LibraryBook> = {}): Libra
 const none: Facts = { progress: () => null, device: () => null };
 
 describe("Home's setup", () => {
-  it("reads an old setup file (no home) as Grid, Recent, the middle size and the first columns", () => {
+  it("reads an old setup file (no home) as Covers, Recent, the middle size and the first columns", () => {
     const setup = decodeSetup(JSON.stringify({ looks: [{ id: "office", name: "Office" }], lookId: "office" }));
     expect(setup.home).toEqual(DEFAULT_HOME);
     expect(shownColumns(setup.home.columns)).toEqual(["title", "author", "series", "num", "progress", "last", "on"]);
@@ -104,7 +104,7 @@ describe("Sorting", () => {
     expect(titles(detailsRows(books, { key: "title", reversed: false }, "mage", none))).toEqual(["Mage Tank 10", "Mage Tank 2"]);
   });
 
-  it("Grid groups a series; other sorts place it where its first book falls", () => {
+  it("Covers groups a series; other sorts place it where its first book falls", () => {
     const recent = homeItems(books, { key: "last", reversed: false }, "", true, none);
     expect(recent.map(i => (i.kind === "book" ? i.book.title : i.name))).toEqual(["Dracula", "Mage Tank", "Sherlock Holmes"]);
     const bySize = homeItems(books, { key: "size", reversed: false }, "", true, none);
@@ -183,7 +183,7 @@ describe("Details' columns in a narrow window (2026-10-16)", () => {
   });
 });
 
-describe("the curated Grid page", () => {
+describe("the curated Covers page", () => {
   const NOW = Date.parse("2026-10-16T12:00:00Z");
   const days = (n: number) => new Date(NOW - n * 86_400_000).toISOString();
   const lib = [

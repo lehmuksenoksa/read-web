@@ -28,7 +28,7 @@ test("Office: the Library, a book, Contents, the place saved", async ({ page }) 
   expect(dropbox.errors).toEqual([]);
 });
 
-test("Home: Grid, Serials, a serial read, the place saved", async ({ page }) => {
+test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) => {
   const dropbox = await standIn(page, true);
   await page.goto("./");
   // The curated page (2026-10-16): Reading now is the book in progress; Katabasis, never opened, is

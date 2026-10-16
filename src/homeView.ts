@@ -1,4 +1,4 @@
-// Home: the full Library (WEB.md → Home, agreed 2026-10-15): Grid and Details (Cards went 2026-10-16), a book's or a
+// Home: the full Library (WEB.md → Home, agreed 2026-10-15): Covers and Details (Cards went 2026-10-16), a book's or a
 // series' panel at the right, the size control, Details' columns and Continue. The data and the
 // actions (the book menu, Edit details, opening a book) are the page's own, passed in.
 
@@ -655,7 +655,7 @@ export function createHome(ctx: HomeContext): {
     main.style.setProperty("--f", String(textScale(z)));
     main.className = `hmain v-${view}`;
     // The status line: the count, the sort's name, Series grouped (not in Details).
-    // Grid without a search or Hidden is the curated page (2026-10-16): its All has its own sort.
+    // Covers without a search or Hidden is the curated page (2026-10-16): its All has its own sort.
     const curated = view === "grid" && !query.trim() && !ctx.showHidden();
     const listSort = curated ? hs.gridSort : sort;
     const sortName = column(listSort.key).sortName + (listSort.reversed ? " ▴" : "");
@@ -703,7 +703,7 @@ export function createHome(ctx: HomeContext): {
     renderContinue();
     renderPanel();
   };
-  // --- The curated Grid page (WEB.md → Home; agreed from mockups 2026-10-16) ---
+  // --- The curated Covers page (WEB.md → Home; agreed from mockups 2026-10-16) ---
 
   /**
    * Reading now's cover as tall as a whole book beside it, cover to bar or date (the user, 2026-10-16):

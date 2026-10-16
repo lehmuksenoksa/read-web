@@ -28,7 +28,7 @@ export function toggleAll(selection: Selection, visible: string[]): Selection {
   return selection.ids.length ? NO_SELECTION : { ids: [...visible], anchor: selection.anchor };
 }
 
-/** The selection with the rows no longer shown dropped (a search typed, Hidden switched, Grid). */
+/** The selection with the rows no longer shown dropped (a search typed, Hidden switched, Covers). */
 export function pruneSelection(selection: Selection, visible: string[]): Selection {
   const ids = selection.ids.filter(id => visible.includes(id));
   if (ids.length === selection.ids.length) return selection;

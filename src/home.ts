@@ -11,7 +11,7 @@ export function viewFor<V extends string>(view: V, home: boolean): V | "details"
 }
 
 export const BOOK_VIEWS: { view: BookView; name: string }[] = [
-  { view: "grid", name: "Grid" }, { view: "details", name: "Details" },
+  { view: "grid", name: "Covers" }, { view: "details", name: "Details" },
 ];
 
 export type ColumnKey = "cover" | "title" | "author" | "series" | "num" | "progress" | "last" | "on" | "added" | "size";
@@ -82,9 +82,9 @@ export interface HomeSetup {
   tab: "books" | "serials";
   serials: SerialsSetup;
   view: BookView;
-  /** Details' sort (and Grid's when it shows plain matches). */
+  /** Details' sort (and Covers' when it shows plain matches). */
   sort: HomeSort;
-  /** The curated Grid page's All (2026-10-16): its own sort, Title to start with. */
+  /** The curated Covers page's All (2026-10-16): its own sort, Title to start with. */
   gridSort: HomeSort;
   /** The size step per view: 0 to 4, 2 the middle. */
   sizes: Record<BookView, number>;
@@ -254,7 +254,7 @@ export function detailsRows(books: LibraryBook[], sort: HomeSort, query: string,
 }
 
 /**
- * Grid: the books found and sorted, a series of two or more books as one item when
+ * Covers: the books found and sorted, a series of two or more books as one item when
  * [group]. The menu's sorts place a series as the sidebar does; the others where its first book falls.
  */
 export function homeItems(books: LibraryBook[], sort: HomeSort, query: string, group: boolean, facts: Facts): LibraryItem[] {
@@ -326,7 +326,7 @@ export function megabytes(bytes: number | null | undefined): string {
   return bytes == null ? "" : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// --- The curated Grid page (WEB.md → Home; agreed from mockups 2026-10-16) ---
+// --- The curated Covers page (WEB.md → Home; agreed from mockups 2026-10-16) ---
 
 /** Recently added: books added within this many days that haven't been started. */
 export const RECENT_DAYS = 60;
