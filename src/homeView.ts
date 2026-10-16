@@ -14,6 +14,7 @@ import {
 import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
 import { lastReadBook, type LibraryBook, type LibraryItem, type Place, type SortBy } from "./library";
 import type { Chrome, Setup } from "./looks";
+import { NO_SELECTION, pruneSelection, toggleAll, toggleRow, type Selection } from "./select";
 import { h, icon, ICONS, type Child } from "./ui";
 import { WORDMARK_BASELINE, wordmark } from "./wordmark";
 
@@ -37,6 +38,12 @@ export interface HomeContext {
   markUnread(book: LibraryBook): void;
   setHidden(book: LibraryBook, hidden: boolean): void;
   edit(book: LibraryBook): void;
+  /** The selection's actions (Details, 2026-10-16): the same marks for every ticked book, one message. */
+  setReadMany(books: LibraryBook[], read: true | null): void;
+  markUnreadMany(books: LibraryBook[]): void;
+  setHiddenMany(books: LibraryBook[], hidden: boolean): void;
+  /** Set details… for the ticked books: a series and an author for them all. */
+  setDetails(books: LibraryBook[]): void;
   signOut(): void;
   offline(): boolean;
   /** Home (true) or Office (false): this browser's choice, in ⚙. */
@@ -122,6 +129,9 @@ export function createHome(ctx: HomeContext): {
   let menuOpen: HTMLElement | null = null;
   /** The panel's book, series or serial; null when closed. */
   let panelFor: { book: LibraryBook } | { series: LibraryBook[] } | { serial: string } | null = null;
+  /** The ticked Details rows (WEB.md → Multi-select); only what's shown counts, so a search or Hidden prunes it. */
+  let selected: Selection = NO_SELECTION;
+  let visibleIds: string[] = [];
 
   /** Office: the same Library, quieter (WEB.md → One app, 2026-10-15): Details only, plain words. */
   const quiet = () => !ctx.isHome();
@@ -161,7 +171,9 @@ export function createHome(ctx: HomeContext): {
   const zoomMore = h("button", { class: "zb", title: "Larger", "aria-label": "Larger" });
   const views = h("div", { class: "hviews", role: "tablist" });
   const addButton = h("button", { class: "hadd" });
-  const status = h("div", { class: "hstatus" }, count, h("span", { class: "grow" }), h("div", { class: "hzoom" }, zoomLess, zoom, zoomMore), views, addButton);
+  // The selection's line, in the count's place while rows are ticked (2026-10-16).
+  const selBar = h("div", { class: "hsel", hidden: true });
+  const status = h("div", { class: "hstatus" }, count, selBar, h("span", { class: "grow" }), h("div", { class: "hzoom" }, zoomLess, zoom, zoomMore), views, addButton);
   const main = h("main", { class: "hmain" });
   const cont = h("button", { class: "hcont", hidden: true });
   const panel = h("aside", { class: "hpanel", "aria-label": "Book" });
@@ -343,8 +355,10 @@ export function createHome(ctx: HomeContext): {
     // A narrow window: the less important columns go until the rest fit (2026-10-16).
     const cols = fitColumns(shownColumns(home().columns).filter(k => !quiet() || k !== "cover"), k => BOOK_LEAST[k] + 24, tableRoom(), ["size", "added", "on", "cover", "num", "series", "last", "progress", "author"]);
     const sort = home().sort;
-    const table = h("div", { class: "tbl", role: "table", style: `grid-template-columns:${cols.map(widthOf).join(" ")} 40px` });
+    const table = h("div", { class: `tbl${selected.ids.length ? " selecting" : ""}`, role: "table", style: `grid-template-columns:28px ${cols.map(widthOf).join(" ")} 40px` });
+    const allBox = h("input", { type: "checkbox", "aria-label": "Select all", onclick: (e: Event) => { e.stopPropagation(); select(toggleAll(selected, visibleIds)); } });
     const headings = h("div", { class: "tr hd", role: "row" },
+      h("div", { class: "th chk", role: "columnheader" }, allBox),
       ...cols.map(key => {
         const c = column(key);
         const on = sort.key === key;
@@ -359,10 +373,57 @@ export function createHome(ctx: HomeContext): {
     dragColumns(headings);
     table.append(headings);
     for (const b of list) {
-      table.append(h("div", { class: `tr${panelFor && "book" in panelFor && panelFor.book.id === b.id ? " on" : ""}`, role: "row", "data-id": b.id, onclick: () => openBook(b) },
-        ...cols.map(key => cell(b, key)), h("div", { class: "td" })));
+      const on = selected.ids.includes(b.id);
+      const box = h("input", { type: "checkbox", "aria-label": `Select ${b.title}`, onclick: (e: Event) => { e.stopPropagation(); select(toggleRow(selected, b.id, visibleIds, (e as MouseEvent).shiftKey)); } });
+      box.checked = on;
+      table.append(h("div", { class: `tr${panelFor && "book" in panelFor && panelFor.book.id === b.id ? " on" : ""}${on ? " sel" : ""}`, role: "row", "data-id": b.id, onclick: () => openBook(b) },
+        h("div", { class: "td chk", onclick: (e: Event) => { e.stopPropagation(); box.click(); } }, box), ...cols.map(key => cell(b, key)), h("div", { class: "td" })));
     }
+    applySelection(table);
     return table;
+  };
+
+  // --- The selection (2026-10-16): the boxes' state and the line of actions in the status row ---
+
+  /** The ticked rows' boxes and highlight, and the heading's box (all, some, none), without drawing the table again. */
+  const applySelection = (table: Element | null = main.querySelector(".tbl")) => {
+    if (!table) return;
+    const n = selected.ids.length;
+    table.classList.toggle("selecting", n > 0);
+    table.querySelectorAll<HTMLElement>(".tr[data-id]").forEach(row => {
+      const on = selected.ids.includes(row.dataset.id!);
+      row.classList.toggle("sel", on);
+      const box = row.querySelector<HTMLInputElement>(".chk input");
+      if (box) box.checked = on;
+    });
+    const all = table.querySelector<HTMLInputElement>(".hd .chk input");
+    if (all) {
+      all.checked = n > 0 && visibleIds.every(id => selected.ids.includes(id));
+      all.indeterminate = n > 0 && !all.checked;
+    }
+    renderSelBar();
+  };
+  const select = (next: Selection) => {
+    selected = next;
+    applySelection();
+  };
+  const clearSelection = () => select(NO_SELECTION);
+  const selectedBooks = () => { const all = ctx.books(); return selected.ids.map(id => all.find(b => b.id === id)).filter((b): b is LibraryBook => b != null); };
+  /** "3 selected · Mark as read · Mark as unread · Automatic · Hide · Set details… · Clear", in the count's place. */
+  const renderSelBar = () => {
+    const n = selected.ids.length;
+    selBar.hidden = n === 0;
+    count.hidden = n > 0;
+    if (!n) return;
+    const act = (name: string, run: () => void) => h("button", { onclick: run }, name);
+    selBar.replaceChildren(
+      h("b", {}, `${n} selected`),
+      act("Mark as read", () => ctx.setReadMany(selectedBooks(), true)),
+      act("Mark as unread", () => ctx.markUnreadMany(selectedBooks())),
+      act("Automatic", () => ctx.setReadMany(selectedBooks(), null)),
+      act(ctx.showHidden() ? "Unhide" : "Hide", () => ctx.setHiddenMany(selectedBooks(), !ctx.showHidden())),
+      act("Set details…", () => ctx.setDetails(selectedBooks())),
+      act("Clear", clearSelection));
   };
 
   /** Each column's least width (the minmax minimum, or its fixed width), for fitting a narrow window. */
@@ -372,7 +433,7 @@ export function createHome(ctx: HomeContext): {
   const tableRoom = () => {
     if (!main.clientWidth) return Infinity;
     const cs = getComputedStyle(main);
-    return main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 40;
+    return main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 40 - 28;
   };
   const widthOf = (key: ColumnKey) => ({
     cover: "calc(36px*var(--z))", title: "minmax(220px,2.2fr)", author: "minmax(140px,1.3fr)", series: "minmax(140px,1.2fr)",
@@ -562,7 +623,12 @@ export function createHome(ctx: HomeContext): {
     // Continue is a small pill in the middle of the bar (Office's C1, then Home's too, 2026-10-16).
     cont.classList.add("pill");
     if (cont.parentElement !== header) header.append(cont);
-    if (onSerials()) return renderSerials(columnsOpen);
+    if (onSerials()) {
+      visibleIds = [];
+      selected = NO_SELECTION;
+      renderSelBar();
+      return renderSerials(columnsOpen);
+    }
     count.classList.remove("plain");
     const hs = home();
     // Office: Details only.
@@ -576,6 +642,8 @@ export function createHome(ctx: HomeContext): {
     // The status line: the count, the sort's name, Series grouped (not in Details).
     const sortName = column(sort.key).sortName + (sort.reversed ? " ▴" : "");
     const shown = view === "details" ? detailsRows(all, sort, query, facts) : null;
+    visibleIds = shown ? shown.map(b => b.id) : [];
+    selected = pruneSelection(selected, visibleIds);
     const items = view === "details" ? null : homeItems(all, sort, query, ctx.setup().groupSeries, facts);
     const n = shown ? shown.length : items!.reduce((k, i) => k + (i.kind === "book" ? 1 : i.books.length), 0);
     const what = ctx.showHidden() ? `${n} hidden` : query.trim() ? `${n} found` : `${n} books`;
@@ -601,7 +669,9 @@ export function createHome(ctx: HomeContext): {
     } else {
       const box = h("div", { class: "grid" }, ...items!.map(gridItem));
       main.replaceChildren(items!.length ? box : empty());
+      renderSelBar();
     }
+    if (shown && !shown.length) renderSelBar();
     // Details' rows have no box of their own (display: contents): their first cell is watched.
     main.querySelectorAll<HTMLElement>("[data-id]").forEach(x => { if (ctx.progress(x.dataset.id!) == null) seen.observe(x.classList.contains("tr") ? x.firstElementChild! : x); });
     const anchor = columnsOpen ? main.querySelector<HTMLElement>(".colbtn button") : null;
@@ -896,12 +966,13 @@ export function createHome(ctx: HomeContext): {
   el.addEventListener("click", e => {
     const path = e.composedPath();
     if (!panelFor || path.includes(panel)) return;
-    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark") || x.closest(".bookmenu, .dialog, .toast")))) return;
+    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark, .hsel") || x.closest(".bookmenu, .dialog, .toast")))) return;
     closePanel();
   });
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape" || !el.isConnected) return;
     if (menuOpen) closeMenu();
+    else if (el.offsetParent && selected.ids.length) clearSelection();
     else if (el.offsetParent) closePanel();
   });
 

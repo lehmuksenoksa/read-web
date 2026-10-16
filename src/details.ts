@@ -50,3 +50,37 @@ export function parseNumber(text: string): number | null {
   const n = Number(t);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
+
+/** What a selection's Set details… changes: a series and/or an author for them all; a field left out keeps each book's own. */
+export interface ManyEdit {
+  series?: string;
+  author?: string;
+}
+
+/** A book's details as the Library shows them, for an entry the details file doesn't have yet. */
+export interface DetailsBase {
+  title: string;
+  author: string | null;
+  series: string | null;
+  number: number | null;
+}
+
+/**
+ * The details file text with [edit] put on every book in [books] at [now], in one write. A book
+ * already in the file keeps its other details (its title, number and chosen cover); one not in it
+ * yet starts from what the Library shows, so nothing of it is lost on the phones.
+ */
+export function withDetailsMany(remote: string | null, books: Record<string, DetailsBase>, edit: ManyEdit, now: number): string {
+  const file = parseDetails(remote);
+  const books2 = { ...file.books };
+  for (const [id, base] of Object.entries(books)) {
+    const before = file.books[id] ?? { title: base.title, author: base.author, series: base.series, number: base.number, coverUrl: null };
+    books2[id] = {
+      ...before,
+      ...(edit.series !== undefined ? { series: edit.series } : {}),
+      ...(edit.author !== undefined ? { author: edit.author } : {}),
+      updatedAt: now,
+    };
+  }
+  return JSON.stringify({ ...file, books: books2, version: file.version ?? 1 });
+}

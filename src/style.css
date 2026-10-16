@@ -251,6 +251,22 @@ button.r:hover { background: var(--sel); }
 .home .td .prog { display: flex; align-items: center; gap: 12px; width: 100%; }
 .home .td .prog .pl { flex: 1; }
 .home .td .pc { color: var(--ink2); min-width: 40px; text-align: right; }
+/* Multi-select (2026-10-16): a box at the left of each row, shown on hover and while anything is ticked. */
+.home .td.chk, .home .th.chk { padding: 0; justify-content: flex-start; cursor: default; }
+.home .th.chk { align-items: flex-start; }
+.home .chk input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; opacity: 0; transition: opacity .12s; }
+.home .th.chk input { margin-top: 1px; }
+.home .tr:hover > .chk input, .home .tbl:hover > .hd > .chk input, .home .tbl.selecting .chk input, .home .tr.sel > .chk input { opacity: 1; }
+.home .tr.sel > .td { background: var(--raised); }
+.hsel { display: flex; align-items: center; min-width: 0; white-space: nowrap; }
+.hsel[hidden] { display: none; }
+.hsel b { font-weight: 600; color: var(--ink); }
+.hsel button { color: var(--ink2); padding: 4px 0; font: inherit; }
+.hsel button:hover { color: var(--ink); }
+.hsel > * + *::before { content: "·"; margin: 0 10px; color: var(--ink3); }
+.dialog .preview { list-style: none; margin: 14px 0 0; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 8px; font-size: 13px; color: var(--ink2); max-height: 200px; overflow: auto; }
+.dialog .preview li { padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dialog .preview li.more { color: var(--ink3); }
 .home .th.colbtn { justify-content: flex-end; cursor: default; }
 .home .th.colbtn button { width: 30px; height: 26px; margin-top: -6px; border-radius: 8px; color: var(--ink2); display: flex; align-items: center; justify-content: center; }
 .home .th.colbtn button:hover { background: var(--well); color: var(--ink); }
