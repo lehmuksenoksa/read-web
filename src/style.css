@@ -318,20 +318,6 @@ button.r:hover { background: var(--sel); }
 .hpanel .back:hover { color: var(--ink); }
 .hpanel .scov .cvb { position: absolute; top: 0; }
 .hpanel .scov .cv { width: 76px; aspect-ratio: 2 / 3; margin: 0; box-shadow: -6px 0 14px rgba(0,0,0,.35); }
-.hpanel .sec { margin-top: 22px; padding: 0; display: block; }
-.hpanel h3 { font: 600 12px Figtree, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--ink3); margin-bottom: 10px; }
-.hpanel .choice { display: flex; gap: 16px; }
-.hpanel .choice button { color: var(--ink2); padding: 4px 0; }
-.hpanel .choice button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
-.hpanel .sbook { display: flex; gap: 14px; align-items: center; padding: 8px 6px; margin: 0 -6px; border-radius: 10px; width: calc(100% + 12px); text-align: left; }
-.hpanel .sbook:hover { background: var(--raised); }
-.hpanel .sbook .cv { width: 34px; height: 50px; border-radius: 3px; }
-.hpanel .sbi { flex: 1; min-width: 0; }
-.hpanel .sbt { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hpanel .sbn { color: var(--ink3); display: inline-block; min-width: 22px; font-variant-numeric: tabular-nums; }
-.hpanel .prog { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
-.hpanel .prog .pl { flex: 1; }
-.hpanel .pc { font-size: 13px; color: var(--ink2); min-width: 34px; text-align: right; }
 
 
 /* Add books (step 2): drop EPUBs on Home or the box, or choose them; a line per file. */
@@ -357,7 +343,6 @@ button.r:hover { background: var(--sel); }
 
 /* A serial's panel: the site, its chapters (each opens on the site), when a phone last checked. */
 .hpanel { --f: 1; }
-.hpanel .stline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--ink2); }
 .hpanel .chap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 14px; font: 15px "Home Literata", Georgia, serif; }
 .hpanel .chap a { color: var(--ink); text-decoration: none; }
 .hpanel .chap a:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -463,35 +448,10 @@ button.r:hover { background: var(--sel); }
 .t-tight .hhead { height: 56px; padding: 0 16px 0 36px; }
 .t-hairline .hstatus { padding-top: 14px; }
 .t-tight .hsearch { padding: 6px 14px; }
-/* The panels as a list of facts, in both styles (P2, then one layout, 2026-10-16): the title and its one button
-   (the cover beside them with covers), label and value rows, quiet words at the foot. */
+/* The panels hang from the hairline in the hairline surface (2026-10-16). */
 .t-hairline .hpanel { width: 380px; box-shadow: none; border-left: 1px solid var(--rule); padding: 14px 26px 32px; }
 .t-tight .hpanel { font-size: 14px; }
-.ophead { display: flex; align-items: flex-start; gap: 18px; margin: 2px 0 16px; }
-.opinfo { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 12px; }
-.opt { flex: 1; min-width: 0; font: 600 17px/1.3 Figtree, system-ui, sans-serif; }
-.t-serif .opt { font: 600 22px/1.2 "Home Literata", Georgia, serif; }
-.opbtn { flex: none; font-weight: 600; border: 1px solid var(--line); border-radius: 8px; padding: 5px 14px; }
-.opbtn:hover { background: var(--sel); }
-/* With the accent the one button is filled, as Home's buttons are. */
-.t-accent .opbtn { background: var(--seal); border-color: var(--seal); color: var(--onseal); border-radius: 12px; padding: 8px 18px; }
-.t-accent .opbtn:hover { background: var(--seal); filter: brightness(1.12); }
-/* With covers: the cover beside the title, the button under it. */
-.t-covers .opinfo { flex-direction: column; align-items: flex-start; gap: 14px; padding-top: 2px; }
-.t-covers .opt { flex: none; }
-.hpanel .ophead .cvb .cv { width: 84px; aspect-ratio: 2 / 3; margin: 0; --f: .55; }
-.hpanel .ophead .scov { position: relative; height: 120px; width: 112px; flex: none; }
-.opgrid { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px 14px; border-top: 1px solid var(--rule); padding-top: 14px; }
-.opgrid .pk { color: var(--ink3); }
-.opgrid .pv { line-height: 1.5; min-width: 0; overflow-wrap: anywhere; }
-.opgrid .pv a { color: var(--ink); text-decoration: none; }
-.opgrid .pv a:hover { text-decoration: underline; text-underline-offset: 3px; }
-.opgrid .choice { gap: 12px; }
-.opgrid .choice button { padding: 0; }
-.oplinks { display: flex; gap: 18px; margin-top: 22px; border-top: 1px solid var(--rule); padding-top: 14px; color: var(--ink2); }
-.oplinks a { color: inherit; text-decoration: none; }
 .t-tight .hpanel .chap .nw { background: none; color: var(--ink); font: 500 12px Figtree, system-ui, sans-serif; letter-spacing: 0; padding: 0; margin-left: 8px; }
-.oplinks > *:hover { color: var(--ink); }
 .t-sans .hpanel .chap, .t-sans .addhead h2, .t-sans .adddrop b { font-family: Figtree, system-ui, sans-serif; }
 .t-oneview .hzoom, .t-oneview .hviews { display: none; }
 .t-tight .home .tag, .t-tight .home .tag.new, .t-tight .home .tag.cu { background: none; color: var(--ink2); font: 500 calc(14px * var(--f)) Figtree, sans-serif; letter-spacing: 0; padding: 0; }
@@ -524,3 +484,60 @@ button.r:hover { background: var(--sel); }
 @media (max-width: 1100px) {
   .hcont.pill { position: fixed; top: auto; bottom: 18px; transform: translateX(-50%); max-width: calc(100% - 32px); box-shadow: var(--shadow); background: var(--ground); }
 }
+
+/* The panels (agreed from mockups, 2026-10-16): the details together and editable in place, one line for
+   where you are over a bar, one button and one status word, the fine print. Three text styles: the title,
+   the body, the fine print. The tokens make Office's: no cover, the sans, ink only, a little tighter. */
+.bp { padding-top: 2px; }
+.bp-hero { display: flex; gap: 20px; align-items: flex-start; }
+.bp-hero .cvb .cv { width: 92px; aspect-ratio: 2 / 3; margin: 0; border-radius: 4px; --f: .6; }
+.bp-hero .scov { position: relative; height: 138px; width: 120px; flex: none; }
+.bp-hero .scov .cv { width: 84px; }
+.bp-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
+.bp-ed { border-radius: 6px; margin: 0 -6px; padding: 1px 6px; align-self: flex-start; max-width: calc(100% + 12px); cursor: text; overflow-wrap: anywhere; }
+.bp-ed:hover, .bp-ed:focus-visible { background: var(--well); outline: none; }
+.bp-ed.still { cursor: default; }
+.bp-ed.still:hover { background: none; }
+.bp-ed.empty { color: var(--ink3); }
+.bp-title { font: 600 24px/1.2 "Home Literata", Georgia, serif; margin-bottom: 4px; }
+.bp-by { color: var(--ink2); }
+.bp-sub { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.bp-site { color: var(--ink3); white-space: nowrap; }
+.bp-edit { display: flex; gap: 6px; margin: 0 -6px; width: calc(100% + 12px); }
+.bp-edit.bp-title { margin-bottom: 4px; }
+.bp-in { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; outline: none; }
+.bp-in.num { flex: 0 0 56px; }
+.bp-prog { margin-top: 30px; }
+.bp-line .bp-l { flex: none; }
+.bp-line { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; width: 100%; padding: 0 0 8px; text-align: left; color: var(--ink); }
+.bp-line .bp-r { color: var(--ink2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-line .chev { font-size: 12px; color: var(--ink3); margin-left: 8px; }
+button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
+.bp-bar { display: block; height: 3px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+.bp-bar i { display: block; height: 100%; background: var(--accent); }
+.bp-devs { display: grid; grid-template-columns: auto auto 1fr auto; gap: 6px 16px; margin-top: 14px; color: var(--ink2); }
+.bp-dev { display: contents; }
+.bp-dev .n { font-variant-numeric: tabular-nums; }
+.bp-dev .c { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-dev .w { color: var(--ink3); white-space: nowrap; }
+.bp-acts { display: flex; align-items: center; gap: 22px; margin-top: 24px; }
+.bp-go { background: var(--seal); color: var(--onseal); border-radius: 12px; padding: 9px 20px; font-weight: 600; }
+.bp-go:hover { filter: brightness(1.12); }
+.bp-word { color: var(--ink2); text-decoration: none; }
+.bp-word:hover { color: var(--ink); }
+.bp-fine { margin-top: 32px; color: var(--ink3); font-size: 13px; overflow-wrap: anywhere; }
+.bp-chaps { margin-top: 30px; }
+.bp-books { margin-top: 30px; display: grid; grid-template-columns: auto 1fr auto; }
+.bp-book { display: contents; text-align: left; color: var(--ink); }
+.bp-book > span { padding: 7px 0; }
+.bp-book .n { color: var(--ink3); padding-right: 14px; font-variant-numeric: tabular-nums; }
+.bp-book .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-book .p { color: var(--ink2); padding-left: 14px; font-variant-numeric: tabular-nums; }
+.bp-book:hover .t { text-decoration: underline; text-underline-offset: 3px; }
+.t-sans .bp-title { font: 600 20px/1.25 Figtree, system-ui, sans-serif; }
+.t-ink .bp-go { background: none; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 16px; }
+.t-ink .bp-go:hover { background: var(--sel); filter: none; }
+.t-tight .bp-prog { margin-top: 24px; }
+.t-tight .bp-acts { margin-top: 20px; }
+.t-tight .bp-chaps, .t-tight .bp-books { margin-top: 24px; }
+.t-tight .bp-fine { margin-top: 26px; }

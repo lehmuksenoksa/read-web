@@ -11,8 +11,8 @@ test("Office: the Library, a book, Contents, the place saved", async ({ page }) 
   await expect(page.locator(".hhead > .hcont")).toContainText("Continue");
   // The book's panel, as a list of facts, then the book (the row's title cell: the first cell is its select box).
   await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(2)`);
-  await expect(page.locator(".hpanel .opt")).toHaveText("Emma");
-  await page.click(".hpanel .opbtn");
+  await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
+  await page.click(".hpanel .bp-go");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
   await expect(page.locator(".httl .bt")).toHaveText("Emma");
   // Contents beside ⚙, its panel at the right.
@@ -35,7 +35,7 @@ test("Home: Grid, Serials, a serial read, the place saved", async ({ page }) => 
   await page.click(".hmark .ser");
   await expect(page.locator(".scard")).toHaveCount(1);
   await page.click(`.scard[data-sid="${SERIAL}"]`);
-  await page.click(".hpanel .opbtn");
+  await page.click(".hpanel .bp-go");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Paragraph 1.");
   await expect(page.locator(".httl .pl2")).toContainText("unread");
   for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowRight");
@@ -78,7 +78,7 @@ test("Office: two rows ticked, Set details… puts the series on both in one wri
   expect(await page.evaluate(() => window.getSelection()?.toString() ?? "")).toBe("");
   // The plain click still opens the panel, with the selection kept.
   await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(2)`);
-  await expect(page.locator(".hpanel .opt")).toHaveText("Emma");
+  await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
   await expect(page.locator(".home .tr.sel")).toHaveCount(2);
   await page.click(".hsel button:text('Set details…')");
   const series = page.locator('.dialog input[aria-label="Series"]');
@@ -94,5 +94,36 @@ test("Office: two rows ticked, Set details… puts the series on both in one wri
   // Esc clears the selection.
   await page.keyboard.press("Escape");
   await expect(page.locator(".hsel")).toBeHidden();
+  expect(dropbox.errors).toEqual([]);
+});
+
+test("Office: the book's panel: the title edited in place, the devices, Mark as read", async ({ page }) => {
+  const dropbox = await standIn(page, false);
+  await page.goto("./");
+  await expect(page.locator(`.home .tr[data-id="${EMMA}"]`)).toContainText("43%");
+  await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(2)`);
+  // One line: the furthest place; a click shows the devices.
+  await expect(page.locator(".hpanel .bp-line .bp-l")).toHaveText("43%");
+  await page.click(".hpanel button.bp-line");
+  await expect(page.locator(".hpanel .bp-dev")).toHaveCount(1);
+  await expect(page.locator(".hpanel .bp-dev")).toContainText("S23");
+  // The title edited in place: Enter saves it to the shared details file.
+  await page.click(".hpanel .bp-title");
+  await page.fill(".hpanel .bp-edit input", "Emma, Revised");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => dropbox.uploads.find(u => u.path === "/Apps/Read/Sync/details.json")?.text ?? "").toContain("Emma, Revised");
+  await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma, Revised");
+  // Esc puts a field back, saves nothing and leaves the panel open.
+  await page.locator(".hpanel .bp-by").first().click();
+  await page.fill(".hpanel .bp-edit input", "Nobody");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".hpanel .bp-by").first()).toHaveText("Jane Austen");
+  await expect(page.locator(".hpanel")).toHaveClass(/open/);
+  // The one status word: Mark as read.
+  await page.click(".hpanel .bp-word");
+  await expect(page.locator(".hpanel .bp-line .bp-l")).toHaveText("Read");
+  await expect(page.locator(".hpanel .bp-word")).toHaveText("Mark as unread");
+  await expect.poll(() => dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/${EMMA}.json` && u.text.includes('"read":true'))).toBe(true);
+  expect(dropbox.uploads.filter(u => u.path === "/Apps/Read/Sync/details.json").some(u => u.text.includes("Nobody"))).toBe(false);
   expect(dropbox.errors).toEqual([]);
 });

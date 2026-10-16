@@ -1,7 +1,7 @@
 import "./style.css";
 import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
-import { parseDetails, parseNumber, withDetails, withDetailsMany, type BookDetails, type DetailsBase } from "./details";
+import { parseDetails, parseNumber, withDetails, withDetailsMany, type BookDetails, type DetailsBase, type DetailsEdit } from "./details";
 import { Dropbox, RevConflict } from "./dropbox";
 import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
 import { createHome } from "./homeView";
@@ -283,9 +283,12 @@ async function showApp() {
   const failed = () => tell("Couldn't reach Dropbox. Try again in a moment.");
 
   /** Mark as read (true) or Automatic (null): here at once, then in the sync file. */
-  const setRead = async (book: LibraryBook, read: true | null) => {
+  const setRead = async (book: LibraryBook, read: true | null, undo = false) => {
+    const before = newer(marks[book.id]?.read, syncMarks.get(book.id)?.read);
     const change: Marks = { read: { read, updatedAt: Date.now() } };
     setMarks(book.id, change);
+    // From the panel: one message with Undo, back to the mark it had (2026-10-16).
+    if (undo) tell(`Marked “${book.title}” read`, () => void setRead(book, before?.read === true ? true : null));
     await writeMarks(book.id, change).catch(failed);
   };
 
@@ -470,6 +473,15 @@ async function showApp() {
         number: parseNumber(numberIn.value),
       };
       close();
+      await saveDetails(book, edit);
+    });
+    root.append(dialog);
+    titleIn.focus();
+    titleIn.select();
+  };
+
+  /** A book's or serial's details into the shared details file (the newer edit wins per book): here at once, back if Dropbox refuses. */
+  const saveDetails = async (book: LibraryBook, edit: DetailsEdit) => {
       const before = books.find(b => b.id === book.id);
       const detailsBefore = detailsNow;
       books = books.map(b => (b.id === book.id ? { ...b, title: edit.title, author: edit.author, series: edit.series, seriesIndex: edit.number } : b));
@@ -492,10 +504,6 @@ async function showApp() {
         render();
         failed();
       }
-    });
-    root.append(dialog);
-    titleIn.focus();
-    titleIn.select();
   };
 
   // --- The reader ---
@@ -756,6 +764,9 @@ async function showApp() {
     markUnread: book => markUnread(book),
     setHidden: (book, hidden) => void setHidden(book, hidden),
     edit: book => editDetails(book),
+    saveDetails: (book, edit) => void saveDetails(book, edit),
+    saveSerial: (x, title, author) => void saveDetails(serialAsBook(x), { title, author, series: null, number: null }),
+    markRead: book => void setRead(book, true, true),
     setReadMany: (list, read) => void setReadMany(list, read),
     markUnreadMany: list => markUnreadMany(list),
     setHiddenMany: (list, hidden) => void setHiddenMany(list, hidden),

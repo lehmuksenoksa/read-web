@@ -16,6 +16,8 @@ import { lastReadBook, type LibraryBook, type LibraryItem, type Place, type Sort
 import type { Chrome, Setup } from "./looks";
 import { NO_SELECTION, pruneSelection, toggleAll, toggleRow, type Selection } from "./select";
 import { styleFor } from "./styleTokens";
+import { parseNumber, type DetailsEdit } from "./details";
+import { bookState, furthestPlace, goLabel, seriesLine, statusAction } from "./panelState";
 import { h, icon, ICONS, type Child } from "./ui";
 import { WORDMARK_BASELINE, wordmark } from "./wordmark";
 
@@ -39,6 +41,11 @@ export interface HomeContext {
   markUnread(book: LibraryBook): void;
   setHidden(book: LibraryBook, hidden: boolean): void;
   edit(book: LibraryBook): void;
+  /** The panel's details edited in place (2026-10-16): into the shared details file, as Edit details does. */
+  saveDetails(book: LibraryBook, edit: DetailsEdit): void;
+  saveSerial(serial: Serial, title: string, author: string | null): void;
+  /** The panel's Mark as read: with a message and Undo. */
+  markRead(book: LibraryBook): void;
   /** The selection's actions (Details, 2026-10-16): the same marks for every ticked book, one message. */
   setReadMany(books: LibraryBook[], read: true | null): void;
   markUnreadMany(books: LibraryBook[]): void;
@@ -709,6 +716,7 @@ export function createHome(ctx: HomeContext): {
   // --- The panel ---
 
   const openBook = (b: LibraryBook) => {
+    if (!(panelFor && "book" in panelFor && panelFor.book.id === b.id)) devicesOpen = false;
     panelFor = { book: b };
     renderPanel();
     if (!ctx.places(b.id) && b.hasSyncFile) void ctx.load(b).then(() => { if (panelFor && "book" in panelFor && panelFor.book.id === b.id) renderPanel(); });
@@ -733,18 +741,59 @@ export function createHome(ctx: HomeContext): {
   };
   let fromSeries: LibraryBook[] | null = null;
 
-  // The panels, one layout in both styles (WEB.md → One app, two styles; Office's list of facts, 2026-10-16):
-  // the title with its one button (the cover beside them when the style shows covers), the facts as
-  // label and value rows, the rest as words at the foot.
-  const opHead = (title: string, action: HTMLElement | null, art: HTMLElement | null = null) =>
-    h("div", { class: "ophead" }, ...present(style().covers ? art : null, h("div", { class: "opinfo" }, h("div", { class: "opt" }, panelTitle(title)), action)));
-  const opButton = (name: string, action: () => void) => h("button", { class: "opbtn", onclick: action }, name);
-  const opGrid = (rows: [string, Child][]) => h("div", { class: "opgrid" },
-    ...rows.filter(([, v]) => v != null && v !== "").flatMap(([k, v]) => [h("div", { class: "pk" }, k), h("div", { class: "pv" }, v)]));
-  const opLinks = (...links: (HTMLElement | null)[]) => h("div", { class: "oplinks" }, ...present(...links));
+  // The panels (WEB.md → One app, two styles → the panels; agreed from mockups 2026-10-16), the same in
+  // both styles through the tokens: the details together and editable in place, one line for where you
+  // are over a bar, one button and one status word, then the fine print.
+
+  /** The device list under a book's line: open after a click on the line, until another book's panel. */
+  let devicesOpen = false;
+
+  /**
+   * Text that turns into fields on a click: Enter or a click away saves, Esc puts it back. [save] gets the
+   * fields' values; the panel is drawn again from the saved details.
+   */
+  const editable = (shown: Node | string, cls: string, fields: { value: string; label: string; cls?: string }[], save: (values: string[]) => void) => {
+    const empty = typeof shown === "string" && !shown;
+    const text = h("span", { class: `bp-ed ${cls}${empty ? " empty" : ""}`, role: "button", tabindex: "0", title: "Click to edit" }, empty ? fields.map(f => f.label).join(" · ") : shown);
+    const start = () => {
+      const inputs = fields.map(f => h("input", { class: `bp-in${f.cls ? ` ${f.cls}` : ""}`, value: f.value, placeholder: f.label, "aria-label": f.label }));
+      const box = h("span", { class: `bp-edit ${cls}` }, ...inputs);
+      let done = false;
+      const finish = (keep: boolean) => {
+        if (done) return;
+        done = true;
+        const values = inputs.map(i => i.value.trim());
+        box.replaceWith(text);
+        if (keep && values.some((v, i) => v !== fields[i].value.trim())) save(values);
+      };
+      for (const input of inputs) {
+        input.addEventListener("keydown", e => {
+          if (e.key === "Enter") { e.preventDefault(); finish(true); }
+          else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+        });
+        // A click away saves; moving between the series and its number doesn't.
+        input.addEventListener("blur", () => window.setTimeout(() => { if (!box.contains(document.activeElement)) finish(true); }, 0));
+      }
+      text.replaceWith(box);
+      inputs[0].focus();
+      inputs[0].select();
+    };
+    text.addEventListener("click", start);
+    text.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); start(); } });
+    return text;
+  };
+  /** The line over the bar, and the bar: [fraction] 0..1. */
+  const lineAndBar = (row: HTMLElement, fraction: number, under: HTMLElement | null = null) =>
+    h("div", { class: "bp-prog" }, row, h("span", { class: "bp-bar" }, h("i", { style: `width:${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%` })), under);
+  const lineRow = (left: string, right: Child, tag: "div" | "button" = "div", attrs: Record<string, string> = {}) =>
+    h(tag, { class: `bp-line${tag === "div" ? " still" : ""}`, ...attrs }, h("span", { class: "bp-l" }, left), h("span", { class: "bp-r" }, right));
+  const hero = (art: HTMLElement | null, ...lines: (HTMLElement | null)[]) =>
+    h("div", { class: "bp-hero" }, ...present(style().covers ? art : null, h("div", { class: "bp-info" }, ...present(...lines))));
 
   const renderPanel = () => {
     if (!panelFor) return;
+    // Not while a field is being edited: the panel is drawn again once it's saved.
+    if (panel.querySelector(".bp-edit")) return;
     const top = h("div", { class: "top" });
     const closeButton = h("button", { class: "hicon", title: "Close", "aria-label": "Close", onclick: closePanel }, svgEl(CLOSE));
     if ("serial" in panelFor) {
@@ -753,51 +802,50 @@ export function createHome(ctx: HomeContext): {
       if (!x) return closePanel();
       top.append(h("span", { class: "grow" }), closeButton);
       const now = Date.now();
-      const updated = updatedLabel(x);
       const link = (c: { title: string; url: string }, cls = "") => h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", class: cls }, c.title);
       const rows = panelChapters(x);
       const chapters = rows.length ? h("div", { class: "chap" }, ...rows.flatMap(({ chapter: c, index }) => {
         const cls = [index === x.progress.currentIndex ? "cur" : "", x.progress.isRead(index) ? "read" : "", c.locked ? "locked" : ""].filter(Boolean).join(" ");
         return [h("span", {}, link(c, cls), x.progress.isNew(index) ? h("span", { class: "nw" }, badges() ? "NEW" : "new") : null), h("span", { class: "d" }, chapterDateLabel(c.published, now, true) ?? "")];
       })) : null;
-      const checked = x.checkedAt && x.device ? [`${ago(new Date(x.checkedAt).toISOString(), now)} on ${x.device}`, inDropbox(x)].filter(Boolean).join(" · ") : "No chapters from the phones yet.";
-      const readable = readingOrderOf(x.chapters).length > 0;
-      // The chapters' state: Home's badges (the tags stay as they are, 2026-10-16) or plain words.
-      const state: Child = badges()
-        ? h("span", { class: "stline" }, ...present(newTag(x), unreadTag(x)), updated ? h("span", {}, `updated ${updated}`) : null)
-        : [x.progress.newCount ? `${x.progress.newCount} new` : "", x.progress.unreadCount ? `${x.progress.unreadCount} unread` : x.caughtUp ? "Caught up" : "", updated ? `updated ${updated}` : ""].filter(Boolean).join(" · ");
-      panel.replaceChildren(...present(top,
-        opHead(x.title, readable ? opButton(x.current ? "Continue" : "Read", () => ctx.openSerial(x)) : null),
-        opGrid([
-          ["Author", bySite(x)],
-          ["Chapters", state],
-          ["Reading", x.chapters.length ? (x.current ? link(x.current) : "Not started") : null],
-          ["Checked", checked],
-        ]),
-        chapters ? h("div", { class: "sec" }, h("h3", {}, "Chapters"), chapters) : null,
-        opLinks(h("a", { href: x.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${x.site} ↗`), h("button", { onclick: () => ctx.editSerial(x) }, "Edit details…"))));
+      const checked = x.checkedAt && x.device ? [`Checked ${ago(new Date(x.checkedAt).toISOString(), now)} on ${x.device}`, inDropbox(x)].filter(Boolean).join(" · ") : "No chapters from the phones yet.";
+      const order = readingOrderOf(x.chapters);
+      const at = x.current ? order.findIndex(c => c.id === x.current!.id) + 1 : 0;
+      const unread = x.progress.unreadCount;
+      const left = x.current ? (x.current.title.match(/^(Chapter \d+[^:]*)/)?.[1] ?? x.current.title) : order.length ? "Not started" : "";
+      const right = x.caughtUp ? "Caught up" : unread ? `${unread} unread` : "";
+      panel.replaceChildren(...present(top, h("div", { class: "bp" },
+        hero(null,
+          editable(panelTitle(x.title), "bp-title", [{ value: x.title, label: "Title" }], ([title]) => { if (title) ctx.saveSerial(x, title, x.author); }),
+          h("div", { class: "bp-sub" },
+            editable(x.author ?? "", "bp-by", [{ value: x.author ?? "", label: "Author" }], ([author]) => ctx.saveSerial(x, x.title, author || null)),
+            h("span", { class: "bp-site" }, `· ${x.site}`))),
+        order.length ? lineAndBar(lineRow(left, right), order.length ? at / order.length : 0) : null,
+        h("div", { class: "bp-acts" },
+          order.length ? h("button", { class: "bp-go", onclick: () => ctx.openSerial(x) }, x.current ? "Continue" : "Read") : null,
+          h("a", { class: "bp-word", href: x.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${x.site} ↗`)),
+        chapters ? h("div", { class: "bp-chaps" }, chapters) : null,
+        h("div", { class: "bp-fine" }, checked))));
     } else if ("series" in panelFor) {
       fromSeries = panelFor.series;
       const ms = inOrder(panelFor.series.map(m => ctx.books().find(b => b.id === m.id) ?? m));
       const name = ms[0]?.series ?? "";
-      const read = ms.filter(m => m.read).length;
       const next = nextInSeries(ms, id => ctx.progress(id));
       top.append(h("span", { class: "grow" }), closeButton);
-      const nextName = next ? `${(ctx.progress(next.id) ?? 0) > 0 ? "Continue" : "Read"}${next.seriesIndex != null ? ` · Book ${next.seriesIndex}` : ""}` : "";
-      const bookRows = ms.map(m => {
-        const p = m.read ? 1 : ctx.progress(m.id) ?? 0;
-        return h("button", { class: "sbook", "data-id": m.id, onclick: () => { panelFor = { book: m }; renderPanel(); if (!ctx.places(m.id) && m.hasSyncFile) void ctx.load(m).then(renderPanel); } },
-          style().covers ? h("span", { class: "cv0" }, cover(m, false)) : null,
-          h("span", { class: "sbi" },
-            h("span", { class: "sbt" }, h("span", { class: "sbn" }, m.seriesIndex != null ? String(m.seriesIndex) : ""), m.title),
-            h("span", { class: "prog" }, h("span", { class: "pl" }, h("i", { style: `width:${Math.round(p * 100)}%` })), h("span", { class: "pc" }, m.read ? "Read" : p > 0 ? pct(p) : ""))));
-      });
+      const line = seriesLine(ms, next, id => ctx.progress(id));
       // The first covers small and fanned, beside the name.
       const fan = h("div", { class: "scov" }, ...ms.slice(0, 3).reverse().map((m, i, arr) => h("div", { class: "cvb", style: `left:${(arr.length - 1 - i) * 14}px` }, cover(m, true))));
-      panel.replaceChildren(...present(top,
-        opHead(name, next ? opButton(nextName, () => ctx.open(next)) : null, fan),
-        opGrid([["Author", ms.find(m => m.author)?.author ?? ""], ["Books", `${ms.length} books · ${read} read`]]),
-        h("div", { class: "sec" }, h("h3", {}, "Books"), ...bookRows)));
+      const bookRows = ms.map(m => {
+        const q = m.read ? 1 : ctx.progress(m.id) ?? 0;
+        return h("button", { class: "bp-book", "data-id": m.id, onclick: () => { devicesOpen = false; panelFor = { book: m }; renderPanel(); if (!ctx.places(m.id) && m.hasSyncFile) void ctx.load(m).then(renderPanel); } },
+          h("span", { class: "n" }, m.seriesIndex != null ? String(m.seriesIndex) : ""), h("span", { class: "t" }, m.title), h("span", { class: "p" }, m.read ? "Read" : q > 0 ? pct(q) : ""));
+      });
+      const nextP = next ? ctx.progress(next.id) ?? 0 : 0;
+      panel.replaceChildren(...present(top, h("div", { class: "bp" },
+        hero(fan, h("div", { class: "bp-ed bp-title still" }, panelTitle(name)), h("div", { class: "bp-sub" }, h("span", { class: "bp-by" }, ms.find(m => m.author)?.author ?? ""))),
+        line.left ? lineAndBar(lineRow(line.left, line.right), line.fraction) : null,
+        next ? h("div", { class: "bp-acts" }, h("button", { class: "bp-go", onclick: () => ctx.open(next) }, nextP > 0 ? "Continue" : "Read")) : null,
+        h("div", { class: "bp-books" }, ...bookRows))));
     } else {
       const b = ctx.books().find(x => x.id === (panelFor as { book: LibraryBook }).book.id) ?? panelFor.book;
       const inSeries = fromSeries?.some(m => m.id === b.id) ? fromSeries : null;
@@ -805,28 +853,37 @@ export function createHome(ctx: HomeContext): {
       else fromSeries = null;
       top.append(h("span", { class: "grow" }), closeButton);
       const places = ctx.places(b.id);
-      const mark = ctx.readMark(b);
-      const p = ctx.progress(b.id) ?? 0;
-      const choice = (name: string, on: boolean, action: () => void) => h("button", { class: on ? "on" : "", "aria-pressed": String(on), onclick: action }, name);
-      const status = h("div", { class: "choice" },
-        choice("Automatic", mark === "auto", () => ctx.setRead(b, null)),
-        choice("Read", mark === "read", () => ctx.setRead(b, true)),
-        choice("Unread", false, () => ctx.markUnread(b)));
+      const state = bookState(b.read, places, b.hasSyncFile);
       const file = [b.path, megabytes(b.size)].filter(Boolean).join(" · ");
-      const hide = h("button", { onclick: () => { closePanel(); ctx.setHidden(b, !b.hidden); } }, b.hidden ? "Unhide" : "Hide from the Library");
-      const where = places == null ? (b.hasSyncFile ? "…" : "Not started on any device.")
-        : places.length ? h("div", {}, ...places.map(pl => h("div", {}, [`${pl.device} ${Math.round(pl.p * 100)}%`, pl.chapter, ago(new Date(pl.at).toISOString(), Date.now())].filter(Boolean).join(" · "))))
-          : "Not started on any device.";
-      panel.replaceChildren(...present(top,
-        opHead(b.title, opButton(p > 0 && !b.read ? "Continue" : "Read", () => ctx.open(b)), h("div", { class: "cvb" }, cover(b, true))),
-        opGrid([
-          ["Author", b.author ?? ""],
-          ["Series", b.series ? `${b.series}${b.seriesIndex != null ? ` · ${b.seriesIndex}` : ""}` : ""],
-          ["Places", where],
-          ["Read status", status],
-          ["File", file],
-        ]),
-        opLinks(h("button", { onclick: () => ctx.edit(b) }, "Edit details…"), hide)));
+      const save = (change: Partial<DetailsEdit>) => ctx.saveDetails(b, { title: b.title, author: b.author, series: b.series, number: b.seriesIndex, ...change });
+      // The line: how far (the furthest device), or Read, or Not started; a click opens the devices.
+      const left = state.kind === "read" ? "Read" : state.kind === "started" ? pct(state.p) : state.kind === "loading" ? "…" : "Not started";
+      const far = places ? furthestPlace(places) : null;
+      const right = state.kind === "started" ? state.chapter ?? "" : "";
+      const hasDevices = (places?.length ?? 0) > 0;
+      const row = hasDevices
+        ? lineRow(left, h("span", {}, right, h("span", { class: "chev", "aria-hidden": "true" }, devicesOpen ? "⌃" : "⌄")), "button", { "aria-expanded": String(devicesOpen), title: "Devices" })
+        : lineRow(left, right);
+      if (hasDevices) row.addEventListener("click", () => { devicesOpen = !devicesOpen; renderPanel(); });
+      const devices = devicesOpen && places?.length ? h("div", { class: "bp-devs" }, ...places.map(pl => h("div", { class: "bp-dev" },
+        h("span", {}, pl.device), h("span", { class: "n" }, pct(pl.p)), h("span", { class: "c" }, pl.chapter ?? ""), h("span", { class: "w" }, ago(new Date(pl.at).toISOString(), Date.now()))))) : null;
+      const action = statusAction(state);
+      panel.replaceChildren(...present(top, h("div", { class: "bp" },
+        hero(h("div", { class: "cvb" }, cover(b, true)),
+          editable(panelTitle(b.title), "bp-title", [{ value: b.title, label: "Title" }], ([title]) => { if (title) save({ title }); }),
+          editable(b.author ?? "", "bp-by", [{ value: b.author ?? "", label: "Author" }], ([author]) => save({ author: author || null })),
+          editable(b.series ? `${b.series}${b.seriesIndex != null ? ` · ${b.seriesIndex}` : ""}` : "", "bp-by",
+            [{ value: b.series ?? "", label: "Series" }, { value: b.seriesIndex != null ? String(b.seriesIndex) : "", label: "#", cls: "num" }],
+            ([series, number]) => {
+              const n = parseNumber(number);
+              if (number && n == null) return;
+              save({ series: series || null, number: series ? n : null });
+            })),
+        lineAndBar(row, state.kind === "read" ? 1 : far?.p ?? 0, devices),
+        h("div", { class: "bp-acts" },
+          h("button", { class: "bp-go", onclick: () => ctx.open(b) }, goLabel(state)),
+          h("button", { class: "bp-word", onclick: () => (action === "Mark as read" ? ctx.markRead(b) : ctx.markUnread(b)) }, action)),
+        h("div", { class: "bp-fine" }, file))));
     }
     panel.classList.add("open");
     refitForPanel();
