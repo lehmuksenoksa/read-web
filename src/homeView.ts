@@ -414,6 +414,8 @@ export function createHome(ctx: HomeContext): {
     const n = selected.ids.length;
     selBar.hidden = n === 0;
     count.hidden = n > 0;
+    // While rows are ticked the line is the selection's: the size, the views and Add books step aside.
+    status.classList.toggle("selecting", n > 0);
     if (!n) return;
     const act = (name: string, run: () => void) => h("button", { onclick: run }, name);
     selBar.replaceChildren(

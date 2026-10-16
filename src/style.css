@@ -252,14 +252,22 @@ button.r:hover { background: var(--sel); }
 .home .td .prog .pl { flex: 1; }
 .home .td .pc { color: var(--ink2); min-width: 40px; text-align: right; }
 /* Multi-select (2026-10-16): a box at the left of each row, shown on hover and while anything is ticked. */
-.home .td.chk, .home .th.chk { padding: 0; justify-content: flex-start; cursor: default; }
+.home .td.chk, .home .th.chk { padding: 0 0 0 10px; justify-content: flex-start; cursor: default; }
 .home .th.chk { align-items: flex-start; }
-.home .chk input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; opacity: 0; transition: opacity .12s; }
-.home .th.chk input { margin-top: 1px; }
+/* Our own box, not the browser's (white in a dark interface): an outline in the faint ink, the accent
+   filled with a tick in the page's colour when ticked, a dash when some are (2026-10-16). */
+.home .chk input { appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 14px; height: 14px; margin: 0; border: 1.5px solid var(--ink3); border-radius: 3px; background: transparent; cursor: pointer; opacity: 0; transition: opacity .12s; }
+.home .chk input:hover { border-color: var(--ink2); }
+.home .chk input:checked, .home .chk input:indeterminate { background: var(--accent); border-color: var(--accent); }
+.home .chk input:checked::before { content: ""; position: absolute; left: 3.5px; top: 0.5px; width: 3px; height: 7px; border: solid var(--bg); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.home .chk input:indeterminate::before { content: ""; position: absolute; left: 2px; right: 2px; top: 4.5px; height: 1.5px; background: var(--bg); }
+.home .chk input:focus-visible { outline: 2px solid var(--ink3); outline-offset: 2px; }
+.home .th.chk input { margin-top: 0; }
 .home .tr:hover > .chk input, .home .tbl:hover > .hd > .chk input, .home .tbl.selecting .chk input, .home .tr.sel > .chk input { opacity: 1; }
 .home .tr.sel > .td { background: var(--raised); }
 .hsel { display: flex; align-items: center; min-width: 0; white-space: nowrap; }
 .hsel[hidden] { display: none; }
+.hstatus.selecting > .hzoom, .hstatus.selecting > .hviews, .hstatus.selecting > .hadd { display: none; }
 .hsel b { font-weight: 600; color: var(--ink); }
 .hsel button { color: var(--ink2); padding: 4px 0; font: inherit; }
 .hsel button:hover { color: var(--ink); }
