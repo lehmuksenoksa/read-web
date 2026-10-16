@@ -1,4 +1,4 @@
-// Home: the full Library (WEB.md → Home, agreed 2026-10-15): Grid, Cards and Details, a book's or a
+// Home: the full Library (WEB.md → Home, agreed 2026-10-15): Grid and Details (Cards went 2026-10-16), a book's or a
 // series' panel at the right, the size control, Details' columns and Continue. The data and the
 // actions (the book menu, Edit details, opening a book) are the page's own, passed in.
 
@@ -64,7 +64,6 @@ export interface HomeContext {
 /** The covers' colours when a book has no cover of its own. */
 const TONES = [["#2E3B2F", "#E6D8B0"], ["#3A2A22", "#E8C9A0"], ["#4A3B5C", "#EADCF2"], ["#1F3747", "#CFE3EE"], ["#6B2E1F", "#F2D0B8"], ["#3B1216", "#E9C3C3"], ["#1E2A44", "#D9E0F2"], ["#44403A", "#E6E0D6"]];
 
-const SERIES_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 8h11v13H4zM8 5h10v13M11 2h10v13"/></svg>';
 const GEAR = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
 const CLOSE = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>';
 const LINES = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M3 8h10M3 11.5h10"/></svg>';
@@ -316,26 +315,6 @@ export function createHome(ctx: HomeContext): {
         b.read ? h("span", { class: "badge tag" }, "READ") : pct(p) ? h("span", { class: "badge" }, pct(p)) : null),
       h("span", { class: "t" }, b.title),
       h("span", { class: "a" }, b.author ?? ""));
-  };
-
-  const cardItem = (item: LibraryItem) => {
-    if (item.kind === "series") {
-      const first = inOrder(item.books)[0];
-      return h("button", { class: "bcard", onclick: () => openSeries(item.books) },
-        cover({ ...first, title: item.name }, false),
-        h("span", { class: "info" },
-          h("span", { class: "head" }, h("span", { class: "t" }, redTitle(item.name)), h("span", { class: "serico" }, String(item.books.length), svgEl(SERIES_ICON))),
-          h("span", { class: "a" }, item.author ?? "")));
-    }
-    const b = item.book;
-    const p = progressOf(b);
-    return h("button", { class: "bcard", "data-id": b.id, onclick: () => openBook(b) },
-      cover(b, false),
-      h("span", { class: "info" },
-        h("span", { class: "head" }, h("span", { class: "t" }, redTitle(b.title)),
-          b.read ? h("span", { class: "tag" }, "READ") : pct(p) ? h("span", { class: "bpct" }, pct(p)) : null),
-        h("span", { class: "a" }, b.author ?? ""),
-        h("span", { class: "bfoot" }, !b.read && p ? h("span", { class: "pl" }, h("i", { style: `width:${Math.round(p * 100)}%` })) : null)));
   };
 
   const cell = (b: LibraryBook, key: ColumnKey) => {
@@ -620,7 +599,7 @@ export function createHome(ctx: HomeContext): {
         void Promise.all(shown.filter(b => b.hasSyncFile && ctx.progress(b.id) == null).map(b => ctx.load(b))).then(renderSoon);
       }
     } else {
-      const box = h("div", { class: view === "grid" ? "grid" : "bcards" }, ...items!.map(view === "grid" ? gridItem : cardItem));
+      const box = h("div", { class: "grid" }, ...items!.map(gridItem));
       main.replaceChildren(items!.length ? box : empty());
     }
     // Details' rows have no box of their own (display: contents): their first cell is watched.
@@ -917,7 +896,7 @@ export function createHome(ctx: HomeContext): {
   el.addEventListener("click", e => {
     const path = e.composedPath();
     if (!panelFor || path.includes(panel)) return;
-    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .bcard, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark") || x.closest(".bookmenu, .dialog, .toast")))) return;
+    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark") || x.closest(".bookmenu, .dialog, .toast")))) return;
     closePanel();
   });
   document.addEventListener("keydown", e => {

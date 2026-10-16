@@ -54,9 +54,14 @@ export class Appearance {
     return forStyle(this.current, this.home);
   }
 
-  /** Office: the book's pages quiet (QUIET_BOOK_CSS). */
+  /** The book's pages quiet (QUIET_BOOK_CSS): the style's Book's styling switch is off (Office to start with). */
   quietBook(): boolean {
-    return !this.home;
+    return !this.current.bookStyling[this.home ? "home" : "office"];
+  }
+
+  /** Aa › Layout › Book's styling, for the style in use. */
+  setBookStyling(on: boolean) {
+    this.update({ ...this.view(), bookStyling: { ...this.current.bookStyling, [this.home ? "home" : "office"]: on } });
   }
 
   /** [look] in the style's Interface colours: what the page shows. */

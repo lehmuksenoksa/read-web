@@ -181,15 +181,12 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
 
   // --- Turning pages ---
 
-  /** Which way the last move went: Office skips a blank page onward in that direction. */
-  let onward = true;
   const turn = (forward: boolean) => {
     if (!nav) return;
     // Office: from the first page with text, nothing to go back to but the book's blank front.
     if (!forward && mountedQuiet && current && (current.locations.progression ?? 0) === 0 && onlyBlankBefore(current.href.split("#")[0])) return;
     moved = true;
     anchor = null;
-    onward = forward;
     if (forward) nav.goForward(false, ok => {
       // A serial read past the end of its newest chapter: CAUGHT UP.
       if (!ok && props.serial && current && book && current.href.split("#")[0] === book.readingOrder[book.readingOrder.length - 1]) props.serial.onPastEnd(current.href);
@@ -418,7 +415,6 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   };
   const goTo = (href: string) => {
     if (!book || !nav) return;
-    onward = true;
     const [base, fragment] = href.split("#");
     const entry = startPosition(book.positions, { href: base, locations: { progression: 0 } });
     if (!entry) return tell("Couldn't find that chapter in this book.");
@@ -514,6 +510,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
           lab("Paragraphs"),
           switchRow("Justify", look.justify, on => change({ justify: on })),
           switchRow("Hyphenation", look.hyphens, on => change({ hyphens: on })),
+          // Off: the quiet book (headings at the text's size, no images, no blank lines); Office starts off, Home on.
+          switchRow("Book's styling", !appearance.quietBook(), on => appearance.setBookStyling(on)),
           optional("Paragraph spacing", "paragraphSpacing"),
           optional("First-line indent", "paragraphIndent"),
           lab("Spacing"),
@@ -604,9 +602,10 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     return true;
   };
   /**
-   * Office: a chapter with nothing to read once images are hidden (the cover, a title page as a
-   * picture) is turned past, the way the reader was going; the book's first page with text is where
-   * it opens (2026-10-16). Not a page turn of the reader's own: the place isn't saved for it.
+   * The quiet book: the book's front (a cover, a title page as a picture: chapters with nothing to
+   * read once images are hidden, before any with text) is turned past, so the book opens on its
+   * first page with text, and nothing goes back into it (2026-10-16). Not a page turn of the
+   * reader's own: the place isn't saved for it.
    */
   const blankKnown = new Map<string, boolean>();
   const isBlank = async (href: string) => {
@@ -626,17 +625,12 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const skipBlank = async (href: string) => {
     if (!book?.blank || !nav) return;
     const blank = await isBlank(href);
-    // Still there (not turned on meanwhile), and blank: one more page onward.
     if (!blank || !nav || !book || current?.href.split("#")[0] !== href) return;
-    if (!onward) {
-      // Going back: when nothing before this has text (the start of the book), forward to the first page with text instead.
-      const at = book.readingOrder.indexOf(href);
-      let textBefore = false;
-      for (let j = at - 1; j >= 0 && !textBefore; j--) textBefore = !(await isBlank(book.readingOrder[j]));
-      if (!textBefore) onward = true;
-      if (current?.href.split("#")[0] !== href) return;
-    }
-    if (onward) nav.goForward(false, () => undefined); else nav.goBackward(false, () => undefined);
+    // Only the book's front (nothing with text before it) is skipped; a picture page later shows its IMAGE line.
+    const at = book.readingOrder.indexOf(href);
+    for (let j = at - 1; j >= 0; j--) if (!(await isBlank(book.readingOrder[j]))) return;
+    if (!nav || current?.href.split("#")[0] !== href) return;
+    nav.goForward(false, () => undefined);
   };
   /** The chapter and progress, for the bar. */
   const tellPlace = () => {

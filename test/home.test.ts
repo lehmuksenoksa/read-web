@@ -22,12 +22,12 @@ describe("Home's setup", () => {
 
   it("keeps what it knows and drops what it doesn't; Title is never hidden; new columns join at the end", () => {
     const home = decodeHome({
-      view: "details", sort: { key: "size", reversed: true }, sizes: { grid: 4, cards: 9, details: 0 },
+      view: "details", sort: { key: "size", reversed: true }, sizes: { grid: 4, details: 0 },
       columns: { order: ["author", "title", "nope"], hidden: ["title", "series"] },
     });
     expect(home.view).toBe("details");
     expect(home.sort).toEqual({ key: "size", reversed: true });
-    expect(home.sizes).toEqual({ grid: 4, cards: 2, details: 0 });
+    expect(home.sizes).toEqual({ grid: 4, details: 0 });
     expect(home.columns.order.slice(0, 3)).toEqual(["author", "title", "cover"]);
     expect(home.columns.order).toHaveLength(DEFAULT_COLUMNS.order.length);
     expect(home.columns.hidden).toEqual(["series"]);
@@ -104,7 +104,7 @@ describe("Sorting", () => {
     expect(titles(detailsRows(books, { key: "title", reversed: false }, "mage", none))).toEqual(["Mage Tank 10", "Mage Tank 2"]);
   });
 
-  it("Grid and Cards group a series; other sorts place it where its first book falls", () => {
+  it("Grid groups a series; other sorts place it where its first book falls", () => {
     const recent = homeItems(books, { key: "last", reversed: false }, "", true, none);
     expect(recent.map(i => (i.kind === "book" ? i.book.title : i.name))).toEqual(["Dracula", "Mage Tank", "Sherlock Holmes"]);
     const bySize = homeItems(books, { key: "size", reversed: false }, "", true, none);

@@ -4,14 +4,14 @@
 import { libraryItems, searchBooks, type LibraryBook, type LibraryItem, type SortBy } from "./library";
 import { SERIAL_COLUMNS, type SerialColumnKey } from "./serials";
 
-export type BookView = "grid" | "cards" | "details";
+export type BookView = "grid" | "details";
 /** The view shown: Office shows Details only, books and serials alike (WEB.md → One app, two styles). */
 export function viewFor<V extends string>(view: V, home: boolean): V | "details" {
   return home ? view : "details";
 }
 
 export const BOOK_VIEWS: { view: BookView; name: string }[] = [
-  { view: "grid", name: "Grid" }, { view: "cards", name: "Cards" }, { view: "details", name: "Details" },
+  { view: "grid", name: "Grid" }, { view: "details", name: "Details" },
 ];
 
 export type ColumnKey = "cover" | "title" | "author" | "series" | "num" | "progress" | "last" | "on" | "added" | "size";
@@ -96,7 +96,7 @@ export const DEFAULT_HOME: HomeSetup = {
   serials: DEFAULT_SERIALS,
   view: "grid",
   sort: { key: "last", reversed: false },
-  sizes: { grid: 2, cards: 2, details: 2 },
+  sizes: { grid: 2, details: 2 },
   columns: DEFAULT_COLUMNS,
 };
 
@@ -138,7 +138,7 @@ function decodeSerials(raw: unknown): SerialsSetup {
 
 // --- Size ---
 
-/** The five sizes as a share of the middle one: covers and cards, Details' rows. */
+/** The five sizes as a share of the middle one: covers, Details' rows. */
 export const SIZES = [0.75, 0.875, 1, 1.15, 1.3];
 
 export function sizeStep(value: unknown): number {
@@ -249,7 +249,7 @@ export function detailsRows(books: LibraryBook[], sort: HomeSort, query: string,
 }
 
 /**
- * Grid and Cards: the books found and sorted, a series of two or more books as one item when
+ * Grid: the books found and sorted, a series of two or more books as one item when
  * [group]. The menu's sorts place a series as the sidebar does; the others where its first book falls.
  */
 export function homeItems(books: LibraryBook[], sort: HomeSort, query: string, group: boolean, facts: Facts): LibraryItem[] {

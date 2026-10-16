@@ -338,3 +338,12 @@ describe("the page in the Interface's colours (2026-10-15)", () => {
     for (const style of [PAGE_COLOURS.home.dark, PAGE_COLOURS.office.dark]) expect(style.text | 0).not.toBe(-1);
   });
 });
+
+describe("Book's styling (2026-10-16)", () => {
+  it("starts on in Home and off in Office, and is kept per style", () => {
+    const setup = decodeSetup(JSON.stringify({ looks: [{ id: "paper", name: "Paper" }], lookId: "paper" }));
+    expect(setup.bookStyling).toEqual({ home: true, office: false });
+    const changed = { ...setup, bookStyling: { home: false, office: true } };
+    expect(decodeSetup(JSON.stringify(changed)).bookStyling).toEqual({ home: false, office: true });
+  });
+});

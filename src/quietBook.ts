@@ -13,8 +13,11 @@ h1, h2, h3, h4, h5, h6 { font-size: 1em !important; font-weight: 600 !important;
 img, svg, picture, video, image { display: none !important; }
 br + br { display: none !important; }
 p:empty, div:empty { display: none !important; }
-[data-read-break] { display: block !important; text-align: center !important; text-indent: 0 !important; margin: 1em 0 !important; }
+[data-read-break] { display: block !important; text-align: center !important; text-indent: 0 !important; margin: 1em 0 !important; float: none !important; width: auto !important; height: auto !important; min-height: 0 !important; }
 [data-read-break]::before { content: "* * *"; }
+[data-read-break="image"] { font-size: .8em !important; letter-spacing: .14em; opacity: .55; }
+[data-read-break="image"]::before { content: "Image"; text-transform: uppercase; }
+[data-read-break="image"]::after { content: attr(data-read-alt); letter-spacing: normal; text-transform: none; }
 section, article, body > div, :is(section, article, body > div) > :first-child { margin-top: 0 !important; padding-top: 0 !important; }
 `;
 
@@ -54,8 +57,8 @@ export const QUIET_BOOK_HIDE = `(function () {
 /**
  * Last thing in each chapter's page (every one Readium loads, those kept ready beside it too), once
  * the book's styles have loaded: the page as it comes out, whatever the book calls things, made
- * quiet (2026-10-16). Blank paragraphs and blocks go (a divider stays: a scene break; a picture
- * between paragraphs, often an ornament, shows as "* * *"); anything
+ * quiet (2026-10-16). Blank paragraphs and blocks go (a divider stays: a scene break; a picture on
+ * its own shows as "* * *" when it's wide, an ornament, else as "IMAGE" with the book's words for it); anything
  * larger than the text is the text's size; floated letters go back into the line; more than about
  * two lines of space above or below a block becomes one, and a block kept taller than that by a
  * minimum height loses it; a deep indent on a short line (a title)
@@ -67,14 +70,24 @@ export const QUIET_BOOK_SCRIPT = `(function () {
   var set = function (el, prop, value) { el.style.setProperty(prop, value, "important"); };
   try {
     var rem = px(getComputedStyle(document.documentElement).fontSize) || 16;
-    // A picture between paragraphs is a scene break (an ornament) or an illustration: "* * *" marks it.
-    var texts = [].filter.call(document.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6"), function (e) { return visible.test(e.textContent || ""); });
-    var first = texts[0], last = texts[texts.length - 1];
-    var between = function (el) { return first && last && (first.compareDocumentPosition(el) & 4) && (el.compareDocumentPosition(last) & 4); };
-    document.querySelectorAll("p, div").forEach(function (el) {
+    // A picture on its own (no text around it in its block): a wide one is an ornament, a scene break,
+    // shown as "* * *"; any other is an illustration, shown as "IMAGE", with the book's words for it.
+    var placeholder = function (el) {
+      var img = el.querySelector("img");
+      var alt = img && (img.getAttribute("alt") || img.getAttribute("title")) || "";
+      el.setAttribute("data-read-alt", alt ? " \u00b7 " + alt : "");
+      var decide = function () {
+        var w = img ? img.naturalWidth : 0, h = img ? img.naturalHeight : 0;
+        el.setAttribute("data-read-break", w && h && w / h >= 3 ? "" : "image");
+      };
+      decide();
+      if (img && !img.complete) img.addEventListener("load", decide);
+    };
+    document.querySelectorAll("p, div, figure, section").forEach(function (el) {
       if (visible.test(el.textContent || "") || el.querySelector("hr")) return;
-      if (el.querySelector("img, svg, image") && between(el) && !el.parentElement.closest("[data-read-break]")) el.setAttribute("data-read-break", "");
-      else if (!el.closest("[data-read-break]")) set(el, "display", "none");
+      if (el.closest("[data-read-break]")) return;
+      if (el.querySelector("img, svg, image")) placeholder(el);
+      else set(el, "display", "none");
     });
     var all = document.body ? document.body.querySelectorAll("*") : [];
     for (var i = 0; i < all.length; i++) {

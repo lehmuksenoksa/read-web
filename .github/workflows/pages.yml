@@ -30,6 +30,11 @@ jobs:
         env:
           # The Dropbox app's key (public by design, not a secret): Settings › Secrets and variables › Actions › Variables.
           VITE_DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
+      # The smoke test (e2e/smoke.spec.ts): the built page in Chromium with a stand-in Dropbox.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+        env:
+          CI: "true"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -104,12 +104,14 @@ export interface Setup {
   homeLook: StyleLook;
   /** Light or Dark around the page, each style its own. */
   chrome: { home: Chrome; office: Chrome };
+  /** The book as its publisher set it (true) or the quiet book (Aa › Layout › Book's styling), each style its own (2026-10-16). */
+  bookStyling: { home: boolean; office: boolean };
   version: 1;
 }
 
 export const DEFAULT_SETUP: Setup = {
   looks: WEB_LOOKS, lookId: "office", custom: null, customFrom: null, removedFonts: [], groupSeries: true, sidebar: true, sidebarWidth: 320, home: DEFAULT_HOME,
-  homeLook: { lookId: "office", custom: null, customFrom: null }, chrome: { home: "dark", office: "light" }, version: 1,
+  homeLook: { lookId: "office", custom: null, customFrom: null }, chrome: { home: "dark", office: "light" }, bookStyling: { home: true, office: false }, version: 1,
 };
 
 /** The setup as the page sees it in Home (true) or Office: the look in use is that style's. Its own inverse. */
@@ -142,6 +144,7 @@ function decodeStyleLook(raw: LookFile, looks: Look[]): StyleLook {
 }
 
 const chromeOf = (value: unknown, otherwise: Chrome): Chrome => (value === "light" || value === "dark" ? value : otherwise);
+const boolOf = (value: unknown, otherwise: boolean): boolean => (typeof value === "boolean" ? value : otherwise);
 
 /** The setup file's text, read leniently: anything missing or unreadable is the default. */
 export function decodeSetup(text: string | null): Setup {
@@ -165,6 +168,7 @@ export function decodeSetup(text: string | null): Setup {
       homeLook,
       // Office's chrome took its look's colours before it had its own: it starts as Light or Dark as that look is.
       chrome: { home: chromeOf(chrome.home, "dark"), office: chromeOf(chrome.office, isLight(officeLook) ? "light" : "dark") },
+      bookStyling: { home: boolOf((raw.bookStyling as Record<string, unknown> | undefined)?.home, true), office: boolOf((raw.bookStyling as Record<string, unknown> | undefined)?.office, false) },
       version: 1,
     };
   } catch {
