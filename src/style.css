@@ -669,3 +669,5 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
 
 /* Reading now's cover fitted to the books beside it: as tall as one of them, cover to bar (set from their size). */
 .cur-top.fitted .cur-cover { width: calc(var(--fh) * 5 / 8); }
+/* Reading now's text keeps to its own columns (the user, 2026-10-16): its bar ends a column gap short of the books beside it. */
+.cur-info { flex: 1 1 auto; min-width: 0; }
