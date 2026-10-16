@@ -15,7 +15,7 @@ import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
 import { lastReadBook, type LibraryBook, type LibraryItem, type Place, type SortBy } from "./library";
 import type { Chrome, Setup } from "./looks";
 import { h, icon, ICONS, type Child } from "./ui";
-import { wordmark } from "./wordmark";
+import { WORDMARK_BASELINE, wordmark } from "./wordmark";
 
 export interface HomeContext {
   /** Every book, with the marks set here (hidden ones too). */
@@ -514,7 +514,47 @@ export function createHome(ctx: HomeContext): {
     renderPanel();
   };
 
+  // --- The bar on one line (2026-10-16): the name, the title, the place and Continue rest on the name's
+  // baseline; ⚙, Contents, Aa and search are centred on the capitals of the text beside them. ---
+
+  /** Where a box's text sits: a zero-size probe on its baseline. */
+  const baselineOf = (box: HTMLElement): number => {
+    const probe = h("span", { class: "blprobe", "aria-hidden": "true" });
+    box.append(probe);
+    const y = probe.getBoundingClientRect().top;
+    probe.remove();
+    return y;
+  };
+  /** Moves [el] up or down so its text's baseline is at [y] (screen pixels). */
+  const restOn = (el: HTMLElement, y: number) => {
+    const now = Number(el.dataset.shift ?? 0);
+    const next = now + (y - baselineOf(el));
+    el.dataset.shift = String(next);
+    el.style.translate = `0 ${next.toFixed(1)}px`;
+  };
+  const alignBar = () => {
+    if (!header.isConnected || !markEl.firstElementChild) return;
+    const top = header.getBoundingClientRect().top;
+    // Home's wordmark is drawn: its baseline is a known share down its canvas. Office's is text.
+    const svg = markEl.querySelector("svg");
+    const base = svg ? svg.getBoundingClientRect().top + WORDMARK_BASELINE * 40 : baselineOf(markEl.querySelector<HTMLElement>(".lib") ?? markEl);
+    if (!titleEl.hidden) { restOn(titleBt, base); restOn(titlePlace, base); }
+    if (cont.parentElement === header && !cont.hidden && getComputedStyle(cont).position === "absolute") restOn(cont, base);
+    // The icons' middle on the capitals of the smaller text (the place, or Continue): about 0.7 of its size.
+    const small = parseFloat(getComputedStyle(titleEl.hidden ? cont : titlePlace).fontSize) || 13;
+    header.style.setProperty("--icons-y", `${(base - top - small * 0.35 - header.offsetHeight / 2).toFixed(1)}px`);
+  };
+  let alignQueued = false;
+  const queueAlign = () => {
+    if (alignQueued) return;
+    alignQueued = true;
+    requestAnimationFrame(() => { alignQueued = false; alignBar(); });
+  };
+  window.addEventListener("resize", queueAlign);
+  void document.fonts?.ready.then(queueAlign);
+
   const render = () => {
+    queueAlign();
     // ☰'s list stays open while its boxes change the columns; other menus close.
     const columnsOpen = menuOpen?.classList.contains("colmenu") ?? false;
     closeMenu();
@@ -874,6 +914,7 @@ export function createHome(ctx: HomeContext): {
     searchBox.hidden = title != null;
     titleEl.hidden = title == null;
     if (!was !== !title || was?.side !== title?.side) renderMark(title ? title.side === "books" : !onSerials());
+    queueAlign();
     if (title) {
       titleBt.replaceChildren(quiet() ? document.createTextNode(title.title) : redTitle(title.title));
       titlePlace.textContent = title.place;

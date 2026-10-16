@@ -406,6 +406,9 @@ button.r:hover { background: var(--sel); }
 .app.reader > .home, .app.library > .readerarea { display: none; }
 .home { display: flex; flex-direction: column; position: relative; }
 .hhead .grow { flex: 1; }
+/* The bar on one line (2026-10-16): the icons and search centred on the capitals of the text beside them. */
+.blprobe { display: inline-block; width: 0; height: 0; vertical-align: baseline; }
+.hhead > .hicon, .hhead > .htools, .hhead > .hsearch { translate: 0 var(--icons-y, 0px); }
 .hhead .w { color: var(--wax); }
 .hsearch[hidden] { display: none; }
 /* The title over the page: from its left edge; the place at its right edge. */

@@ -14,6 +14,8 @@ const SERIALS_BACK = 0.65;
 const AMPERSAND_SIZE = 0.41;
 const LIFT = 0.06;
 const ASCENT = 0.86;
+/** The baseline's share of the way down the mark's [title]-tall canvas (the bar lines up on it). */
+export const WORDMARK_BASELINE = ASCENT;
 
 /** One piece as an SVG on a [title]-tall canvas, its baseline [ASCENT] of the way down. */
 function glyph(piece: Piece, size: number, title: number, cls: string, lift = 0): string {
