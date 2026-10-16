@@ -21,6 +21,17 @@ section, article, body > div, :is(section, article, body > div) > :first-child {
 /** A character that shows: anything but spaces, no-break spaces and zero-width characters. */
 const VISIBLE = "[^\\s\\u00a0\\u200b\\u200c\\u200d\\u2060\\ufeff]";
 
+/**
+ * A chapter with nothing to read once images are hidden (a cover, a title page drawn as a picture):
+ * Office turns past it. Judged from the XHTML itself: the head, scripts and styles left out, tags
+ * and blank entities dropped.
+ */
+export function blankPage(xhtml: string): boolean {
+  const body = xhtml.replace(/<head[\s\S]*?<\/head>/i, "").replace(/<(script|style)[\s\S]*?<\/\1>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
+  const text = body.replace(/<[^>]*>/g, " ").replace(/&(nbsp|#160|#xa0|#8203|#x200b|ensp|emsp|thinsp|#8194|#8195|#8201);/gi, " ");
+  return isBlankText(text);
+}
+
 /** Text with nothing visible in it. */
 export function isBlankText(text: string): boolean {
   return !new RegExp(VISIBLE).test(text);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ago, clickSort, decodeHome, DEFAULT_COLUMNS, DEFAULT_HOME, detailsRows, homeItems, megabytes, menuSort, moveColumn,
+  ago, clickSort, decodeHome, fitColumns, DEFAULT_COLUMNS, DEFAULT_HOME, detailsRows, homeItems, megabytes, menuSort, moveColumn,
   nextInSeries, shownColumns, sizeStep, sortMenuChoice, sortRows, textScale, titleWord, toggleColumn, type Facts,
 } from "../src/home";
 import type { LibraryBook } from "../src/library";
@@ -161,5 +161,24 @@ describe("Words and sizes", () => {
     expect(sizeStep(5)).toBe(2);
     expect(textScale(1.3)).toBeCloseTo(1.21);
     expect(textScale(0.75)).toBeCloseTo(0.825);
+  });
+});
+
+describe("Details' columns in a narrow window (2026-10-16)", () => {
+  const least = (k: string) => ({ title: 244, author: 164, series: 164, num: 72, progress: 194, last: 144, on: 104, added: 134, size: 104 } as Record<string, number>)[k];
+  const order = ["size", "added", "on", "cover", "num", "series", "last", "progress", "author"];
+
+  it("keeps every column when they fit", () => {
+    expect(fitColumns(["title", "author", "progress"], least, 2000, order)).toEqual(["title", "author", "progress"]);
+  });
+
+  it("drops the least important first, until the rest fit", () => {
+    const cols = ["title", "author", "series", "num", "progress", "last", "on"];
+    // 1086 needed; 760 of room: size and added aren't shown, on (104) and num (72) go, then series (164).
+    expect(fitColumns(cols, least, 760, order)).toEqual(["title", "author", "progress", "last"]);
+  });
+
+  it("never drops Title", () => {
+    expect(fitColumns(["title", "author"], least, 100, order)).toEqual(["title"]);
   });
 });

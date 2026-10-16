@@ -338,7 +338,7 @@ button.r:hover { background: var(--sel); }
 
 /* Add books (step 2): drop EPUBs on Home or the box, or choose them; a line per file. */
 .hadd { background: var(--seal); color: var(--onseal); border-radius: 12px; padding: 8px 16px; font-weight: 600; margin-left: 6px; }
-.hdialog { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); }
+.hdialog { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); }
 .addbox { width: min(560px, calc(100% - 32px)); max-height: 86vh; overflow: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 18px; box-shadow: var(--shadow); padding: 22px 28px 24px; }
 .addhead { display: flex; align-items: center; }
 .addhead h2 { flex: 1; font: 600 24px "Home Literata", Georgia, serif; }
@@ -506,9 +506,13 @@ button.r:hover { background: var(--sel); }
 #app.homeon .hsearch { background: var(--raised); }
 #app.homeon .hpanel, #app.homeon .rpanel { top: 10px; right: 14px; bottom: 14px; width: 400px; max-width: calc(100% - 28px); border: 1px solid var(--rule); border-radius: 18px; box-shadow: none; background: var(--raised); }
 #app.homeon .hpanel { padding: 20px 26px 32px; }
-/* The Library makes room for the card: the status line and the books stop at its edge. */
+/* A panel open (2026-10-16): the status line makes room for it, so the slider, the views and Add books
+   stay in view; the books keep their size and place under it (a Details table makes room too, refitting
+   its columns: half-hidden it can't be read). */
+#app.homeon { --panelw: 414px; }
+#app.office { --panelw: 380px; }
 @media (min-width: 901px) {
-  #app.homeon .home:has(> .hpanel.open) .hmain, #app.homeon .home:has(> .hpanel.open) .hstatus { padding-right: 450px; }
+  .home:has(> .hpanel.open) .hstatus, .home:has(> .hpanel.open) .hmain:has(> .tbl) { padding-right: calc(var(--panelw) + 36px); }
 }
 .hhero { display: flex; gap: 18px; align-items: flex-start; margin: 2px 0 4px; }
 .hhero .info { min-width: 0; padding-top: 4px; }

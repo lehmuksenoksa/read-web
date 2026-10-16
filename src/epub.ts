@@ -3,6 +3,7 @@
 
 import { Fetcher, Link, Locator, Manifest, Publication, Resource } from "@readium/shared";
 import { Zip } from "./zip";
+import { blankPage } from "./quietBook";
 
 /** A made-up address the book's paths are resolved against; nothing is ever fetched from it. */
 const BOOK_ROOT = "https://book.invalid/";
@@ -83,6 +84,8 @@ export interface Book {
   toc: TocEntry[];
   /** The chapters' hrefs, in reading order. */
   readingOrder: string[];
+  /** The chapter has nothing to read once images are hidden (Office turns past it); not for serials. */
+  blank?(href: string): Promise<boolean>;
   close(): void;
 }
 
@@ -141,7 +144,8 @@ export async function openBook(bytes: Uint8Array): Promise<Book> {
   const positions = positionsOf(readingOrder.map(r => ({ ...r, title: titles.get(r.href) })), lengths)
     .map(p => Locator.deserialize(p)!)
     .filter(Boolean);
-  return { publication, positions, titles, toc, readingOrder: readingOrder.map(r => r.href), close: () => fetcher.close() };
+  const blank = async (href: string) => blankPage(await zip.text(entryName(href)));
+  return { publication, positions, titles, toc, readingOrder: readingOrder.map(r => r.href), blank, close: () => fetcher.close() };
 }
 
 function parseXml(text: string): Document {

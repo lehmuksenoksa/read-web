@@ -4,7 +4,7 @@
 
 import {
   ago, BOOK_VIEWS, clickSort, column, DEFAULT_COLUMNS, DEFAULT_SERIAL_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
-  menuSort, moveColumn, nextInSeries, SERIAL_VIEWS, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
+  fitColumns, menuSort, moveColumn, nextInSeries, SERIAL_VIEWS, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
   viewFor, type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
 } from "./home";
 import {
@@ -215,7 +215,7 @@ export function createHome(ctx: HomeContext): {
     const homeNow = ctx.isHome();
     openMenu(h("div", { role: "menu" },
       ctx.offline() ? h("div", { class: "lab" }, "Dropbox: offline") : null,
-      h("div", { class: "lab" }, "Show"),
+      h("div", { class: "lab" }, "Style"),
       h("button", { class: "r", role: "menuitemradio", "aria-checked": String(homeNow), onclick: () => { closeMenu(); if (!homeNow) ctx.setHome(true); } }, "Home", tick(homeNow)),
       h("button", { class: "r", role: "menuitemradio", "aria-checked": String(!homeNow), onclick: () => { closeMenu(); if (homeNow) ctx.setHome(false); } }, "Office", tick(!homeNow)),
       h("hr"),
@@ -361,7 +361,8 @@ export function createHome(ctx: HomeContext): {
 
   const details = (list: LibraryBook[]) => {
     // Office has no covers: no Cover column (WEB.md → One app, two styles).
-    const cols = shownColumns(home().columns).filter(k => !quiet() || k !== "cover");
+    // A narrow window: the less important columns go until the rest fit (2026-10-16).
+    const cols = fitColumns(shownColumns(home().columns).filter(k => !quiet() || k !== "cover"), k => BOOK_LEAST[k] + 24, tableRoom(), ["size", "added", "on", "cover", "num", "series", "last", "progress", "author"]);
     const sort = home().sort;
     const table = h("div", { class: "tbl", role: "table", style: `grid-template-columns:${cols.map(widthOf).join(" ")} 40px` });
     const headings = h("div", { class: "tr hd", role: "row" },
@@ -385,6 +386,15 @@ export function createHome(ctx: HomeContext): {
     return table;
   };
 
+  /** Each column's least width (the minmax minimum, or its fixed width), for fitting a narrow window. */
+  const BOOK_LEAST: Record<ColumnKey, number> = { cover: 36, title: 220, author: 140, series: 140, num: 48, progress: 170, last: 120, on: 80, added: 110, size: 80 };
+  const SERIAL_LEAST: Record<SerialColumnKey, [number, number]> = { title: [220, 220], author: [130, 130], site: [110, 110], new: [100, 64], unread: [130, 72], updated: [100, 100], latest: [200, 200], reading: [200, 200], lastread: [110, 110] };
+  /** The room for a Details table's columns: the books' area less its padding and the ☰ column; no limit before it's laid out. */
+  const tableRoom = () => {
+    if (!main.clientWidth) return Infinity;
+    const cs = getComputedStyle(main);
+    return main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 40;
+  };
   const widthOf = (key: ColumnKey) => ({
     cover: "calc(36px*var(--z))", title: "minmax(220px,2.2fr)", author: "minmax(140px,1.3fr)", series: "minmax(140px,1.2fr)",
     num: "48px", progress: "minmax(170px,1.3fr)", last: "120px", on: "80px", added: "110px", size: "80px",
@@ -448,9 +458,10 @@ export function createHome(ctx: HomeContext): {
   };
 
   const serialDetails = (list: Serial[]) => {
-    const cols = shownColumns(serialsSetup().columns);
+    const all = shownColumns(serialsSetup().columns);
     const sort = serialsSetup().sort;
-    const numbers = numbersOnly(cols.length, window.innerWidth);
+    const numbers = numbersOnly(all.length, window.innerWidth);
+    const cols = fitColumns(all, k => SERIAL_LEAST[k][numbers ? 1 : 0] + 24, tableRoom(), ["lastread", "reading", "latest", "site", "author", "updated", "unread", "new"]);
     const box = h("div", { class: "tbl ser", role: "table", style: `grid-template-columns:${cols.map(k => SERIAL_WIDTHS[k][numbers ? 1 : 0]).join(" ")} 40px` });
     const headings = h("div", { class: "tr hd", role: "row" },
       ...cols.map(key => {
@@ -547,9 +558,20 @@ export function createHome(ctx: HomeContext): {
     requestAnimationFrame(() => { alignQueued = false; alignBar(); });
   };
   window.addEventListener("resize", queueAlign);
+  // A Details table refits its columns to the window.
+  let refitTimer: number | undefined;
+  window.addEventListener("resize", () => {
+    window.clearTimeout(refitTimer);
+    refitTimer = window.setTimeout(() => { if (main.querySelector(".tbl") && el.offsetParent) render(); }, 150);
+  });
   void document.fonts?.ready.then(queueAlign);
 
+  /** The panel open or not, as the last render laid the Library out (a Details table refits when that changes). */
+  let renderedWithPanel = false;
+  const refitForPanel = () => { if ((panelFor != null) !== renderedWithPanel && main.querySelector(".tbl")) render(); };
+
   const render = () => {
+    renderedWithPanel = panelFor != null;
     queueAlign();
     // ☰'s list stays open while its boxes change the columns; other menus close.
     const columnsOpen = menuOpen?.classList.contains("colmenu") ?? false;
@@ -651,6 +673,7 @@ export function createHome(ctx: HomeContext): {
     panelFor = null;
     panel.classList.remove("open");
     main.querySelectorAll(".tr.on, .scard.on").forEach(e => e.classList.remove("on"));
+    refitForPanel();
   };
   let fromSeries: LibraryBook[] | null = null;
 
@@ -693,6 +716,7 @@ export function createHome(ctx: HomeContext): {
           chapters ? h("div", { class: "sec" }, h("h3", {}, "Chapters"), chapters) : null,
           opLinks(h("a", { href: x.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${x.site} ↗`), h("button", { onclick: () => ctx.editSerial(x) }, "Edit details…"))));
         panel.classList.add("open");
+    refitForPanel();
         return;
       }
       panel.replaceChildren(...present(top,
@@ -710,6 +734,7 @@ export function createHome(ctx: HomeContext): {
         h("div", { class: "sec" }, h("button", { class: "word", onclick: () => ctx.editSerial(x) }, "Edit details…")),
         h("div", { class: "foot2" }, checked)));
       panel.classList.add("open");
+    refitForPanel();
       return;
     }
     if ("series" in panelFor) {
@@ -797,6 +822,7 @@ export function createHome(ctx: HomeContext): {
         h("div", { class: "sec" }, hide)));
     }
     panel.classList.add("open");
+    refitForPanel();
     main.querySelectorAll(".tr.on").forEach(x => x.classList.remove("on"));
     if ("book" in panelFor) main.querySelector(`.tr[data-id="${panelFor.book.id}"]`)?.classList.add("on");
   };

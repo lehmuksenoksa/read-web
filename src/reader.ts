@@ -181,10 +181,15 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
 
   // --- Turning pages ---
 
+  /** Which way the last move went: Office skips a blank page onward in that direction. */
+  let onward = true;
   const turn = (forward: boolean) => {
     if (!nav) return;
+    // Office: from the first page with text, nothing to go back to but the book's blank front.
+    if (!forward && mountedQuiet && current && (current.locations.progression ?? 0) === 0 && onlyBlankBefore(current.href.split("#")[0])) return;
     moved = true;
     anchor = null;
+    onward = forward;
     if (forward) nav.goForward(false, ok => {
       // A serial read past the end of its newest chapter: CAUGHT UP.
       if (!ok && props.serial && current && book && current.href.split("#")[0] === book.readingOrder[book.readingOrder.length - 1]) props.serial.onPastEnd(current.href);
@@ -413,6 +418,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   };
   const goTo = (href: string) => {
     if (!book || !nav) return;
+    onward = true;
     const [base, fragment] = href.split("#");
     const entry = startPosition(book.positions, { href: base, locations: { progression: 0 } });
     if (!entry) return tell("Couldn't find that chapter in this book.");
@@ -560,6 +566,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       props.serial?.onChapter(locator.href);
       showPlace();
       tellPlace();
+      if (mountedQuiet) void skipBlank(locator.href.split("#")[0]);
       // Contents open follows the reading: the chapter you're in is the highlighted one, scrolled to when it changes.
       if (!contents.hidden) {
         fillContents();
@@ -595,6 +602,41 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const pageClicked = () => {
     if (overlay() && (!contents.hidden || !aa.hidden)) closePanels();
     return true;
+  };
+  /**
+   * Office: a chapter with nothing to read once images are hidden (the cover, a title page as a
+   * picture) is turned past, the way the reader was going; the book's first page with text is where
+   * it opens (2026-10-16). Not a page turn of the reader's own: the place isn't saved for it.
+   */
+  const blankKnown = new Map<string, boolean>();
+  const isBlank = async (href: string) => {
+    let blank = blankKnown.get(href);
+    if (blank === undefined && book?.blank) {
+      blank = await book.blank(href).catch(() => false);
+      blankKnown.set(href, blank);
+    }
+    return blank ?? false;
+  };
+  /** Every chapter before [href] is known blank (the book's front: a cover, a title page): nothing to go back to. */
+  const onlyBlankBefore = (href: string) => {
+    if (!book) return false;
+    const at = book.readingOrder.indexOf(href);
+    return at >= 0 && book.readingOrder.slice(0, at).every(h => blankKnown.get(h) === true);
+  };
+  const skipBlank = async (href: string) => {
+    if (!book?.blank || !nav) return;
+    const blank = await isBlank(href);
+    // Still there (not turned on meanwhile), and blank: one more page onward.
+    if (!blank || !nav || !book || current?.href.split("#")[0] !== href) return;
+    if (!onward) {
+      // Going back: when nothing before this has text (the start of the book), forward to the first page with text instead.
+      const at = book.readingOrder.indexOf(href);
+      let textBefore = false;
+      for (let j = at - 1; j >= 0 && !textBefore; j--) textBefore = !(await isBlank(book.readingOrder[j]));
+      if (!textBefore) onward = true;
+      if (current?.href.split("#")[0] !== href) return;
+    }
+    if (onward) nav.goForward(false, () => undefined); else nav.goBackward(false, () => undefined);
   };
   /** The chapter and progress, for the bar. */
   const tellPlace = () => {

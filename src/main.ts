@@ -450,7 +450,9 @@ async function showApp() {
     rememberPlace({ kind: "book", id: book.id });
     if (book.id === currentId) return opening;
     currentId = book.id;
-    const props = chrome(book.title, "books", p => [p.chapter, `${Math.round(p.totalProgression * 100)}%`].filter(Boolean).join(" · "));
+    // Front matter is often named after the book: then just the percentage.
+    const sameAsBook = (chapter: string | null) => !chapter || chapter.trim().toLocaleLowerCase() === book.title.trim().toLocaleLowerCase();
+    const props = chrome(book.title, "books", p => [sameAsBook(p.chapter) ? null : p.chapter, `${Math.round(p.totalProgression * 100)}%`].filter(Boolean).join(" · "));
     opening = opening.then(async () => {
       await closeReader?.();
       closeReader = null;

@@ -167,6 +167,21 @@ export function toggleColumn<K extends string>(columns: { order: K[]; hidden: K[
   return { ...columns, hidden };
 }
 
+/**
+ * The columns that fit [available] pixels (2026-10-16): the least important go first, in [dropOrder],
+ * until the rest fit by their least widths. The first column (Title) always stays.
+ */
+export function fitColumns<K extends string>(cols: K[], leastWidth: (key: K) => number, available: number, dropOrder: K[]): K[] {
+  const kept = [...cols];
+  const width = () => kept.reduce((n, k) => n + leastWidth(k), 0);
+  for (const drop of dropOrder) {
+    if (width() <= available) break;
+    const at = kept.indexOf(drop);
+    if (at > 0) kept.splice(at, 1);
+  }
+  return kept;
+}
+
 export function shownColumns<K extends string>(columns: { order: K[]; hidden: K[] }): K[] {
   return columns.order.filter(k => !columns.hidden.includes(k));
 }
