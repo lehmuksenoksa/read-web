@@ -59,9 +59,17 @@ test("Office: two rows ticked, Set details… puts the series on both in one wri
   const dropbox = await standIn(page, false);
   await page.goto("./");
   await expect(page.locator(".home .tbl .tr[data-id]")).toHaveCount(2);
-  await page.locator(`.home .tr[data-id="${KATABASIS}"] .chk input`).click({ force: true });
-  await page.locator(`.home .tr[data-id="${EMMA}"] .chk input`).click({ force: true });
+  // Clicks in the box's cell, beside the box, as a mouse does: the first one anchors a text selection in the browser.
+  const boxCell = async (id: string) => { const b = (await page.locator(`.home .tr[data-id="${id}"] .td.chk`).boundingBox())!; return [b.x + 3, b.y + b.height / 2] as const; };
+  const [x1, y1] = await boxCell(KATABASIS);
+  await page.mouse.click(x1, y1);
+  const [x2, y2] = await boxCell(EMMA);
+  await page.keyboard.down("Shift");
+  await page.mouse.click(x2, y2);
+  await page.keyboard.up("Shift");
   await expect(page.locator(".hsel b")).toHaveText("2 selected");
+  // A shift-click ticks the range without selecting the rows' text.
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? "")).toBe("");
   // The plain click still opens the panel, with the selection kept.
   await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(2)`);
   await expect(page.locator(".hpanel .opt")).toHaveText("Emma");

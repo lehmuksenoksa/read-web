@@ -379,6 +379,8 @@ export function createHome(ctx: HomeContext): {
       table.append(h("div", { class: `tr${panelFor && "book" in panelFor && panelFor.book.id === b.id ? " on" : ""}${on ? " sel" : ""}`, role: "row", "data-id": b.id, onclick: () => openBook(b) },
         h("div", { class: "td chk", onclick: (e: Event) => { e.stopPropagation(); box.click(); } }, box), ...cols.map(key => cell(b, key)), h("div", { class: "td" })));
     }
+    // Shift-click on a box ticks a range, so the browser mustn't extend a text selection over the rows meanwhile.
+    table.addEventListener("mousedown", e => { if (e.shiftKey && (e.target as HTMLElement).closest(".chk")) e.preventDefault(); });
     applySelection(table);
     return table;
   };

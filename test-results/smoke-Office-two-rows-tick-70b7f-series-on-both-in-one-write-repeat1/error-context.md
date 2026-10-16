@@ -1,0 +1,55 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic "Library & Serials" [ref=e4]:
+      - button "Library" [pressed] [ref=e5]
+      - generic [ref=e6]: "&"
+      - button "Serials" [ref=e7] [cursor=pointer]
+    - generic [ref=e8]:
+      - img [ref=e10]
+      - searchbox "Search title or author" [ref=e13]
+    - button "Settings" [ref=e14] [cursor=pointer]:
+      - img [ref=e16]
+    - button "Continue Emma · Chapter 2 · 43%" [ref=e19] [cursor=pointer]:
+      - generic [ref=e20]: Continue
+      - generic [ref=e21]: Emma
+      - generic [ref=e22]: · Chapter 2 · 43%
+      - generic [ref=e23]: ›
+  - generic [ref=e24]:
+    - generic [ref=e25]:
+      - button "2 books · Recent" [ref=e26] [cursor=pointer]
+      - button "Add books" [ref=e27] [cursor=pointer]
+    - main [ref=e28]:
+      - table [ref=e29]:
+        - 'row "Select all Title Author Series # Progress Last read ▾ On Columns" [ref=e30] [cursor=pointer]':
+          - columnheader "Select all" [ref=e31]:
+            - checkbox "Select all" [ref=e32]
+          - columnheader "Title" [ref=e33]
+          - columnheader "Author" [ref=e34]
+          - columnheader "Series" [ref=e35]
+          - columnheader "#" [ref=e36]
+          - columnheader "Progress" [ref=e37]
+          - columnheader "Last read ▾" [ref=e38]
+          - columnheader "On" [ref=e39]
+          - button "Columns" [ref=e41]:
+            - img [ref=e43]
+        - row "Select Emma Emma Jane Austen Test Series 2 43% 1 h ago S23" [ref=e45] [cursor=pointer]:
+          - checkbox "Select Emma" [ref=e47]
+          - generic [ref=e49]: Emma
+          - generic [ref=e50]: Jane Austen
+          - generic [ref=e51]: Test Series
+          - generic [ref=e52]: "2"
+          - generic [ref=e57]: 43%
+          - generic [ref=e58]: 1 h ago
+          - generic [ref=e59]: S23
+        - row "Select Katabasis Katabasis R. F. Kuang Test Series 1 0%" [ref=e61] [cursor=pointer]:
+          - checkbox "Select Katabasis" [ref=e63]
+          - generic [ref=e65]: Katabasis
+          - generic [ref=e66]: R. F. Kuang
+          - generic [ref=e67]: Test Series
+          - generic [ref=e68]: "1"
+          - generic [ref=e72]: 0%
+    - complementary "Book" [ref=e76]
+```
