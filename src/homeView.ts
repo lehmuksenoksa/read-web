@@ -705,6 +705,26 @@ export function createHome(ctx: HomeContext): {
   };
   // --- The curated Grid page (WEB.md → Home; agreed from mockups 2026-10-16) ---
 
+  /**
+   * Reading now's cover as tall as a whole book beside it, cover to bar or date (the user, 2026-10-16):
+   * measured once drawn and whenever that row changes size; not while the row is below it (narrow).
+   */
+  let fitObserver: ResizeObserver | null = null;
+  const fitReadingNow = (top: HTMLElement) => {
+    fitObserver?.disconnect();
+    const now = top.querySelector<HTMLElement>(".cur-now");
+    const beside = top.querySelector<HTMLElement>(".cur-also");
+    if (!now || !beside) return;
+    const fit = () => {
+      const cell = beside.querySelector<HTMLElement>(".cell");
+      const sideBySide = Math.abs(beside.getBoundingClientRect().top - now.getBoundingClientRect().top) < 2;
+      top.classList.toggle("fitted", !!cell && sideBySide);
+      if (cell && sideBySide) top.style.setProperty("--fh", `${Math.round(cell.getBoundingClientRect().height)}px`);
+    };
+    fitObserver = new ResizeObserver(fit);
+    fitObserver.observe(beside);
+    requestAnimationFrame(fit);
+  };
   /** The bar's Continue steps aside while Reading now shows the same book. */
   let hideContinue = false;
   /** Reading now, Also reading, Recently added, then All (its count and sort in its heading). */
@@ -741,7 +761,7 @@ export function createHome(ctx: HomeContext): {
       const far = furthestPlace(ctx.places(f.id) ?? []);
       const series = seriesLine(f);
       hideContinue = true;
-      out.push(h("section", { class: "cur cur-top" },
+      const top: HTMLElement = h("section", { class: "cur cur-top" },
         h("div", { class: "cur-now" }, head("Reading now"),
           h("div", { class: "cur-feat" },
             h("button", { class: "cur-cover", "data-id": f.id, onclick: () => openBook(f), "aria-label": `${f.title}: details` }, cover(f, true)),
@@ -754,7 +774,9 @@ export function createHome(ctx: HomeContext): {
               h("button", { class: "cur-go", onclick: () => ctx.open(f) }, h("span", { class: "play", "aria-hidden": "true" }, "▶"), "Continue")))),
         // The books beside it sit in the grid's own columns, as the covers below do (2026-10-16).
         beside ? h("div", { class: `cur-also ${beside.kind}` }, head(beside.title, beside.kind === "added" ? String(beside.books.length) : null),
-          ...beside.books.map(b => (beside.kind === "also" ? reading(b) : added(b)))) : null));
+          ...beside.books.map(b => (beside.kind === "also" ? reading(b) : added(b)))) : null);
+      out.push(top);
+      fitReadingNow(top);
     }
     // Recently added gets its own row unless it already sits beside Reading now.
     if (c.added.length && beside?.kind !== "added") {

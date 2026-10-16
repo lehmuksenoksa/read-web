@@ -666,3 +666,6 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
 .cur-also { align-items: stretch; }
 .home .cur-also .cell { align-self: stretch; }
 .home .cur-also .cell .cbar { margin-top: auto; padding-top: 8px; }
+
+/* Reading now's cover fitted to the books beside it: as tall as one of them, cover to bar (set from their size). */
+.cur-top.fitted .cur-cover { width: calc(var(--fh) * 2 / 3); }
