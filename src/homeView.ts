@@ -14,7 +14,7 @@ import {
 import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
 import { lastReadBook, type LibraryBook, type LibraryItem, type Place, type SortBy } from "./library";
 import type { Chrome, Setup } from "./looks";
-import { h, icon, ICONS } from "./ui";
+import { h, icon, ICONS, type Child } from "./ui";
 import { wordmark } from "./wordmark";
 
 export interface HomeContext {
@@ -622,6 +622,14 @@ export function createHome(ctx: HomeContext): {
   };
   let fromSeries: LibraryBook[] | null = null;
 
+  // Office's panels (WEB.md → One app, two styles, 2026-10-16): the title on one line with its one
+  // button, then the facts as label and value rows, the rest as quiet words at the foot.
+  const opHead = (title: string, action: HTMLElement | null) => h("div", { class: "ophead" }, h("div", { class: "opt" }, title), action);
+  const opButton = (name: string, action: () => void) => h("button", { class: "opbtn", onclick: action }, name);
+  const opGrid = (rows: [string, Child][]) => h("div", { class: "opgrid" },
+    ...rows.filter(([, v]) => v != null && v !== "").flatMap(([k, v]) => [h("div", { class: "pk" }, k), h("div", { class: "pv" }, v)]));
+  const opLinks = (...links: (HTMLElement | null)[]) => h("div", { class: "oplinks" }, ...present(...links));
+
   const renderPanel = () => {
     if (!panelFor) return;
     const top = h("div", { class: "top" });
@@ -635,24 +643,40 @@ export function createHome(ctx: HomeContext): {
       const updated = updatedLabel(x);
       const link = (c: { title: string; url: string }, cls = "") => h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", class: cls }, c.title);
       const rows = panelChapters(x);
+      const chapters = rows.length ? h("div", { class: "chap" }, ...rows.flatMap(({ chapter: c, index }) => {
+        const cls = [index === x.progress.currentIndex ? "cur" : "", x.progress.isRead(index) ? "read" : "", c.locked ? "locked" : ""].filter(Boolean).join(" ");
+        return [h("span", {}, link(c, cls), x.progress.isNew(index) ? h("span", { class: "nw" }, quiet() ? "new" : "NEW") : null), h("span", { class: "d" }, chapterDateLabel(c.published, now, true) ?? "")];
+      })) : null;
+      const checked = x.checkedAt && x.device ? [`Checked ${ago(new Date(x.checkedAt).toISOString(), now)} on ${x.device}`, inDropbox(x)].filter(Boolean).join(" · ") : "No chapters from the phones yet.";
+      const readable = readingOrderOf(x.chapters).length > 0;
+      if (quiet()) {
+        panel.replaceChildren(...present(top,
+          opHead(x.title, readable ? opButton(x.current ? "Continue" : "Read", () => ctx.openSerial(x)) : null),
+          opGrid([
+            ["Author", bySite(x)],
+            ["Chapters", [x.progress.newCount ? `${x.progress.newCount} new` : "", x.progress.unreadCount ? `${x.progress.unreadCount} unread` : x.caughtUp ? "Caught up" : "", updated ? `updated ${updated}` : ""].filter(Boolean).join(" · ")],
+            ["Reading", x.chapters.length ? (x.current ? link(x.current) : "Not started") : null],
+            ["Checked", checked.replace(/^Checked /, "")],
+          ]),
+          chapters ? h("div", { class: "sec" }, h("h3", {}, "Chapters"), chapters) : null,
+          opLinks(h("a", { href: x.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${x.site} ↗`), h("button", { onclick: () => ctx.editSerial(x) }, "Edit details…"))));
+        panel.classList.add("open");
+        return;
+      }
       panel.replaceChildren(...present(top,
         h("h1", { class: "sans" }, panelTitle(x.title)),
         h("div", { class: "by" }, bySite(x)),
         h("div", { class: "stline" }, ...present(newTag(x), unreadTag(x)), updated ? h("span", {}, `Updated ${updated}`) : null),
         h("div", { class: "acts" },
-          readingOrderOf(x.chapters).length ? h("button", { class: "seal", onclick: () => ctx.openSerial(x) }, x.current ? "Continue" : "Read") : null,
+          readable ? h("button", { class: "seal", onclick: () => ctx.openSerial(x) }, x.current ? "Continue" : "Read") : null,
           h("a", { class: "well", href: x.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${x.site} ↗`)),
         x.chapters.length ? h("div", { class: "sec" }, h("h3", {}, "Reading"),
           h("div", { class: "chap" }, ...(x.current
             ? [link(x.current), h("span", { class: "d" }, chapterDateLabel(x.current.published, now, true) ?? "")]
             : [h("span", { class: "dim" }, "Not started"), h("span", {})]))) : null,
-        rows.length ? h("div", { class: "sec" }, h("h3", {}, "Chapters"),
-          h("div", { class: "chap" }, ...rows.flatMap(({ chapter: c, index }) => {
-            const cls = [index === x.progress.currentIndex ? "cur" : "", x.progress.isRead(index) ? "read" : "", c.locked ? "locked" : ""].filter(Boolean).join(" ");
-            return [h("span", {}, link(c, cls), x.progress.isNew(index) ? h("span", { class: "nw" }, "NEW") : null), h("span", { class: "d" }, chapterDateLabel(c.published, now, true) ?? "")];
-          }))) : null,
+        chapters ? h("div", { class: "sec" }, h("h3", {}, "Chapters"), chapters) : null,
         h("div", { class: "sec" }, h("button", { class: "word", onclick: () => ctx.editSerial(x) }, "Edit details…")),
-        h("div", { class: "foot2" }, x.checkedAt && x.device ? [`Checked ${ago(new Date(x.checkedAt).toISOString(), now)} on ${x.device}`, inDropbox(x)].filter(Boolean).join(" · ") : "No chapters from the phones yet.")));
+        h("div", { class: "foot2" }, checked)));
       panel.classList.add("open");
       return;
     }
@@ -663,20 +687,27 @@ export function createHome(ctx: HomeContext): {
       const read = ms.filter(m => m.read).length;
       const next = nextInSeries(ms, id => ctx.progress(id));
       top.append(h("span", { class: "grow" }), closeButton);
-      panel.replaceChildren(...present(top,
+      const nextName = next ? `${(ctx.progress(next.id) ?? 0) > 0 ? "Continue" : "Read"}${next.seriesIndex != null ? ` · Book ${next.seriesIndex}` : ""}` : "";
+      const bookRows = ms.map(m => {
+        const p = m.read ? 1 : ctx.progress(m.id) ?? 0;
+        return h("button", { class: "sbook", "data-id": m.id, onclick: () => { panelFor = { book: m }; renderPanel(); if (!ctx.places(m.id) && m.hasSyncFile) void ctx.load(m).then(renderPanel); } },
+          h("span", { class: "cv0" }, cover(m, false)),
+          h("span", { class: "sbi" },
+            h("span", { class: "sbt" }, h("span", { class: "sbn" }, m.seriesIndex != null ? String(m.seriesIndex) : ""), m.title),
+            h("span", { class: "prog" }, h("span", { class: "pl" }, h("i", { style: `width:${Math.round(p * 100)}%` })), h("span", { class: "pc" }, m.read ? "Read" : p > 0 ? pct(p) : ""))));
+      });
+      if (quiet()) {
+        panel.replaceChildren(...present(top,
+          opHead(name, next ? opButton(nextName, () => ctx.open(next)) : null),
+          opGrid([["Author", ms.find(m => m.author)?.author ?? ""], ["Books", `${ms.length} books · ${read} read`]]),
+          h("div", { class: "sec" }, h("h3", {}, "Books"), ...bookRows)));
+      } else panel.replaceChildren(...present(top,
         h("div", { class: "scov" }, ...ms.slice(0, 3).reverse().map((m, i, arr) => h("div", { class: "cvb", style: `left:${(arr.length - 1 - i) * 22}px` }, cover(m, true)))),
         h("h1", {}, panelTitle(name)),
         h("div", { class: "by" }, ms.find(m => m.author)?.author ?? ""),
         h("div", { class: "ser" }, `${ms.length} books · ${read} read`),
-        next ? h("div", { class: "acts" }, h("button", { class: "seal", onclick: () => ctx.open(next) }, `${(ctx.progress(next.id) ?? 0) > 0 ? "Continue" : "Read"}${next.seriesIndex != null ? ` · Book ${next.seriesIndex}` : ""}`)) : null,
-        h("div", { class: "sec" }, h("h3", {}, "Books"), ...ms.map(m => {
-          const p = m.read ? 1 : ctx.progress(m.id) ?? 0;
-          return h("button", { class: "sbook", "data-id": m.id, onclick: () => { panelFor = { book: m }; renderPanel(); if (!ctx.places(m.id) && m.hasSyncFile) void ctx.load(m).then(renderPanel); } },
-            h("span", { class: "cv0" }, cover(m, false)),
-            h("span", { class: "sbi" },
-              h("span", { class: "sbt" }, h("span", { class: "sbn" }, m.seriesIndex != null ? String(m.seriesIndex) : ""), m.title),
-              h("span", { class: "prog" }, h("span", { class: "pl" }, h("i", { style: `width:${Math.round(p * 100)}%` })), h("span", { class: "pc" }, m.read ? "Read" : p > 0 ? pct(p) : ""))));
-        }))));
+        next ? h("div", { class: "acts" }, h("button", { class: "seal", onclick: () => ctx.open(next) }, nextName)) : null,
+        h("div", { class: "sec" }, h("h3", {}, "Books"), ...bookRows)));
     } else {
       const b = ctx.books().find(x => x.id === (panelFor as { book: LibraryBook }).book.id) ?? panelFor.book;
       const inSeries = fromSeries?.some(m => m.id === b.id) ? fromSeries : null;
@@ -687,7 +718,27 @@ export function createHome(ctx: HomeContext): {
       const mark = ctx.readMark(b);
       const p = ctx.progress(b.id) ?? 0;
       const choice = (name: string, on: boolean, action: () => void) => h("button", { class: on ? "on" : "", "aria-pressed": String(on), onclick: action }, name);
-      panel.replaceChildren(...present(top,
+      const status = h("div", { class: "choice" },
+        choice("Automatic", mark === "auto", () => ctx.setRead(b, null)),
+        choice("Read", mark === "read", () => ctx.setRead(b, true)),
+        choice("Unread", false, () => ctx.markUnread(b)));
+      const file = [b.path, megabytes(b.size)].filter(Boolean).join(" · ");
+      const hide = h("button", { class: quiet() ? undefined : "word", onclick: () => { closePanel(); ctx.setHidden(b, !b.hidden); } }, b.hidden ? "Unhide" : "Hide from the Library");
+      if (quiet()) {
+        const where = places == null ? (b.hasSyncFile ? "…" : "Not started on any device.")
+          : places.length ? h("div", {}, ...places.map(pl => h("div", {}, [`${pl.device} ${Math.round(pl.p * 100)}%`, pl.chapter, ago(new Date(pl.at).toISOString(), Date.now())].filter(Boolean).join(" · "))))
+            : "Not started on any device.";
+        panel.replaceChildren(...present(top,
+          opHead(b.title, opButton(p > 0 && !b.read ? "Continue" : "Read", () => ctx.open(b))),
+          opGrid([
+            ["Author", b.author ?? ""],
+            ["Series", b.series ? `${b.series}${b.seriesIndex != null ? ` · ${b.seriesIndex}` : ""}` : ""],
+            ["Places", where],
+            ["Read status", status],
+            ["File", file],
+          ]),
+          opLinks(h("button", { onclick: () => ctx.edit(b) }, "Edit details…"), hide)));
+      } else panel.replaceChildren(...present(top,
         h("div", { class: "cvb" }, cover(b, true)),
         h("h1", {}, panelTitle(b.title)),
         h("div", { class: "by" }, b.author ?? ""),
@@ -703,13 +754,9 @@ export function createHome(ctx: HomeContext): {
               h("span", { class: "pct" }, `${Math.round(pl.p * 100)}%`),
               h("span", { class: "when" }, [pl.chapter, ago(new Date(pl.at).toISOString(), Date.now())].filter(Boolean).join(" · ")))))
               : h("div", { class: "file" }, "Not started on any device.")),
-        h("div", { class: "sec" }, h("h3", {}, "Read status"),
-          h("div", { class: "choice" },
-            choice("Automatic", mark === "auto", () => ctx.setRead(b, null)),
-            choice("Read", mark === "read", () => ctx.setRead(b, true)),
-            choice("Unread", false, () => ctx.markUnread(b)))),
-        h("div", { class: "sec" }, h("h3", {}, "File"), h("div", { class: "file" }, [b.path, megabytes(b.size)].filter(Boolean).join(" · "))),
-        h("div", { class: "sec" }, h("button", { class: "word", onclick: () => { closePanel(); ctx.setHidden(b, !b.hidden); } }, b.hidden ? "Unhide" : "Hide from the Library"))));
+        h("div", { class: "sec" }, h("h3", {}, "Read status"), status),
+        h("div", { class: "sec" }, h("h3", {}, "File"), h("div", { class: "file" }, file)),
+        h("div", { class: "sec" }, hide)));
     }
     panel.classList.add("open");
     main.querySelectorAll(".tr.on").forEach(x => x.classList.remove("on"));

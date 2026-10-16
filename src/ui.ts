@@ -1,6 +1,6 @@
 // A few lines instead of a UI library: elements with attributes, handlers and children.
 
-type Child = Node | string | null | undefined | false;
+export type Child = Node | string | null | undefined | false;
 type Attrs = Record<string, string | boolean | number | ((e: Event) => void) | undefined>;
 
 export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Attrs = {}, ...children: Child[]): HTMLElementTagNameMap[K] {
