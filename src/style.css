@@ -469,7 +469,8 @@ button.r:hover { background: var(--sel); }
 }
 .office .w { color: inherit; }
 /* The book's title in the bar: Office's sans, as the rest of its chrome. */
-.office .httl .bt { font: 600 17px Figtree, system-ui, sans-serif; }
+/* Office's bar title steps back while reading: medium, smaller, the chapter's grey (2026-10-16). */
+.office .httl .bt { font: 500 15px Figtree, system-ui, sans-serif; color: var(--ink2); }
 /* Office's panels and Add books: no covers, the sans (2026-10-16). */
 .office .hpanel .cvb, .office .hpanel .scov, .office .hpanel .cv0 { display: none; }
 .office .hpanel h1 { font: 600 24px/1.25 Figtree, system-ui, sans-serif; margin-top: 8px; }
