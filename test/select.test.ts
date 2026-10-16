@@ -21,10 +21,11 @@ describe("multi-select in Details", () => {
     expect(toggleRow({ ids: ["z"], anchor: "z" }, "c", rows, true)).toEqual({ ids: ["z", "c"], anchor: "c" });
   });
 
-  it("the heading box ticks every shown row, or clears them when they all are", () => {
-    const all = toggleAll({ ids: ["b"], anchor: "b" }, rows);
+  it("the heading box ticks every shown row when none is, and clears any ticks, some or all", () => {
+    const all = toggleAll(NO_SELECTION, rows);
     expect(all.ids).toEqual(rows);
     expect(toggleAll(all, rows)).toEqual(NO_SELECTION);
+    expect(toggleAll({ ids: ["b"], anchor: "b" }, rows)).toEqual(NO_SELECTION);
     expect(toggleAll(NO_SELECTION, [])).toEqual(NO_SELECTION);
   });
 

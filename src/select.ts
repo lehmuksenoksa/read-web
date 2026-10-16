@@ -23,10 +23,9 @@ export function toggleRow(selection: Selection, id: string, visible: string[], s
   return { ids: on ? selection.ids.filter(x => x !== id) : [...selection.ids, id], anchor: id };
 }
 
-/** The heading's box: every shown row, or none when they all are ticked already. */
+/** The heading's box: none when anything is ticked (some or all), else every shown row (2026-10-16). */
 export function toggleAll(selection: Selection, visible: string[]): Selection {
-  const all = visible.length > 0 && visible.every(id => selection.ids.includes(id));
-  return all ? NO_SELECTION : { ids: [...visible], anchor: selection.anchor };
+  return selection.ids.length ? NO_SELECTION : { ids: [...visible], anchor: selection.anchor };
 }
 
 /** The selection with the rows no longer shown dropped (a search typed, Hidden switched, Grid). */

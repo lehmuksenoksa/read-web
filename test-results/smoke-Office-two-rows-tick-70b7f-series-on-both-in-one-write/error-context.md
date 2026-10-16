@@ -18,43 +18,38 @@
       - generic [ref=e22]: · Chapter 2 · 43%
       - generic [ref=e23]: ›
   - generic [ref=e24]:
-    - generic [ref=e26]:
-      - generic [ref=e27]: 1 selected
-      - button "·Mark as read" [ref=e28] [cursor=pointer]
-      - button "·Mark as unread" [ref=e29] [cursor=pointer]
-      - button "·Automatic" [ref=e30] [cursor=pointer]
-      - button "·Hide" [ref=e31] [cursor=pointer]
-      - button "·Set details…" [ref=e32] [cursor=pointer]
-      - button "·Clear" [ref=e33] [cursor=pointer]
-    - main [ref=e34]:
-      - table [ref=e35]:
-        - 'row "Select all Title Author Series # Progress Last read ▾ On Columns" [ref=e36] [cursor=pointer]':
-          - columnheader "Select all" [ref=e37]:
-            - checkbox "Select all" [checked=mixed] [ref=e38]
-          - columnheader "Title" [ref=e39]
-          - columnheader "Author" [ref=e40]
-          - columnheader "Series" [ref=e41]
-          - columnheader "#" [ref=e42]
-          - columnheader "Progress" [ref=e43]
-          - columnheader "Last read ▾" [ref=e44]
-          - columnheader "On" [ref=e45]
-          - button "Columns" [ref=e47]:
-            - img [ref=e49]
-        - row "Select Emma Emma Jane Austen Test Series 2 43% 1 h ago S23" [ref=e51] [cursor=pointer]:
-          - checkbox "Select Emma" [ref=e53]
-          - generic [ref=e55]: Emma
-          - generic [ref=e56]: Jane Austen
-          - generic [ref=e57]: Test Series
-          - generic [ref=e58]: "2"
-          - generic [ref=e63]: 43%
-          - generic [ref=e64]: 1 h ago
-          - generic [ref=e65]: S23
-        - row "Select Katabasis Katabasis R. F. Kuang Test Series 1 0%" [ref=e67] [cursor=pointer]:
-          - checkbox "Select Katabasis" [checked] [ref=e69]
-          - generic [ref=e71]: Katabasis
-          - generic [ref=e72]: R. F. Kuang
-          - generic [ref=e73]: Test Series
-          - generic [ref=e74]: "1"
-          - generic [ref=e78]: 0%
-    - complementary "Book" [ref=e82]
+    - generic [ref=e25]:
+      - button "2 books · Recent" [ref=e26] [cursor=pointer]
+      - button "Add books" [ref=e27] [cursor=pointer]
+    - main [ref=e28]:
+      - table [ref=e29]:
+        - 'row "Select all Title Author Series # Progress Last read ▾ On Columns" [ref=e30] [cursor=pointer]':
+          - columnheader "Select all" [ref=e31]:
+            - checkbox "Select all" [ref=e32]
+          - columnheader "Title" [ref=e33]
+          - columnheader "Author" [ref=e34]
+          - columnheader "Series" [ref=e35]
+          - columnheader "#" [ref=e36]
+          - columnheader "Progress" [ref=e37]
+          - columnheader "Last read ▾" [ref=e38]
+          - columnheader "On" [ref=e39]
+          - button "Columns" [ref=e41]:
+            - img [ref=e43]
+        - row "Select Emma Emma Jane Austen Test Series 2 43% 1 h ago S23" [ref=e45] [cursor=pointer]:
+          - checkbox "Select Emma" [ref=e47]
+          - generic [ref=e49]: Emma
+          - generic [ref=e50]: Jane Austen
+          - generic [ref=e51]: Test Series
+          - generic [ref=e52]: "2"
+          - generic [ref=e57]: 43%
+          - generic [ref=e58]: 1 h ago
+          - generic [ref=e59]: S23
+        - row "Select Katabasis Katabasis R. F. Kuang Test Series 1 0%" [ref=e61] [cursor=pointer]:
+          - checkbox "Select Katabasis" [ref=e63]
+          - generic [ref=e65]: Katabasis
+          - generic [ref=e66]: R. F. Kuang
+          - generic [ref=e67]: Test Series
+          - generic [ref=e68]: "1"
+          - generic [ref=e72]: 0%
+    - complementary "Book" [ref=e76]
 ```
