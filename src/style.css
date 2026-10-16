@@ -198,7 +198,7 @@ button.r:hover { background: var(--sel); }
 .home .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(150px * var(--z)), 1fr)); gap: calc(34px * var(--z)) calc(26px * var(--z)); }
 .home .cell { display: flex; flex-direction: column; position: relative; min-width: 0; }
 .home .cell .cvw { position: relative; display: block; }
-.home .cell .cv { aspect-ratio: 2 / 3; width: 100%; transition: transform .15s; }
+.home .cell .cv { aspect-ratio: 5 / 8; width: 100%; transition: transform .15s; }
 .home .cell:hover .cv { transform: translateY(-3px); }
 .home .cell .t { font: 600 calc(16px * var(--f))/1.25 "Home Literata", Georgia, serif; margin-top: 10px; }
 .home .cell .a { color: var(--ink2); font-size: calc(14px * var(--f)); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -317,7 +317,7 @@ button.r:hover { background: var(--sel); }
 .hpanel .back { color: var(--ink2); padding: 6px 8px 6px 0; }
 .hpanel .back:hover { color: var(--ink); }
 .hpanel .scov .cvb { position: absolute; top: 0; }
-.hpanel .scov .cv { width: 76px; aspect-ratio: 2 / 3; margin: 0; box-shadow: -6px 0 14px rgba(0,0,0,.35); }
+.hpanel .scov .cv { width: 76px; aspect-ratio: 5 / 8; margin: 0; box-shadow: -6px 0 14px rgba(0,0,0,.35); }
 
 
 /* Add books (step 2): drop EPUBs on Home or the box, or choose them; a line per file. */
@@ -490,8 +490,8 @@ button.r:hover { background: var(--sel); }
    the body, the fine print. The tokens make Office's: no cover, the sans, ink only, a little tighter. */
 .bp { padding-top: 2px; }
 .bp-hero { display: flex; gap: 20px; align-items: flex-start; }
-.bp-hero .cvb .cv { width: 92px; aspect-ratio: 2 / 3; margin: 0; border-radius: 4px; --f: .6; }
-.bp-hero .scov { position: relative; height: 138px; width: 120px; flex: none; }
+.bp-hero .cvb .cv { width: 92px; aspect-ratio: 5 / 8; margin: 0; border-radius: 4px; --f: .6; }
+.bp-hero .scov { position: relative; height: 148px; width: 120px; flex: none; }
 .bp-hero .scov .cv { width: 84px; }
 .bp-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
 .bp-ed { border-radius: 6px; margin: 0 -6px; padding: 1px 6px; align-self: flex-start; max-width: calc(100% + 12px); cursor: text; overflow-wrap: anywhere; }
@@ -578,7 +578,7 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
 .cur-top { --fw: clamp(180px, 17.4vw, 250px); display: flex; flex-wrap: wrap; gap: 40px 64px; align-items: flex-start; }
 .cur-feat { display: flex; gap: 34px; align-items: stretch; }
 .cur-cover { flex: none; width: var(--fw); }
-.cur-cover .cv { width: 100%; aspect-ratio: 2 / 3; border-radius: 6px; box-shadow: 0 22px 50px rgba(0,0,0,.45); --f: .9; }
+.cur-cover .cv { width: 100%; aspect-ratio: 5 / 8; border-radius: 6px; box-shadow: 0 22px 50px rgba(0,0,0,.45); --f: .9; }
 .cur-info { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; min-width: 220px; max-width: 360px; }
 .cur-title { text-align: left; font: 600 clamp(28px, 2.6vw, 38px)/1.12 "Home Literata", Georgia, serif; color: var(--ink); }
 .cur-title:hover { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; }
@@ -668,4 +668,4 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
 .home .cur-also .cell .cbar { margin-top: auto; padding-top: 8px; }
 
 /* Reading now's cover fitted to the books beside it: as tall as one of them, cover to bar (set from their size). */
-.cur-top.fitted .cur-cover { width: calc(var(--fh) * 2 / 3); }
+.cur-top.fitted .cur-cover { width: calc(var(--fh) * 5 / 8); }
