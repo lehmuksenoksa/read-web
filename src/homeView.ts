@@ -698,11 +698,13 @@ export function createHome(ctx: HomeContext): {
   // --- Continue: the book read last on any device ---
 
   /** Continue as a pill in the bar (Office, then Home, 2026-10-16): "Continue Title · Chapter 12 · 43% ›". */
-  const quietLine = (title: string, rest: string[]) => [
+  const quietLine = (title: string, rest: string[]): Node[] => present(
+    // With the accent, a round ▶ in the seal's colours first and no box, as Continue ▶ on the phones (2026-10-16).
+    style().accent ? h("span", { class: "play", "aria-hidden": "true" }, "▶") : null,
     h("span", { class: "k" }, "Continue"), h("b", {}, panelTitle(title)),
     h("span", { class: "k" }, rest.filter(Boolean).map(t => `· ${t}`).join(" ")),
-    h("span", { class: "go", "aria-hidden": "true" }, "›"),
-  ];
+    style().accent ? null : h("span", { class: "go", "aria-hidden": "true" }, "›"),
+  );
   const renderContinue = () => {
     const last = lastReadBook(ctx.books().filter(b => !b.hidden));
     cont.hidden = !last;
