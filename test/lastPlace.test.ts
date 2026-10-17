@@ -39,8 +39,8 @@ describe("Office shows Details only", () => {
   it("for books and serials; Home keeps its view", () => {
     expect(viewFor("grid", false)).toBe("details");
     expect(viewFor("cards", false)).toBe("details");
-    expect(viewFor("compact", false)).toBe("details");
+    expect(viewFor("list", false)).toBe("details");
     expect(viewFor("grid", true)).toBe("grid");
-    expect(viewFor("expanded", true)).toBe("expanded");
+    expect(viewFor("list", true)).toBe("list");
   });
 });

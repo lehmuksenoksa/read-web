@@ -56,9 +56,10 @@ export interface HomeSort {
   reversed: boolean;
 }
 
-export type SerialView = "compact" | "expanded" | "details";
+/** List (2026-10-17: Expanded with the cover, Compact gone) or Details. */
+export type SerialView = "list" | "details";
 export const SERIAL_VIEWS: { view: SerialView; name: string }[] = [
-  { view: "compact", name: "Compact" }, { view: "expanded", name: "Expanded" }, { view: "details", name: "Details" },
+  { view: "list", name: "List" }, { view: "details", name: "Details" },
 ];
 
 /** The Serials side of Home: its own view, sort and sizes. */
@@ -70,9 +71,9 @@ export interface SerialsSetup {
 }
 
 export const DEFAULT_SERIALS: SerialsSetup = {
-  view: "compact",
+  view: "list",
   sort: { key: "latest", reversed: false },
-  sizes: { compact: 2, expanded: 2, details: 2 },
+  sizes: { list: 2, details: 2 },
 };
 
 /** What Web's setup keeps for Home (in Dropbox, so every browser shows the same). */
@@ -121,6 +122,7 @@ export function decodeHome(raw: unknown): HomeSetup {
 
 function decodeSerials(raw: unknown, oldScale: boolean): SerialsSetup {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof SerialsSetup, unknown>>;
+  // Compact and Expanded (until 2026-10-17) open as List.
   const view = SERIAL_VIEWS.some(v => v.view === r.view) ? (r.view as SerialView) : DEFAULT_SERIALS.view;
   const sortRaw = (r.sort ?? {}) as { key?: unknown; reversed?: unknown };
   // "updated" was a column until 2026-10-17; Latest chapter sorts by the same date.
@@ -129,7 +131,8 @@ function decodeSerials(raw: unknown, oldScale: boolean): SerialsSetup {
     ? { key: key as SerialColumnKey, reversed: sortRaw.reversed === true }
     : DEFAULT_SERIALS.sort;
   const sizesRaw = (r.sizes ?? {}) as Record<string, unknown>;
-  const sizes = Object.fromEntries(SERIAL_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v], oldScale)])) as Record<SerialView, number>;
+  // List's size: its own, else Expanded's (the same rows until 2026-10-17).
+  const sizes = Object.fromEntries(SERIAL_VIEWS.map(({ view: v }) => [v, sizeStep(v === "list" ? sizesRaw.list ?? sizesRaw.expanded : sizesRaw[v], oldScale)])) as Record<SerialView, number>;
   return { view, sort, sizes };
 }
 

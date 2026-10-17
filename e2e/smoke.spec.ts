@@ -54,8 +54,13 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   await page.click(".hmark .lib");
   await expect(page.locator(".cur-now")).toBeVisible();
   await page.click(".hmark .ser");
+  // Serials' List (2026-10-17): the row with the serial's sharp cover from the covers folder; List · Details to choose from.
   await expect(page.locator(".scard")).toHaveCount(1);
+  await expect(page.locator(".scard .cv img")).toHaveAttribute("src", /^blob:/);
+  await expect(page.locator(".hviews [role=tab]")).toHaveText(["List", "Details"]);
   await page.click(`.scard[data-sid="${SERIAL}"]`);
+  // The panel shows the cover too.
+  await expect(page.locator(".hpanel .bp-hero .cv img")).toHaveAttribute("src", /^blob:/);
   // The serial's panel: the button names the chapter it opens; the counts over the chapters.
   await expect(page.locator(".hpanel .bp-go")).toHaveText("Continue Chapter 212");
   await expect(page.locator(".hpanel .bp-head")).toContainText("3 unread · 1 new");

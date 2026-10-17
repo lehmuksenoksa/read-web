@@ -63,13 +63,13 @@ export async function standIn(page: Page, home: boolean): Promise<StandIn> {
       const folder = body.path as string;
       const entries = folder === "/Books"
         ? titles.map(([t], i) => ({ ...entry(`/Books/${t}.epub`), content_hash: hashOf(i), size: 300_000 }))
-        : folder === "/Apps/Read/Sync/covers" ? [{ ...entry(`${folder}/${EMMA}.jpg`), content_hash: "c1" }]
+        : folder === "/Apps/Read/Sync/covers" ? [{ ...entry(`${folder}/${EMMA}.jpg`), content_hash: "c1" }, { ...entry(`${folder}/${SERIAL}.jpg`), content_hash: "c2" }]
         : Object.keys(files).filter(p => p.startsWith(folder + "/") && !p.slice(folder.length + 1).includes("/")).map(entry);
       return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ entries, cursor: "c", has_more: false }) });
     }
     if (url.endsWith("/files/download")) {
       if (files[arg.path]) return ok(files[arg.path], "X");
-      if (arg.path === `/Apps/Read/Sync/covers/${EMMA}.jpg`) return ok(COVER, "C");
+      if (arg.path === `/Apps/Read/Sync/covers/${EMMA}.jpg` || arg.path === `/Apps/Read/Sync/covers/${SERIAL}.jpg`) return ok(COVER, "C");
       if (String(arg.path).startsWith("/Books/")) return ok(EPUB);
       return route.fulfill({ status: 409, headers: cors, body: '{"error_summary":"path/not_found/"}' });
     }

@@ -101,12 +101,24 @@ function toneOf(id: string): string[] {
  * its title in its colours. Marked with the book's id, so a sharp cover arriving later takes its place.
  */
 function cover(book: LibraryBook, withText: boolean): HTMLElement {
-  const src = sharpCover(book.id) ?? (book.cover ? `data:image/jpeg;base64,${book.cover}` : null);
-  if (src) return h("div", { class: "cv", "data-cover": book.id }, h("img", { src, alt: "" }));
-  const [bg, fg] = toneOf(book.id);
-  return h("div", { class: "cv", "data-cover": book.id, style: `background:${bg};color:${fg}` },
-    withText ? h("span", { class: "ct" }, book.title) : null,
-    withText && book.author ? h("span", { class: "ca" }, book.author) : null);
+  return coverBox(book.id, book.title, book.author, book.cover ? `data:image/jpeg;base64,${book.cover}` : null, withText);
+}
+
+/**
+ * A serial's cover (2026-10-17): the sharp one the phones put in the covers folder (the site's own, or
+ * a Royal Road or Hardcover match, or the user's pick), else the same plain cover a book without one gets.
+ */
+function serialCover(x: Serial): HTMLElement {
+  return coverBox(x.id, x.title, x.author, null, true);
+}
+
+function coverBox(id: string, title: string, author: string | null, small: string | null, withText: boolean): HTMLElement {
+  const src = sharpCover(id) ?? small;
+  if (src) return h("div", { class: "cv", "data-cover": id }, h("img", { src, alt: "" }));
+  const [bg, fg] = toneOf(id);
+  return h("div", { class: "cv", "data-cover": id, style: `background:${bg};color:${fg}` },
+    withText ? h("span", { class: "ct" }, title) : null,
+    withText && author ? h("span", { class: "ca" }, author) : null);
 }
 
 /** The cover's or card's one mark: the percentage, READ, or a series' count. */
@@ -351,7 +363,6 @@ export function createHome(ctx: HomeContext): {
     return x.caughtUp ? h("span", { class: "tag cu" }, badges() ? "CAUGHT UP" : "Caught up") : null;
   };
   const tagRow = (x: Serial) => h("span", { class: "tagrow" }, ...present(newTag(x), unreadTag(x)));
-  const updatedLabel = (x: Serial) => chapterDateLabel(x.latest?.published, Date.now(), true);
   const bySite = (x: Serial) => [x.author, x.site].filter(Boolean).join(" · ");
   /** "214 of 215 chapters in Dropbox", once listed. */
   const inDropbox = (x: Serial) => {
@@ -361,8 +372,8 @@ export function createHome(ctx: HomeContext): {
   };
   const serialOpen = (x: Serial) => panelFor != null && "serial" in panelFor && panelFor.serial === x.id;
 
-  const serialCard = (x: Serial, expanded: boolean) => {
-    const updated = updatedLabel(x);
+  /** The List row (2026-10-17, after Royal Road's follow list): the cover at the left, the lines at its foot. */
+  const serialCard = (x: Serial) => {
     const lines = () => {
       const now = Date.now();
       const latest = x.latest;
@@ -372,9 +383,11 @@ export function createHome(ctx: HomeContext): {
         ...(same ? [] : [h("span", { class: "k" }, "READING"), h("span", { class: x.current ? "" : "dim" }, x.current?.title ?? "Not started"), h("span", { class: "d" }, chapterDateLabel(x.current?.published, now, true) ?? "")]));
     };
     return h("button", { class: `scard${serialOpen(x) ? " on" : ""}`, "data-sid": x.id, onclick: () => openSerial(x) },
-      h("span", { class: "head" }, h("span", { class: "t" }, redTitle(x.title)), tagRow(x)),
-      h("span", { class: "a" }, bySite(x)),
-      expanded ? lines() : h("span", { class: "m" }, h("span", { class: "grow" }), updated ? `Updated ${updated}` : ""));
+      serialCover(x),
+      h("span", { class: "body" },
+        h("span", { class: "head" }, h("span", { class: "t" }, redTitle(x.title)), tagRow(x)),
+        h("span", { class: "a" }, bySite(x)),
+        lines()));
   };
 
   const serialCell = (x: Serial, key: SerialColumnKey) => {
@@ -435,13 +448,14 @@ export function createHome(ctx: HomeContext): {
     if (all == null) main.replaceChildren();
     else if (!shown.length) main.replaceChildren(h("p", { class: "hempty" }, all.length ? "No serials match." : "No serials yet."));
     else if (view === "details") main.replaceChildren(serialDetails(shown));
-    else main.replaceChildren(h("div", { class: `scards${view === "expanded" ? " long" : ""}` }, ...shown.map(x => serialCard(x, view === "expanded"))));
+    else main.replaceChildren(h("div", { class: "scards" }, ...shown.map(serialCard)));
     // Continue: the serial read last on any device, and its chapter.
     const last = all && lastReadSerial(all);
     cont.hidden = !last;
     if (last) {
       cont.classList.add("sv");
-      cont.replaceChildren(...quietLine(last.title, [last.current?.title ?? "", last.progress.unreadCount ? `${last.progress.unreadCount} unread` : "Up to date"]));
+      // The chapter only (2026-10-17): the unread count left every serial row.
+      cont.replaceChildren(...quietLine(last.title, [last.current?.title ?? ""]));
       cont.onclick = () => ctx.openSerial(last);
     }
     renderPanel();
@@ -778,7 +792,7 @@ export function createHome(ctx: HomeContext): {
         ? h("button", { class: "bp-go off", disabled: "true" }, "Caught up")
         : x.upNext ? h("button", { class: "bp-go", onclick: () => ctx.openSerial(x) }, x.current ? `Continue ${shortChapter(x.upNext.title)}` : "Start") : null;
       panel.replaceChildren(...present(top, h("div", { class: "bp sv" },
-        hero(null,
+        hero(h("div", { class: "cvb" }, serialCover(x)),
           editable(panelTitle(x.title), "bp-title", [{ value: x.title, label: "Title" }], ([title]) => { if (title) ctx.saveSerial(x, title, x.author); }),
           h("div", { class: "bp-sub" },
             editable(x.author ?? "", "bp-by", [{ value: x.author ?? "", label: "Author" }], ([author]) => ctx.saveSerial(x, x.title, author || null), { text: "Add author" }),

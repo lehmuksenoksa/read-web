@@ -152,10 +152,10 @@ describe("Words and sizes", () => {
     expect(SIZES[2]).toBe(0.75);
     expect(SIZES[0]).toBe(0.6);
     expect(SIZES[4]).toBe(1);
-    // The old file: the smallest Covers, the second Details, the largest Serials' Expanded.
+    // The old file: the smallest Covers, the second Details, the largest Serials' Expanded (List since 2026-10-17).
     const old = decodeHome({ sizes: { grid: 0, details: 1 }, serials: { sizes: { expanded: 4 } } });
     expect(old.sizes).toEqual({ grid: 2, details: 3 });
-    expect(old.serials.sizes).toEqual({ compact: 2, expanded: 4, details: 2 });
+    expect(old.serials.sizes).toEqual({ list: 4, details: 2 });
     expect(old.sizeScale).toBe(2);
     // Saved again, it reads the same: no second move.
     expect(decodeHome(JSON.parse(JSON.stringify(old)))).toEqual(old);

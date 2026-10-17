@@ -213,11 +213,14 @@ describe("Serials' setup and paths", () => {
     expect(home.tab).toBe("serials");
     expect(home.serials.view).toBe("details");
     expect(home.serials.sort).toEqual({ key: "reading", reversed: true });
-    expect(home.serials.sizes).toEqual({ compact: 2, expanded: 4, details: 2 });
+    expect(home.serials.sizes).toEqual({ list: 4, details: 2 });
     expect(home.serials).not.toHaveProperty("columns");
     // Sorted by Updated, a column until 2026-10-17: Latest chapter sorts by the same date; New, a column too, is the default again.
     expect(decodeHome({ serials: { sort: { key: "updated", reversed: true } } }).serials.sort).toEqual({ key: "latest", reversed: true });
     expect(decodeHome({ serials: { sort: { key: "new" } } }).serials.sort).toEqual(DEFAULT_SERIALS.sort);
+    // Compact and Expanded (until 2026-10-17) open as List; a Compact size is ignored, Expanded's carries over.
+    expect(decodeHome({ sizeScale: 2, serials: { view: "compact", sizes: { compact: 0, expanded: 3 } } }).serials).toEqual({ ...DEFAULT_SERIALS, view: "list", sizes: { list: 3, details: 2 } });
+    expect(decodeHome({ serials: { view: "expanded" } }).serials.view).toBe("list");
   });
 
   it("reads a serial's chapter files only; writes only its sync file (Web's place)", () => {
