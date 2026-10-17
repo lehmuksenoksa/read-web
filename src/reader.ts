@@ -23,6 +23,9 @@ import { h, icon, ICONS } from "./ui";
 import { QUIET_BOOK_CSS, QUIET_BOOK_HIDE, QUIET_BOOK_SCRIPT } from "./quietBook";
 
 /** Uploads wait this long after the last page turn (the phones wait 5 s). */
+/** Readium's gutter inside the page, each side (its default; Read doesn't change it). */
+const PAGE_GUTTER = 20;
+
 export const UPLOAD_DELAY_MS = 4000;
 /** How long opening waits for Readium to find the place before showing the chapter as it is. */
 const GO_TIMEOUT_MS = 8000;
@@ -472,7 +475,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (!toDownload.includes(family)) return null;
     return h("div", { class: "r font off" }, h("span", { class: "nm" }, family), downloading.has(family)
       ? h("span", { class: "dl busy" }, "Downloading…")
-      : h("button", { class: "dl", onclick: () => void download(family) }, "Download"));
+      : h("button", { class: "dl", onclick: () => void download(family) }, "Get"));
   };
 
   const fillAa = async () => {
@@ -679,8 +682,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       arrow.disabled = look.scroll;
     }
     applyLook(look);
+    // The text's own edges: Readium keeps a gutter inside the page (20 px), so the bar's title lines up with the text.
     const box = (page.parentElement as HTMLElement).getBoundingClientRect();
-    props.onPageBox?.({ left: box.left, width: box.width });
+    props.onPageBox?.({ left: box.left + PAGE_GUTTER, width: Math.max(0, box.width - 2 * PAGE_GUTTER) });
   };
 
   /**

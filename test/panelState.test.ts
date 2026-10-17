@@ -37,8 +37,8 @@ describe("the series' panel", () => {
     const b = book("b", "Emma", { seriesIndex: 2 });
     const c = book("c", "Third", { seriesIndex: 3 });
     const progress = (id: string) => (id === "b" ? 0.5 : null);
-    expect(seriesLine([a, b, c], b, progress)).toEqual({ left: "Book 2 of 3", right: "Emma · 50%", fraction: 0.5 });
-    expect(seriesLine([a, b, c], c, () => null)).toMatchObject({ left: "Book 3 of 3", right: "Third" });
+    expect(seriesLine([a, b, c], b, progress)).toEqual({ left: "1 of 3 read", right: "Emma · 50%", fraction: 0.5 });
+    expect(seriesLine([a, b, c], c, () => null)).toMatchObject({ left: "1 of 3 read", right: "Third" });
     expect(seriesLine([{ ...a }, { ...b, read: true }], null, () => null)).toEqual({ left: "All read", right: "", fraction: 1 });
     expect(seriesLine([], null, () => null)).toEqual({ left: "", right: "", fraction: 0 });
   });

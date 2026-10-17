@@ -347,7 +347,8 @@ export function createHome(ctx: HomeContext): {
 
   const cell = (b: LibraryBook, key: ColumnKey) => {
     const c = column(key);
-    const td = (child: Node | string, cls = "") => h("div", { class: `td${c.right ? " ra" : ""}${cls ? ` ${cls}` : ""}` }, child);
+    // Text in its own span, so a long one ends in "…" a gap short of the next column instead of running into it.
+    const td = (child: Node | string, cls = "") => h("div", { class: `td${c.right ? " ra" : ""}${cls ? ` ${cls}` : ""}` }, typeof child === "string" ? h("span", { class: "tx" }, child) : child);
     const last = ctx.places(b.id)?.[0];
     switch (key) {
       case "cover": return td(cover(b, false), "cvc");
@@ -802,8 +803,8 @@ export function createHome(ctx: HomeContext): {
   const quietLine = (title: string, rest: string[]): Node[] => present(
     // With the accent, a round ▶ in the seal's colours first and no box, as Continue ▶ on the phones (2026-10-16).
     style().accent ? h("span", { class: "play", "aria-hidden": "true" }, "▶") : null,
-    h("span", { class: "k" }, "Continue"), h("b", {}, panelTitle(title)),
-    h("span", { class: "k" }, rest.filter(Boolean).map(t => `· ${t}`).join(" ")),
+    h("span", { class: "k kw" }, "Continue"), h("b", {}, panelTitle(title)),
+    h("span", { class: "k kr" }, rest.filter(Boolean).map(t => `· ${t}`).join(" ")),
     style().accent ? null : h("span", { class: "go", "aria-hidden": "true" }, "›"),
   );
   const renderContinue = () => {

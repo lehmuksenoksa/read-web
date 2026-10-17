@@ -570,7 +570,7 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
    headings, sharing a top edge (the covers) and a bottom edge (the cover, Continue, the other books' bars);
    then Recently added as one row, then All. The featured cover's width (--fw) sets both: the side covers are
    as tall as it once their title, author and bar are counted. Below about 1100 px Also reading goes under. */
-.cur { margin-bottom: 44px; }
+section.cur { margin-bottom: 44px; }
 .cur-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 20px; }
 .cur-head h2 { font: 600 22px/1 "Home Literata", Georgia, serif; color: var(--ink); }
 .cur-head .n { color: var(--ink3); font-size: 14px; }
@@ -671,3 +671,13 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
 .cur-top.fitted .cur-cover { width: calc(var(--fh) * 5 / 8); }
 /* Reading now's text keeps to its own columns (the user, 2026-10-16): its bar ends a column gap short of the books beside it. */
 .cur-info { flex: 1 1 auto; min-width: 0; }
+
+/* A cell's text ends in "…" inside its padding (2026-10-17): long series names ran into the progress bar. */
+.home .td > .tx, .home .td > .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The pill shortens the chapter first, then the title; "Continue" itself never (2026-10-17: "Conti…"). */
+.hcont.pill .k.kw { flex: none; }
+.hcont.pill .k.kr { flex: 0 100 auto; }
+/* The status row keeps its height without Add books (Serials), so the row doesn't move between the tabs (2026-10-17). */
+.hstatus { min-height: 50px; }
+/* Office's Serials table: the counts in the cells' own size, not smaller (2026-10-17). */
+.t-tight .home .td .tag { font-size: inherit; }

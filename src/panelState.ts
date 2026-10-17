@@ -38,9 +38,9 @@ export function seriesLine(books: LibraryBook[], next: LibraryBook | null, progr
   if (!n) return { left: "", right: "", fraction: 0 };
   if (!next) return { left: read === n ? "All read" : "", right: "", fraction: read / n };
   const p = progress(next.id) ?? 0;
-  const at = next.seriesIndex ?? books.indexOf(next) + 1;
+  // How many are read, not "Book 5 of 4": a series' numbers can have gaps (the books not in Dropbox).
   return {
-    left: `Book ${at} of ${n}`,
+    left: `${read} of ${n} read`,
     right: `${next.title}${p > 0 ? ` · ${Math.round(p * 100)}%` : ""}`,
     fraction: (read + p) / n,
   };
