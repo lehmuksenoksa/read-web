@@ -1,7 +1,7 @@
 // The smoke test (2026-10-16): the built page in Chromium with a stand-in Dropbox. It catches what
 // the unit tests can't: the Library drawn, a book and a serial opened and read, the place saved.
 import { expect, test } from "@playwright/test";
-import { EMMA, pageText, SERIAL, standIn } from "./standin";
+import { DONE, EMMA, pageText, SERIAL, standIn } from "./standin";
 
 test("Office: the Library, a book, Contents, the place saved", async ({ page }) => {
   const dropbox = await standIn(page, false);
@@ -55,9 +55,19 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   await expect(page.locator(".cur-now")).toBeVisible();
   await page.click(".hmark .ser");
   // Serials' List (2026-10-17): the row with the serial's sharp cover from the covers folder; List · Details to choose from.
-  await expect(page.locator(".scard")).toHaveCount(1);
-  await expect(page.locator(".scard .cv img")).toHaveAttribute("src", /^blob:/);
+  await expect(page.locator(".scard")).toHaveCount(2);
+  await expect(page.locator(`.scard[data-sid="${SERIAL}"] .cv img`)).toHaveAttribute("src", /^blob:/);
   await expect(page.locator(".hviews [role=tab]")).toHaveText(["List", "Details"]);
+  // No tags on a serial row (2026-10-17): the new one has the dot and its latest chapter's title marked; the caught-up one reads LATEST over & READ.
+  await expect(page.locator(".scard .tag")).toHaveCount(0);
+  await expect(page.locator(`.scard[data-sid="${SERIAL}"] .ndot`)).toHaveCount(1);
+  await expect(page.locator(`.scard[data-sid="${SERIAL}"] .lines .nwt`)).toHaveText("Chapter 215: Scale");
+  await expect(page.locator(`.scard[data-sid="${DONE}"] .lines .k`)).toHaveText(["LATEST", "& READ"]);
+  await expect(page.locator(`.scard[data-sid="${DONE}"] .ndot`)).toHaveCount(0);
+  await page.click(".hviews [role=tab]:has-text('Details')");
+  await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td.nwt`)).toHaveText("Chapter 215: Scale");
+  await expect(page.locator(`.tr[data-sid="${DONE}"] .td`).nth(3)).toHaveText("Read");
+  await page.click(".hviews [role=tab]:has-text('List')");
   await page.click(`.scard[data-sid="${SERIAL}"]`);
   // The panel shows the cover too.
   await expect(page.locator(".hpanel .bp-hero .cv img")).toHaveAttribute("src", /^blob:/);

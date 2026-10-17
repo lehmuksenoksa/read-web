@@ -354,15 +354,14 @@ export function createHome(ctx: HomeContext): {
     title: "minmax(220px,2fr)", author: "minmax(200px,1.4fr)", site: "0", new: "0", unread: "0", updated: "0",
     latest: "minmax(200px,1.8fr)", reading: "minmax(200px,1.8fr)", lastread: "110px",
   };
-  /** "2 NEW" in the seal's colours. */
-  const newTag = (x: Serial) => x.progress.newCount ? h("span", { class: "tag new" }, `${x.progress.newCount} ${badges() ? "NEW" : "new"}`) : null;
-  /** "30 UNREAD" (the unread ones not NEW), or CAUGHT UP. */
-  const unreadTag = (x: Serial) => {
-    const n = x.progress.olderUnreadCount;
-    if (n) return h("span", { class: "tag" }, `${n} ${badges() ? "UNREAD" : "unread"}`);
-    return x.caughtUp ? h("span", { class: "tag cu" }, badges() ? "CAUGHT UP" : "Caught up") : null;
-  };
-  const tagRow = (x: Serial) => h("span", { class: "tagrow" }, ...present(newTag(x), unreadTag(x)));
+  // No tags on a serial row (2026-10-17, the user's call): LATEST and READING say what the UNREAD count
+  // said; new chapters show as the dot and the latest chapter's title in the accent (bold where the style
+  // has none); caught up is the one chapter line labelled LATEST over & READ.
+  /** The dot for new chapters: a serial's one mark. */
+  const newDot = (x: Serial) => x.progress.newCount ? h("span", { class: "ndot", "aria-label": `${x.progress.newCount} new` }) : null;
+  const hasNew = (x: Serial) => x.progress.newCount > 0;
+  /** LATEST and READING are the same chapter: the newest was read to its end. */
+  const sameChapter = (x: Serial) => x.latest != null && x.current != null && x.latest.id === x.current.id;
   const bySite = (x: Serial) => [x.author, x.site].filter(Boolean).join(" · ");
   /** "214 of 215 chapters in Dropbox", once listed. */
   const inDropbox = (x: Serial) => {
@@ -377,15 +376,17 @@ export function createHome(ctx: HomeContext): {
     const lines = () => {
       const now = Date.now();
       const latest = x.latest;
-      const same = latest && x.current && latest.id === x.current.id;
+      const same = sameChapter(x);
       return h("span", { class: "lines" },
-        ...(latest ? [h("span", { class: "k" }, "LATEST"), h("span", {}, latest.title), h("span", { class: "d" }, chapterDateLabel(latest.published, now, true) ?? "")] : []),
-        ...(same ? [] : [h("span", { class: "k" }, "READING"), h("span", { class: x.current ? "" : "dim" }, x.current?.title ?? "Not started"), h("span", { class: "d" }, chapterDateLabel(x.current?.published, now, true) ?? "")]));
+        ...(latest ? [h("span", { class: "k" }, "LATEST"), h("span", { class: hasNew(x) ? "nwt" : "" }, latest.title), h("span", { class: "d" }, chapterDateLabel(latest.published, now, true) ?? "")] : []),
+        // Caught up: the label's second line, "& READ", under LATEST; the row keeps a two-line row's height.
+        ...(same ? [h("span", { class: "k" }, "& READ"), h("span", {}), h("span", { class: "d" })]
+          : [h("span", { class: "k" }, "READING"), h("span", { class: x.current ? "" : "dim" }, x.current?.title ?? "Not started"), h("span", { class: "d" }, chapterDateLabel(x.current?.published, now, true) ?? "")]));
     };
     return h("button", { class: `scard${serialOpen(x) ? " on" : ""}`, "data-sid": x.id, onclick: () => openSerial(x) },
       serialCover(x),
       h("span", { class: "body" },
-        h("span", { class: "head" }, h("span", { class: "t" }, redTitle(x.title)), tagRow(x)),
+        h("span", { class: "head" }, h("span", { class: "t" }, redTitle(x.title)), newDot(x)),
         h("span", { class: "a" }, bySite(x)),
         lines()));
   };
@@ -393,10 +394,11 @@ export function createHome(ctx: HomeContext): {
   const serialCell = (x: Serial, key: SerialColumnKey) => {
     const td = (child: Node | string | null, cls = "") => h("div", { class: `td${cls ? ` ${cls}` : ""}` }, ...present(typeof child === "string" ? document.createTextNode(child) : child));
     switch (key) {
-      case "title": return td(h("span", { class: "t" }, x.title));
+      case "title": return td(h("span", { class: "t" }, x.title, newDot(x)));
       case "author": return td(bySite(x), "dim");
-      case "latest": return td(x.latest?.title ?? "", "dim");
-      case "reading": return td(x.current?.title ?? (x.chapters.length ? "Not started" : ""), "dim");
+      case "latest": return td(x.latest?.title ?? "", hasNew(x) ? "dim nwt" : "dim");
+      // The latest chapter read to its end: "Read", not the same chapter twice.
+      case "reading": return td(sameChapter(x) ? "Read" : x.current?.title ?? (x.chapters.length ? "Not started" : ""), "dim");
       case "lastread": return td(x.lastRead ? ago(new Date(x.lastRead).toISOString(), Date.now()) : "", "dim");
       // Sorts only, never shown (2026-10-17).
       case "site": case "new": case "unread": case "updated": return td("");

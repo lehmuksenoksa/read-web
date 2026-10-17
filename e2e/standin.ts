@@ -14,6 +14,8 @@ export const hashOf = (i: number) => i.toString(16).padStart(2, "0").repeat(32);
 export const KATABASIS = hashOf(0);
 export const EMMA = hashOf(1);
 export const SERIAL = "rr-101";
+/** A caught-up serial (2026-10-17): its three chapters all seen, the newest read to its end. */
+export const DONE = "rr-202";
 
 export interface StandIn {
   /** Every file written, in order. */
@@ -33,15 +35,25 @@ export async function standIn(page: Page, home: boolean): Promise<StandIn> {
     published: new Date(now - 8 * H - (214 - i) * 3 * D).toISOString(), length: 9000,
     ...(i >= 214 ? {} : { seenAt: 0 }),
   }));
+  const doneChapters = Array.from({ length: 3 }, (_, i) => ({
+    id: chapterId(i + 1), title: `Chapter ${i + 1}: ${["Ashes", "Embers", "Smoke"][i]}`,
+    url: `https://www.royalroad.com/fiction/202/x/chapter/${chapterId(i + 1)}/c`,
+    published: new Date(now - 30 * D - (2 - i) * 7 * D).toISOString(), length: 9000, seenAt: 0,
+  }));
   const para = (n: number) => `<p>Paragraph ${n}. The ink had dried in the night, and with it the last of the coastline he had trusted. Maren rolled the sheet flat with both palms and looked at what the survey had become.</p>`;
   const chapterPage = (title: string) => `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${title}</title></head><body><h1>${title}</h1>${Array.from({ length: 14 }, (_, i) => para(i + 1)).join("")}</body></html>`;
   const files: Record<string, string> = {
     "/Apps/Read/Sync/library.json": JSON.stringify({ books: index, version: 1 }),
-    "/Apps/Read/Sync/subscriptions.json": JSON.stringify({ stories: [{ bookId: SERIAL, url: "https://www.royalroad.com/fiction/101", title: "Dungeon Cartographer", author: "Sample Author", site: "rr", updatedAt: 1, removed: false, seen: {}, endChapterId: null }], version: 1 }),
+    "/Apps/Read/Sync/subscriptions.json": JSON.stringify({ stories: [
+      { bookId: SERIAL, url: "https://www.royalroad.com/fiction/101", title: "Dungeon Cartographer", author: "Sample Author", site: "rr", updatedAt: 1, removed: false, seen: {}, endChapterId: null },
+      { bookId: DONE, url: "https://www.royalroad.com/fiction/202", title: "The Lantern Road", author: "Ivy Marrow", site: "rr", updatedAt: 1, removed: false, seen: {}, endChapterId: chapterId(3) },
+    ], version: 1 }),
     "/Apps/Read/Sync/devices/Web/setup.json": JSON.stringify({ looks: [{ id: "office", name: "Office", background: "Custom", backgroundColor: -1, textColor: -14737633 }], lookId: "office", version: 1 }),
     "/Apps/Read/Sync/devices.json": JSON.stringify({ devices: ["S23"], version: 1 }),
     "/Apps/Read/Sync/devices/S23/backup.json": JSON.stringify({ device: "S23", savedAt: 5, settings: { keepAuthorNotes: "false" }, fonts: [], version: 1 }),
     [`/Apps/Read/Sync/chapters/${SERIAL}.json`]: JSON.stringify({ bookId: SERIAL, device: "S23", checkedAt: now - 2 * H, version: 1, chapters }),
+    [`/Apps/Read/Sync/chapters/${DONE}.json`]: JSON.stringify({ bookId: DONE, device: "S23", checkedAt: now - 2 * H, version: 1, chapters: doneChapters }),
+    [`/Apps/Read/Sync/${DONE}.json`]: JSON.stringify({ bookId: DONE, positions: { s23: { href: `ch/${chapterId(3)}.xhtml`, progression: 1, totalProgression: 1, timestamp: now - 3 * D, deviceName: "S23", locator: { href: `ch/${chapterId(3)}.xhtml`, type: "application/xhtml+xml", title: "x", locations: { progression: 1, totalProgression: 1 } }, snippet: "" } }, version: 1 }),
     [`/Apps/Read/Sync/${SERIAL}.json`]: JSON.stringify({ bookId: SERIAL, positions: { s23: { href: `ch/${chapterId(212)}.xhtml`, progression: 0.4, totalProgression: 0.9, timestamp: now - 5 * H, deviceName: "S23", locator: { href: `ch/${chapterId(212)}.xhtml`, type: "application/xhtml+xml", title: "x", locations: { progression: 0.4, totalProgression: 0.9 } }, snippet: "" } }, version: 1 }),
     [`/Apps/Read/Sync/${EMMA}.json`]: JSON.stringify({ bookId: EMMA, positions: { s23: { href: "OEBPS/Text/chapter 2.xhtml", progression: 0.3, totalProgression: 0.43, timestamp: now - 2 * H, deviceName: "S23", locator: { href: "OEBPS/Text/chapter 2.xhtml", type: "application/xhtml+xml", title: "Chapter 2", locations: { progression: 0.3, totalProgression: 0.43 } } } }, version: 1 }),
   };
