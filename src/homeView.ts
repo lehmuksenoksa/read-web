@@ -301,10 +301,10 @@ export function createHome(ctx: HomeContext): {
       case "author": return td(b.author ?? "", "dim");
       // The series with its number: "Mage Tank 5" (the # column went with the chooser, 2026-10-17).
       case "series": return td(b.series ? [b.series, b.seriesIndex != null ? String(b.seriesIndex) : ""].filter(Boolean).join(" ") : "", "dim");
-      // The number alone (2026-10-17, evening; the bar took too much room): "Read" once read, nothing before the start.
+      // The number alone (2026-10-17, evening; the bar took too much room): "100%" once read, nothing before the start.
       case "progress": {
         const p = b.read ? 1 : ctx.progress(b.id) ?? 0;
-        return td(b.read ? "Read" : p > 0 ? `${Math.round(p * 100)}%` : "", "dim ra");
+        return td(p > 0 ? `${Math.round(p * 100)}%` : "", "dim ra");
       }
       case "last": return td(ago(b.lastRead, Date.now()), "dim");
       // When the file came to Dropbox (the index has no added time of its own).
@@ -359,7 +359,16 @@ export function createHome(ctx: HomeContext): {
   // No tags on a serial row (2026-10-17, the user's call): LATEST and READING say what the UNREAD count
   // said; new chapters show as the dot and the latest chapter's title in the accent (bold where the style
   // has none); caught up is the one chapter line labelled LATEST over & READ.
-  /** The dot for new chapters: a serial's one mark. */
+  /** "2 NEW" in the seal's colours (back on the List row the evening of 2026-10-17, the user missing the tags). */
+  const newTag = (x: Serial) => x.progress.newCount ? h("span", { class: "tag new" }, `${x.progress.newCount} ${badges() ? "NEW" : "new"}`) : null;
+  /** "30 UNREAD" (the unread ones not NEW), or CAUGHT UP. */
+  const unreadTag = (x: Serial) => {
+    const n = x.progress.olderUnreadCount;
+    if (n) return h("span", { class: "tag" }, `${n} ${badges() ? "UNREAD" : "unread"}`);
+    return x.caughtUp ? h("span", { class: "tag cu" }, badges() ? "CAUGHT UP" : "Caught up") : null;
+  };
+  const tagRow = (x: Serial) => h("span", { class: "tagrow" }, ...present(newTag(x), unreadTag(x)));
+  /** The dot for new chapters: Details' mark (its title cell has no tags). */
   const newDot = (x: Serial) => x.progress.newCount ? h("span", { class: "ndot", "aria-label": `${x.progress.newCount} new` }) : null;
   const hasNew = (x: Serial) => x.progress.newCount > 0;
   /** LATEST and READING are the same chapter: the newest was read to its end. */
@@ -388,7 +397,7 @@ export function createHome(ctx: HomeContext): {
     return h("button", { class: `scard${serialOpen(x) ? " on" : ""}`, "data-sid": x.id, onclick: () => openSerial(x) },
       serialCover(x),
       h("span", { class: "body" },
-        h("span", { class: "head" }, h("span", { class: "t" }, redTitle(x.title)), newDot(x)),
+        h("span", { class: "head" }, h("span", { class: "t" }, redTitle(x.title)), tagRow(x)),
         h("span", { class: "a" }, bySite(x)),
         lines()));
   };
@@ -410,7 +419,8 @@ export function createHome(ctx: HomeContext): {
 
   const serialDetails = (list: Serial[]) => {
     const sort = serialsSetup().sort;
-    const cols = fitColumns(SERIAL_DETAIL_COLUMNS, k => SERIAL_LEAST[k] + 24, tableRoom(), ["updated", "site", "author"]);
+    // A narrow window drops Last read, then Source, then Chapters; Unread and Latest published stay.
+    const cols = fitColumns(SERIAL_DETAIL_COLUMNS, k => SERIAL_LEAST[k] + 24, tableRoom(), ["lastread", "site", "chapters", "author"]);
     const box = h("div", { class: "tbl ser", role: "table", style: `grid-template-columns:${cols.map(k => SERIAL_WIDTHS[k]).join(" ")}` });
     box.append(h("div", { class: "tr hd", role: "row" },
       ...cols.map(key => {

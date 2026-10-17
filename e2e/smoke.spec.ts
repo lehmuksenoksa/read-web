@@ -58,15 +58,16 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   await expect(page.locator(".scard")).toHaveCount(2);
   await expect(page.locator(`.scard[data-sid="${SERIAL}"] .cv img`)).toHaveAttribute("src", /^blob:/);
   await expect(page.locator(".hviews [role=tab]")).toHaveText(["List", "Details"]);
-  // No tags on a serial row (2026-10-17): the new one has the dot and its latest chapter's title marked; the caught-up one reads LATEST over & READ.
-  await expect(page.locator(".scard .tag")).toHaveCount(0);
-  await expect(page.locator(`.scard[data-sid="${SERIAL}"] .ndot`)).toHaveCount(1);
+  // The tags are back on the List row (2026-10-17, evening): NEW, UNREAD, CAUGHT UP; no dot there. The new one's latest chapter title is marked; the caught-up one reads LATEST over & READ.
+  await expect(page.locator(`.scard[data-sid="${SERIAL}"] .tag`)).toHaveText(["1 NEW", "2 UNREAD"]);
+  await expect(page.locator(`.scard[data-sid="${DONE}"] .tag`)).toHaveText(["CAUGHT UP"]);
+  await expect(page.locator(".scard .ndot")).toHaveCount(0);
   await expect(page.locator(`.scard[data-sid="${SERIAL}"] .lines .nwt`)).toHaveText("Chapter 215: Scale");
   await expect(page.locator(`.scard[data-sid="${DONE}"] .lines .k`)).toHaveText(["LATEST", "& READ"]);
-  await expect(page.locator(`.scard[data-sid="${DONE}"] .ndot`)).toHaveCount(0);
   await page.click(".hviews [role=tab]:has-text('Details')");
   // Details (2026-10-17, evening): Serial · Author · Source · Chapters · Unread · Latest published · Last read; the unread count is empty when caught up.
   await expect(page.locator(".home .tbl.ser .th")).toHaveText(["Serial", "Author", "Source", "Chapters", "Unread", "Latest published ▾", "Last read"]);
+  await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td .ndot`)).toHaveCount(1);
   await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td`).nth(2)).toHaveText("Royal Road");
   await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td`).nth(4)).toHaveText("3");
   await expect(page.locator(`.tr[data-sid="${DONE}"] .td`).nth(4)).toHaveText("");

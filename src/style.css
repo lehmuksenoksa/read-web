@@ -139,7 +139,7 @@ button.r:hover { background: var(--sel); }
   --rule: rgba(201,178,124,.14); --line: rgba(201,178,124,.24); --sel: #16130d;
   --raised: #121008; --sheet: #0a0906; --bar: #16130d; --well: #221e15;
   --accent: #B4572E; --seal: #6A2E14; --onseal: #E8D6AE; --wax: #CC4B42; --badge: rgba(0,0,0,.84);
-  --shadow: 0 18px 50px rgba(0,0,0,.6);
+  --cu-bg: #1D2A30; --cu-fg: #94B5C0; --shadow: 0 18px 50px rgba(0,0,0,.6);
 }
 #app.homeon.light {
   --bg: #FBF8F2; --tx: #2B2318;
@@ -147,7 +147,7 @@ button.r:hover { background: var(--sel); }
   --rule: rgba(43,35,24,.11); --line: rgba(43,35,24,.2); --sel: #F1EADD;
   --raised: #F3EEE4; --sheet: #FFFCF6; --bar: #F1EADD; --well: #E6DED0;
   --accent: #C0453B; --seal: #C0453B; --onseal: #FFF6EC; --wax: #2B2318; --badge: rgba(255,252,246,.94);
-  --shadow: 0 14px 40px rgba(60,40,10,.14);
+  --cu-bg: #F1E3BE; --cu-fg: #6A5214; --shadow: 0 14px 40px rgba(60,40,10,.14);
 }
 #app.t-accent .btn.primary { background: var(--seal); border-color: var(--seal); color: var(--onseal); }
 .home .grow { flex: 1; }
@@ -213,6 +213,9 @@ button.r:hover { background: var(--sel); }
 
 /* Serials: Compact and Expanded cards, the tags (NEW in the seal's colours, UNREAD, CAUGHT UP). */
 .home .tag.new { background: var(--seal); color: var(--onseal); }
+.home .tag.cu { background: var(--cu-bg); color: var(--cu-fg); }
+.home .tagrow { display: flex; gap: 8px; align-items: center; flex: none; }
+.home .scard .tagrow { margin-top: 1px; }
 .home .tag.n { min-width: 30px; text-align: center; letter-spacing: 0; font-size: calc(12px * var(--f)); }
 /* Serial rows without tags (2026-10-17): the dot for new chapters, the latest chapter's title marked new. */
 .home .ndot { flex: none; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--wax); margin-top: 7px; }
@@ -396,7 +399,7 @@ button.r:hover { background: var(--sel); }
   --ink2: color-mix(in srgb, #1F1F1F 68%, #FFFFFF); --ink3: color-mix(in srgb, #1F1F1F 48%, #FFFFFF);
   --rule: color-mix(in srgb, #1F1F1F 11%, #FFFFFF); --line: color-mix(in srgb, #1F1F1F 22%, #FFFFFF); --sel: color-mix(in srgb, #1F1F1F 7%, #FFFFFF);
   --raised: color-mix(in srgb, #1F1F1F 4%, #FFFFFF); --sheet: #FFFFFF; --bar: #FFFFFF; --well: color-mix(in srgb, #1F1F1F 8%, #FFFFFF);
-  --accent: #1F1F1F; --seal: #1F1F1F; --onseal: #FFFFFF;
+  --accent: #1F1F1F; --seal: #1F1F1F; --onseal: #FFFFFF; --cu-bg: transparent; --cu-fg: var(--ink3);
   --badge: rgba(255,255,255,.88); --shadow: 0 6px 24px rgba(31,31,31,.12);
 }
 /* Never pure white on dark (DESIGN). */
@@ -405,7 +408,7 @@ button.r:hover { background: var(--sel); }
   --ink2: color-mix(in srgb, #C9C9C9 68%, #121212); --ink3: color-mix(in srgb, #C9C9C9 48%, #121212);
   --rule: color-mix(in srgb, #C9C9C9 11%, #121212); --line: color-mix(in srgb, #C9C9C9 22%, #121212); --sel: color-mix(in srgb, #C9C9C9 7%, #121212);
   --raised: color-mix(in srgb, #C9C9C9 5%, #121212); --sheet: #121212; --bar: #121212; --well: color-mix(in srgb, #C9C9C9 10%, #121212);
-  --accent: #C9C9C9; --seal: #C9C9C9; --onseal: #121212;
+  --accent: #C9C9C9; --seal: #C9C9C9; --onseal: #121212; --cu-bg: transparent; --cu-fg: var(--ink3);
   --badge: rgba(18,18,18,.88); --shadow: 0 10px 30px rgba(0,0,0,.5);
 }
 /* Without the accent a title's first word is the title's colour. */
@@ -424,7 +427,7 @@ button.r:hover { background: var(--sel); }
 .t-tight .hpanel .chap .nw { background: none; color: var(--ink); font: 500 12px Figtree, system-ui, sans-serif; letter-spacing: 0; padding: 0; margin-left: 8px; }
 .t-sans .hpanel .chap, .t-sans .addhead h2, .t-sans .adddrop b { font-family: Figtree, system-ui, sans-serif; }
 .t-oneview .hzoom, .t-oneview .hviews { display: none; }
-.t-tight .home .tag, .t-tight .home .tag.new { background: none; color: var(--ink2); font: 500 calc(14px * var(--f)) Figtree, sans-serif; letter-spacing: 0; padding: 0; }
+.t-tight .home .tag, .t-tight .home .tag.new, .t-tight .home .tag.cu { background: none; color: var(--ink2); font: 500 calc(14px * var(--f)) Figtree, sans-serif; letter-spacing: 0; padding: 0; }
 .t-tight .home .tag.new { color: var(--ink); }
 .t-tight .hadd { background: none; color: var(--ink2); padding: 4px 0; border-radius: 0; font-weight: 500; }
 .t-tight .hadd:hover { color: var(--ink); }
