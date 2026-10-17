@@ -310,7 +310,7 @@ export function shortChapter(title: string): string {
 
 // --- Details' columns for serials ---
 
-export type SerialColumnKey = "title" | "author" | "site" | "new" | "unread" | "updated" | "latest" | "reading" | "lastread";
+export type SerialColumnKey = "title" | "author" | "site" | "chapters" | "unread" | "updated" | "lastread";
 
 export interface SerialColumn {
   key: SerialColumnKey;
@@ -318,22 +318,26 @@ export interface SerialColumn {
   heading: string;
   /** 1: A to Z, oldest first; -1 the other way. A first click sorts this way. */
   firstDir: 1 | -1;
+  /** Right-aligned (numbers). */
+  right?: boolean;
 }
 
 export const SERIAL_COLUMNS: SerialColumn[] = [
   { key: "title", name: "Serial", heading: "Serial", firstDir: 1 },
   { key: "author", name: "Author", heading: "Author", firstDir: 1 },
-  { key: "site", name: "Site", heading: "Site", firstDir: 1 },
-  { key: "new", name: "New", heading: "New", firstDir: -1 },
-  { key: "unread", name: "Unread", heading: "Unread", firstDir: -1 },
-  { key: "updated", name: "Updated", heading: "Updated", firstDir: -1 },
-  { key: "latest", name: "Latest chapter", heading: "Latest chapter", firstDir: -1 },
-  { key: "reading", name: "Reading", heading: "Reading", firstDir: 1 },
+  { key: "site", name: "Source", heading: "Source", firstDir: 1 },
+  { key: "chapters", name: "Chapters", heading: "Chapters", firstDir: -1, right: true },
+  { key: "unread", name: "Unread", heading: "Unread", firstDir: -1, right: true },
+  { key: "updated", name: "Latest published", heading: "Latest published", firstDir: -1 },
   { key: "lastread", name: "Last read", heading: "Last read", firstDir: -1 },
 ];
 export const serialColumn = (key: SerialColumnKey) => SERIAL_COLUMNS.find(c => c.key === key)!;
-/** Serials' Details, fixed (2026-10-17): the serial, "author · site", the latest chapter, the one being read, last read. */
-export const SERIAL_DETAIL_COLUMNS: SerialColumnKey[] = ["title", "author", "latest", "reading", "lastread"];
+/**
+ * Serials' Details, fixed (2026-10-17, evening; the latest and reading chapters went at the user's
+ * call): the serial, author, source, the site's chapter count, the unread count, when the newest
+ * chapter was published, last read.
+ */
+export const SERIAL_DETAIL_COLUMNS: SerialColumnKey[] = ["title", "author", "site", "chapters", "unread", "updated", "lastread"];
 
 const sortKey = (text: string | null) => (text ?? "").replace(/^(the|a|an)\s+/i, "").toLocaleLowerCase();
 
@@ -342,11 +346,9 @@ function serialValue(s: Serial, col: SerialColumnKey): string | number | null {
     case "title": return sortKey(s.title);
     case "author": return s.author ? sortKey(s.author) : null;
     case "site": return s.site;
-    case "new": return s.progress.newCount;
-    case "unread": return s.chapters.length ? s.progress.olderUnreadCount : null;
-    case "updated":
-    case "latest": return s.updated;
-    case "reading": return s.current ? sortKey(s.current.title) : null;
+    case "chapters": return s.chapters.length || null;
+    case "unread": return s.chapters.length ? s.progress.unreadCount : null;
+    case "updated": return s.updated;
     case "lastread": return s.lastRead;
   }
 }

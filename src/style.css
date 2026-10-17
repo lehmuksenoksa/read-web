@@ -430,7 +430,8 @@ button.r:hover { background: var(--sel); }
 .t-tight .hadd:hover { color: var(--ink); }
 .t-tight .toc .item .nw { background: none; color: var(--ink); text-transform: none; letter-spacing: 0; font: 500 12px Figtree, sans-serif; padding: 0; }
 /* Office's Continue: a small pill in the middle of the bar, on the Library and Serials pages (C1, 2026-10-16). */
-.hcont.pill { left: 50%; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: auto; max-width: min(460px, calc(100% - 2 * 380px)); border: 1px solid var(--line); border-radius: 18px; box-shadow: none; background: var(--raised); padding: 6px 16px; gap: 8px; align-items: baseline; font-size: 13px; z-index: 2; }
+.hcont.pill { left: 50%; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: auto; max-width: min(460px, calc(100% - 2 * 380px)); border: 1px solid var(--line); border-radius: 18px; box-shadow: none; background: var(--raised); padding: 6px 16px; gap: 8px; align-items: center; font-size: 13px; z-index: 2; }
+.hcont.pill .ct { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .app.reader .hcont.pill { display: none; }
 /* Home on the black (2026-10-16): the pill, search and the panels are a lighter black with a faint edge. */
 #app.t-serif .hcont.pill b { font: 600 15px "Home Literata", Georgia, serif; }

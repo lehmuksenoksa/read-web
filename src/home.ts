@@ -45,10 +45,11 @@ export const COLUMNS: Column[] = [
 const KEYS = COLUMNS.map(c => c.key);
 export const column = (key: ColumnKey) => COLUMNS.find(c => c.key === key)!;
 /**
- * Details' columns, fixed (2026-10-17, from the fresh look: the column chooser and multi-select went):
- * the cover where the style has covers, title, author, series with its number, progress, last read.
+ * Details' columns, fixed (2026-10-17, from the fresh look: the column chooser and multi-select went;
+ * the cover and the progress bar went the same evening): title, author, series with its number,
+ * progress as a number, last read, added.
  */
-export const DETAIL_COLUMNS: ColumnKey[] = ["cover", "title", "author", "series", "progress", "last"];
+export const DETAIL_COLUMNS: ColumnKey[] = ["title", "author", "series", "progress", "last", "added"];
 
 export interface HomeSort {
   key: ColumnKey;
@@ -72,7 +73,7 @@ export interface SerialsSetup {
 
 export const DEFAULT_SERIALS: SerialsSetup = {
   view: "list",
-  sort: { key: "latest", reversed: false },
+  sort: { key: "updated", reversed: false },
   sizes: { list: 2, details: 2 },
 };
 
@@ -125,8 +126,8 @@ function decodeSerials(raw: unknown, oldScale: boolean): SerialsSetup {
   // Compact and Expanded (until 2026-10-17) open as List.
   const view = SERIAL_VIEWS.some(v => v.view === r.view) ? (r.view as SerialView) : DEFAULT_SERIALS.view;
   const sortRaw = (r.sort ?? {}) as { key?: unknown; reversed?: unknown };
-  // "updated" was a column until 2026-10-17; Latest chapter sorts by the same date.
-  const key = sortRaw.key === "updated" ? "latest" : sortRaw.key;
+  // "latest" (Latest chapter, until the evening of 2026-10-17) sorted by the same date as Latest published.
+  const key = sortRaw.key === "latest" ? "updated" : sortRaw.key;
   const sort = SERIAL_DETAIL_COLUMNS.includes(key as SerialColumnKey)
     ? { key: key as SerialColumnKey, reversed: sortRaw.reversed === true }
     : DEFAULT_SERIALS.sort;

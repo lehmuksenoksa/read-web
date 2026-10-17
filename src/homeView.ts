@@ -301,20 +301,23 @@ export function createHome(ctx: HomeContext): {
       case "author": return td(b.author ?? "", "dim");
       // The series with its number: "Mage Tank 5" (the # column went with the chooser, 2026-10-17).
       case "series": return td(b.series ? [b.series, b.seriesIndex != null ? String(b.seriesIndex) : ""].filter(Boolean).join(" ") : "", "dim");
+      // The number alone (2026-10-17, evening; the bar took too much room): "Read" once read, nothing before the start.
       case "progress": {
         const p = b.read ? 1 : ctx.progress(b.id) ?? 0;
-        return td(h("span", { class: "prog" }, h("span", { class: "pl" }, h("i", { style: `width:${Math.round(p * 100)}%` })), h("span", { class: "pc" }, `${Math.round(p * 100)}%`)));
+        return td(b.read ? "Read" : p > 0 ? `${Math.round(p * 100)}%` : "", "dim ra");
       }
       case "last": return td(ago(b.lastRead, Date.now()), "dim");
+      // When the file came to Dropbox (the index has no added time of its own).
+      case "added": return td(ago(b.added ?? null, Date.now()), "dim");
       // Sorts only, never shown (2026-10-17).
-      case "num": case "on": case "added": case "size": return td("");
+      case "cover": case "num": case "on": case "size": return td("");
     }
   };
 
   const details = (list: LibraryBook[]) => {
-    // Office has no covers: no Cover column (WEB.md → One app, two styles).
+    // No covers in Details, in either style (2026-10-17, evening).
     // A narrow window: the less important columns go until the rest fit (2026-10-16).
-    const cols = fitColumns(DETAIL_COLUMNS.filter(k => style().covers || k !== "cover"), k => BOOK_LEAST[k] + 24, tableRoom(), ["cover", "series", "last", "progress", "author"]);
+    const cols = fitColumns(DETAIL_COLUMNS, k => BOOK_LEAST[k] + 24, tableRoom(), ["added", "series", "last", "progress", "author"]);
     const sort = home().sort;
     const table = h("div", { class: "tbl", role: "table", style: `grid-template-columns:${cols.map(widthOf).join(" ")}` });
     table.append(h("div", { class: "tr hd", role: "row" },
@@ -335,8 +338,8 @@ export function createHome(ctx: HomeContext): {
   };
 
   /** Each column's least width (the minmax minimum, or its fixed width), for fitting a narrow window. */
-  const BOOK_LEAST: Record<ColumnKey, number> = { cover: 36, title: 220, author: 140, series: 170, num: 0, progress: 170, last: 120, on: 0, added: 0, size: 0 };
-  const SERIAL_LEAST: Record<SerialColumnKey, number> = { title: 220, author: 200, site: 0, new: 0, unread: 0, updated: 0, latest: 200, reading: 200, lastread: 110 };
+  const BOOK_LEAST: Record<ColumnKey, number> = { cover: 0, title: 220, author: 140, series: 170, num: 0, progress: 80, last: 120, on: 0, added: 120, size: 0 };
+  const SERIAL_LEAST: Record<SerialColumnKey, number> = { title: 220, author: 160, site: 100, chapters: 90, unread: 80, updated: 140, lastread: 110 };
   /** The room for a Details table's columns: the books' area less its padding; no limit before it's laid out. */
   const tableRoom = () => {
     if (!main.clientWidth) return Infinity;
@@ -344,15 +347,14 @@ export function createHome(ctx: HomeContext): {
     return main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   };
   const widthOf = (key: ColumnKey) => ({
-    cover: "calc(36px*var(--z))", title: "minmax(220px,2.2fr)", author: "minmax(140px,1.3fr)", series: "minmax(170px,1.3fr)",
-    num: "0", progress: "minmax(170px,1.3fr)", last: "120px", on: "0", added: "0", size: "0",
+    cover: "0", title: "minmax(220px,2.2fr)", author: "minmax(140px,1.3fr)", series: "minmax(170px,1.3fr)",
+    num: "0", progress: "80px", last: "120px", on: "0", added: "120px", size: "0",
   })[key];
 
   // --- Serials (WEB.md → Home, step 3a): from the phones' chapter lists, read only ---
 
   const SERIAL_WIDTHS: Record<SerialColumnKey, string> = {
-    title: "minmax(220px,2fr)", author: "minmax(200px,1.4fr)", site: "0", new: "0", unread: "0", updated: "0",
-    latest: "minmax(200px,1.8fr)", reading: "minmax(200px,1.8fr)", lastread: "110px",
+    title: "minmax(220px,2fr)", author: "minmax(160px,1.2fr)", site: "100px", chapters: "90px", unread: "80px", updated: "140px", lastread: "110px",
   };
   // No tags on a serial row (2026-10-17, the user's call): LATEST and READING say what the UNREAD count
   // said; new chapters show as the dot and the latest chapter's title in the accent (bold where the style
@@ -395,25 +397,26 @@ export function createHome(ctx: HomeContext): {
     const td = (child: Node | string | null, cls = "") => h("div", { class: `td${cls ? ` ${cls}` : ""}` }, ...present(typeof child === "string" ? document.createTextNode(child) : child));
     switch (key) {
       case "title": return td(h("span", { class: "t" }, x.title, newDot(x)));
-      case "author": return td(bySite(x), "dim");
-      case "latest": return td(x.latest?.title ?? "", hasNew(x) ? "dim nwt" : "dim");
-      // The latest chapter read to its end: "Read", not the same chapter twice.
-      case "reading": return td(sameChapter(x) ? "Read" : x.current?.title ?? (x.chapters.length ? "Not started" : ""), "dim");
+      case "author": return td(x.author ?? "", "dim");
+      case "site": return td(x.site, "dim");
+      // The site's count, once a phone has listed the chapters.
+      case "chapters": return td(x.chapters.length ? String(x.chapters.length) : "", "dim ra");
+      // Empty when caught up (or not yet listed).
+      case "unread": return td(x.chapters.length && x.progress.unreadCount ? String(x.progress.unreadCount) : "", "dim ra");
+      case "updated": return td(x.updated ? ago(new Date(x.updated).toISOString(), Date.now()) : "", "dim");
       case "lastread": return td(x.lastRead ? ago(new Date(x.lastRead).toISOString(), Date.now()) : "", "dim");
-      // Sorts only, never shown (2026-10-17).
-      case "site": case "new": case "unread": case "updated": return td("");
     }
   };
 
   const serialDetails = (list: Serial[]) => {
     const sort = serialsSetup().sort;
-    const cols = fitColumns(SERIAL_DETAIL_COLUMNS, k => SERIAL_LEAST[k] + 24, tableRoom(), ["lastread", "reading", "latest", "author"]);
+    const cols = fitColumns(SERIAL_DETAIL_COLUMNS, k => SERIAL_LEAST[k] + 24, tableRoom(), ["updated", "site", "author"]);
     const box = h("div", { class: "tbl ser", role: "table", style: `grid-template-columns:${cols.map(k => SERIAL_WIDTHS[k]).join(" ")}` });
     box.append(h("div", { class: "tr hd", role: "row" },
       ...cols.map(key => {
         const on = sort.key === key;
         return h("div", {
-          class: `th${on ? " sort" : ""}`, role: "columnheader", "data-col": key,
+          class: `th${serialColumn(key).right ? " ra" : ""}${on ? " sort" : ""}`, role: "columnheader", "data-col": key,
           onclick: () => setSerials({ sort: sort.key === key ? { key, reversed: !sort.reversed } : { key, reversed: false } }),
         }, serialColumn(key).heading, on ? (sort.reversed ? " ▴" : " ▾") : "");
       })));
@@ -670,9 +673,12 @@ export function createHome(ctx: HomeContext): {
   const quietLine = (title: string, rest: string[]): Node[] => present(
     // With the accent, a round ▶ in the seal's colours first and no box, as Continue ▶ on the phones (2026-10-16).
     style().accent ? h("span", { class: "play", "aria-hidden": "true" }, "▶") : null,
-    h("span", { class: "k kw" }, "Continue"), h("b", {}, panelTitle(title)),
-    h("span", { class: "k kr" }, rest.filter(Boolean).map(t => `· ${t}`).join(" ")),
-    style().accent ? null : h("span", { class: "go", "aria-hidden": "true" }, "›"),
+    // The texts share a baseline inside one box, and that box is centred on the ▶ (2026-10-17, evening:
+    // aligned by baseline straight in the pill, the texts sat at its top, above the button's middle).
+    h("span", { class: "ct" },
+      h("span", { class: "k kw" }, "Continue"), h("b", {}, panelTitle(title)),
+      h("span", { class: "k kr" }, rest.filter(Boolean).map(t => `· ${t}`).join(" ")),
+      style().accent ? null : h("span", { class: "go", "aria-hidden": "true" }, "›")),
   );
   const renderContinue = () => {
     const last = lastReadBook(ctx.books().filter(b => !b.hidden));

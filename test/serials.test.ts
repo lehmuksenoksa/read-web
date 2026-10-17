@@ -190,10 +190,12 @@ describe("Serials on Home", () => {
     const a = make("rr-1", "The Alpha", 3, 2);
     const b = make("rr-2", "Beta", 1);
     const c = homeSerials([sub("rr-3", "Gamma")], {}, {}, {}, NOW)[0];
-    expect(sortSerials([a, b, c], { key: "latest", reversed: false }).map(s => s.id)).toEqual(["rr-2", "rr-1", "rr-3"]);
-    expect(sortSerials([a, b, c], { key: "latest", reversed: true }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
+    expect(sortSerials([a, b, c], { key: "updated", reversed: false }).map(s => s.id)).toEqual(["rr-2", "rr-1", "rr-3"]);
+    expect(sortSerials([a, b, c], { key: "updated", reversed: true }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
     expect(sortSerials([c, b, a], { key: "title", reversed: false }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
-    expect(sortSerials([b, c, a], { key: "new", reversed: false }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
+    // Unread: the Alpha has 5 unread (not started), Beta 5 too, Gamma none listed; ties by title.
+    expect(sortSerials([b, c, a], { key: "unread", reversed: false }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
+    expect(sortSerials([b, c, a], { key: "chapters", reversed: true }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
     expect(searchSerials([a, b, c], "beta author").map(s => s.id)).toEqual(["rr-2"]);
   });
 
@@ -209,14 +211,15 @@ describe("Serials' setup and paths", () => {
   it("keeps Serials' own view, sort and sizes; Library or Serials in front; the chooser's columns are ignored (2026-10-17)", () => {
     expect(decodeHome({}).serials).toEqual(DEFAULT_SERIALS);
     expect(decodeHome({}).tab).toBe("books");
-    const home = decodeHome({ tab: "serials", serials: { view: "details", sort: { key: "reading", reversed: true }, sizes: { expanded: 4 }, columns: { order: ["site", "title"], hidden: ["title", "author"] } } });
+    const home = decodeHome({ tab: "serials", serials: { view: "details", sort: { key: "lastread", reversed: true }, sizes: { expanded: 4 }, columns: { order: ["site", "title"], hidden: ["title", "author"] } } });
     expect(home.tab).toBe("serials");
     expect(home.serials.view).toBe("details");
-    expect(home.serials.sort).toEqual({ key: "reading", reversed: true });
+    expect(home.serials.sort).toEqual({ key: "lastread", reversed: true });
     expect(home.serials.sizes).toEqual({ list: 4, details: 2 });
     expect(home.serials).not.toHaveProperty("columns");
-    // Sorted by Updated, a column until 2026-10-17: Latest chapter sorts by the same date; New, a column too, is the default again.
-    expect(decodeHome({ serials: { sort: { key: "updated", reversed: true } } }).serials.sort).toEqual({ key: "latest", reversed: true });
+    // Sorted by Latest chapter (a column until the evening of 2026-10-17): Latest published sorts by the same date; Reading and New, columns too, are the default again.
+    expect(decodeHome({ serials: { sort: { key: "latest", reversed: true } } }).serials.sort).toEqual({ key: "updated", reversed: true });
+    expect(decodeHome({ serials: { sort: { key: "reading" } } }).serials.sort).toEqual(DEFAULT_SERIALS.sort);
     expect(decodeHome({ serials: { sort: { key: "new" } } }).serials.sort).toEqual(DEFAULT_SERIALS.sort);
     // Compact and Expanded (until 2026-10-17) open as List; a Compact size is ignored, Expanded's carries over.
     expect(decodeHome({ sizeScale: 2, serials: { view: "compact", sizes: { compact: 0, expanded: 3 } } }).serials).toEqual({ ...DEFAULT_SERIALS, view: "list", sizes: { list: 3, details: 2 } });

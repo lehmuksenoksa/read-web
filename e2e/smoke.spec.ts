@@ -65,8 +65,12 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   await expect(page.locator(`.scard[data-sid="${DONE}"] .lines .k`)).toHaveText(["LATEST", "& READ"]);
   await expect(page.locator(`.scard[data-sid="${DONE}"] .ndot`)).toHaveCount(0);
   await page.click(".hviews [role=tab]:has-text('Details')");
-  await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td.nwt`)).toHaveText("Chapter 215: Scale");
-  await expect(page.locator(`.tr[data-sid="${DONE}"] .td`).nth(3)).toHaveText("Read");
+  // Details (2026-10-17, evening): Serial · Author · Source · Chapters · Unread · Latest published · Last read; the unread count is empty when caught up.
+  await expect(page.locator(".home .tbl.ser .th")).toHaveText(["Serial", "Author", "Source", "Chapters", "Unread", "Latest published ▾", "Last read"]);
+  await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td`).nth(2)).toHaveText("Royal Road");
+  await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td`).nth(4)).toHaveText("3");
+  await expect(page.locator(`.tr[data-sid="${DONE}"] .td`).nth(4)).toHaveText("");
+  await expect(page.locator(`.tr[data-sid="${DONE}"] .td`).nth(3)).toHaveText("3");
   await page.click(".hviews [role=tab]:has-text('List')");
   await page.click(`.scard[data-sid="${SERIAL}"]`);
   // The panel shows the cover too.

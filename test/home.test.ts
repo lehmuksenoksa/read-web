@@ -17,7 +17,7 @@ describe("Home's setup", () => {
   it("reads an old setup file (no home) as Covers, Recent and the middle size", () => {
     const setup = decodeSetup(JSON.stringify({ looks: [{ id: "office", name: "Office" }], lookId: "office" }));
     expect(setup.home).toEqual(DEFAULT_HOME);
-    expect(DETAIL_COLUMNS).toEqual(["cover", "title", "author", "series", "progress", "last"]);
+    expect(DETAIL_COLUMNS).toEqual(["title", "author", "series", "progress", "last", "added"]);
   });
 
   it("keeps what it knows and drops what it doesn't; the chooser's columns and its sorts are ignored (2026-10-17)", () => {
