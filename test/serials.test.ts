@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { decodeHome, DEFAULT_SERIALS, moveColumn, shownColumns } from "../src/home";
+import { decodeHome, DEFAULT_SERIALS } from "../src/home";
 import { chapterListPath, isSerialId, isWritablePath, serialSyncPath } from "../src/paths";
 import {
   chapterDateLabel, chapterHref, currentChapterIndex, estimatedLengths, freshIndexes, furthestPlace, homeSerials, keepsNotes, lastCheck, lastReadSerial,
-  missingChapterPage, NEW_FOR_MS, newChaptersText, nextAfterCaughtUp, numbersOnly, panelChapters, parseChapterList, shortChapter, parseSubscriptions, phonesKeepNotes,
+  missingChapterPage, NEW_FOR_MS, newChaptersText, nextAfterCaughtUp, panelChapters, parseChapterList, shortChapter, parseSubscriptions, phonesKeepNotes,
   progressLabel, readingOrderOf, searchSerials, sortSerials, storyProgress, withEndMark,
   type ChapterList, type SharedChapter, type Subscription,
 } from "../src/serials";
@@ -190,17 +190,11 @@ describe("Serials on Home", () => {
     const a = make("rr-1", "The Alpha", 3, 2);
     const b = make("rr-2", "Beta", 1);
     const c = homeSerials([sub("rr-3", "Gamma")], {}, {}, {}, NOW)[0];
-    expect(sortSerials([a, b, c], { key: "updated", reversed: false }).map(s => s.id)).toEqual(["rr-2", "rr-1", "rr-3"]);
-    expect(sortSerials([a, b, c], { key: "updated", reversed: true }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
+    expect(sortSerials([a, b, c], { key: "latest", reversed: false }).map(s => s.id)).toEqual(["rr-2", "rr-1", "rr-3"]);
+    expect(sortSerials([a, b, c], { key: "latest", reversed: true }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
     expect(sortSerials([c, b, a], { key: "title", reversed: false }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
     expect(sortSerials([b, c, a], { key: "new", reversed: false }).map(s => s.id)).toEqual(["rr-1", "rr-2", "rr-3"]);
     expect(searchSerials([a, b, c], "beta author").map(s => s.id)).toEqual(["rr-2"]);
-  });
-
-  it("shows New and Unread as plain numbers when Details is crowded", () => {
-    expect(numbersOnly(6, 1400)).toBe(false);
-    expect(numbersOnly(7, 1400)).toBe(true);
-    expect(numbersOnly(6, 1199)).toBe(true);
   });
 
   it("reads the phones' files leniently", () => {
@@ -212,18 +206,18 @@ describe("Serials on Home", () => {
 });
 
 describe("Serials' setup and paths", () => {
-  it("keeps Serials' own view, sort, sizes and columns; Library or Serials in front", () => {
+  it("keeps Serials' own view, sort and sizes; Library or Serials in front; the chooser's columns are ignored (2026-10-17)", () => {
     expect(decodeHome({}).serials).toEqual(DEFAULT_SERIALS);
     expect(decodeHome({}).tab).toBe("books");
-    expect(shownColumns(DEFAULT_SERIALS.columns)).toEqual(["title", "author", "site", "new", "unread", "updated"]);
-    const home = decodeHome({ tab: "serials", serials: { view: "details", sort: { key: "new", reversed: true }, sizes: { expanded: 4 }, columns: { order: ["site", "title"], hidden: ["title", "author"] } } });
+    const home = decodeHome({ tab: "serials", serials: { view: "details", sort: { key: "reading", reversed: true }, sizes: { expanded: 4 }, columns: { order: ["site", "title"], hidden: ["title", "author"] } } });
     expect(home.tab).toBe("serials");
     expect(home.serials.view).toBe("details");
-    expect(home.serials.sort).toEqual({ key: "new", reversed: true });
+    expect(home.serials.sort).toEqual({ key: "reading", reversed: true });
     expect(home.serials.sizes).toEqual({ compact: 2, expanded: 4, details: 2 });
-    expect(home.serials.columns.order.slice(0, 3)).toEqual(["site", "title", "author"]);
-    expect(home.serials.columns.hidden).toEqual(["author"]);
-    expect(moveColumn(home.serials.columns, "new", "site").order.slice(0, 2)).toEqual(["new", "site"]);
+    expect(home.serials).not.toHaveProperty("columns");
+    // Sorted by Updated, a column until 2026-10-17: Latest chapter sorts by the same date; New, a column too, is the default again.
+    expect(decodeHome({ serials: { sort: { key: "updated", reversed: true } } }).serials.sort).toEqual({ key: "latest", reversed: true });
+    expect(decodeHome({ serials: { sort: { key: "new" } } }).serials.sort).toEqual(DEFAULT_SERIALS.sort);
   });
 
   it("reads a serial's chapter files only; writes only its sync file (Web's place)", () => {

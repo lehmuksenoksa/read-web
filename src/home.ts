@@ -1,8 +1,8 @@
 // Home: the full Library (WEB.md → Home, agreed 2026-10-15). The parts without the page: what Web's
-// setup keeps for it, the sorts, Details' columns, the size steps and the title's red word.
+// setup keeps for it, the sorts, Details' fixed columns, the size steps and the title's red word.
 
 import { libraryItems, searchBooks, type LibraryBook, type LibraryItem, type SortBy } from "./library";
-import { SERIAL_COLUMNS, type SerialColumnKey } from "./serials";
+import { SERIAL_DETAIL_COLUMNS, type SerialColumnKey } from "./serials";
 
 export type BookView = "grid" | "details";
 /** The view shown: Office shows Details only, books and serials alike (WEB.md → One app, two styles). */
@@ -18,7 +18,6 @@ export type ColumnKey = "cover" | "title" | "author" | "series" | "num" | "progr
 
 export interface Column {
   key: ColumnKey;
-  /** In ☰'s list. */
   name: string;
   /** Over the column ("" for Cover). */
   heading: string;
@@ -30,7 +29,7 @@ export interface Column {
   right?: boolean;
 }
 
-/** Details' columns in their first order. Title can't be hidden or moved. */
+/** Everything Home can sort by; Details shows the fixed [DETAIL_COLUMNS] (2026-10-17), the rest are sorts only. */
 export const COLUMNS: Column[] = [
   { key: "cover", name: "Cover", heading: "", sortName: "Title", firstDir: 1 },
   { key: "title", name: "Title", heading: "Title", sortName: "Title", firstDir: 1 },
@@ -45,8 +44,11 @@ export const COLUMNS: Column[] = [
 ];
 const KEYS = COLUMNS.map(c => c.key);
 export const column = (key: ColumnKey) => COLUMNS.find(c => c.key === key)!;
-/** Title stays: always shown, never moved. */
-export const FIXED = "title";
+/**
+ * Details' columns, fixed (2026-10-17, from the fresh look: the column chooser and multi-select went):
+ * the cover where the style has covers, title, author, series with its number, progress, last read.
+ */
+export const DETAIL_COLUMNS: ColumnKey[] = ["cover", "title", "author", "series", "progress", "last"];
 
 export interface HomeSort {
   key: ColumnKey;
@@ -59,21 +61,18 @@ export const SERIAL_VIEWS: { view: SerialView; name: string }[] = [
   { view: "compact", name: "Compact" }, { view: "expanded", name: "Expanded" }, { view: "details", name: "Details" },
 ];
 
-/** The Serials side of Home: its own view, sort, sizes and Details' columns. */
+/** The Serials side of Home: its own view, sort and sizes. */
 export interface SerialsSetup {
   view: SerialView;
+  /** Details' sort: one of its fixed columns (SERIAL_DETAIL_COLUMNS). */
   sort: { key: SerialColumnKey; reversed: boolean };
   sizes: Record<SerialView, number>;
-  columns: { order: SerialColumnKey[]; hidden: SerialColumnKey[] };
 }
 
-const SERIAL_KEYS = SERIAL_COLUMNS.map(c => c.key);
-export const DEFAULT_SERIAL_COLUMNS: SerialsSetup["columns"] = { order: SERIAL_KEYS, hidden: ["latest", "reading", "lastread"] };
 export const DEFAULT_SERIALS: SerialsSetup = {
   view: "compact",
-  sort: { key: "updated", reversed: false },
+  sort: { key: "latest", reversed: false },
   sizes: { compact: 2, expanded: 2, details: 2 },
-  columns: DEFAULT_SERIAL_COLUMNS,
 };
 
 /** What Web's setup keeps for Home (in Dropbox, so every browser shows the same). */
@@ -88,12 +87,9 @@ export interface HomeSetup {
   gridSort: HomeSort;
   /** The size step per view: 0 to 4, 2 the middle. */
   sizes: Record<BookView, number>;
-  columns: { order: ColumnKey[]; hidden: ColumnKey[] };
   /** 2: the steps are on the scale of 2026-10-16 (SIZES); a file without it has its steps moved up by two once. */
   sizeScale: 2;
 }
-
-export const DEFAULT_COLUMNS: HomeSetup["columns"] = { order: KEYS, hidden: ["cover", "added", "size"] };
 
 export const DEFAULT_HOME: HomeSetup = {
   tab: "books",
@@ -102,7 +98,6 @@ export const DEFAULT_HOME: HomeSetup = {
   sort: { key: "last", reversed: false },
   gridSort: { key: "title", reversed: false },
   sizes: { grid: 2, details: 2 },
-  columns: DEFAULT_COLUMNS,
   sizeScale: 2,
 };
 
@@ -110,39 +105,32 @@ export const DEFAULT_HOME: HomeSetup = {
 export function decodeHome(raw: unknown): HomeSetup {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof HomeSetup, unknown>>;
   const view = BOOK_VIEWS.some(v => v.view === r.view) ? (r.view as BookView) : DEFAULT_HOME.view;
-  const sortOf = (raw: unknown, fallback: HomeSort): HomeSort => {
+  const sortOf = (raw: unknown, keys: ColumnKey[], fallback: HomeSort): HomeSort => {
     const x = (raw ?? {}) as Partial<HomeSort>;
-    return KEYS.includes(x.key as ColumnKey) && x.key !== "cover" ? { key: x.key as ColumnKey, reversed: x.reversed === true } : fallback;
+    return keys.includes(x.key as ColumnKey) && x.key !== "cover" ? { key: x.key as ColumnKey, reversed: x.reversed === true } : fallback;
   };
-  const sort = sortOf(r.sort, DEFAULT_HOME.sort);
-  const gridSort = sortOf(r.gridSort, DEFAULT_HOME.gridSort);
+  // Details sorts by one of its fixed columns; a sort kept from the chooser's days (On, Added, Size) is the default again.
+  const sort = sortOf(r.sort, DETAIL_COLUMNS, DEFAULT_HOME.sort);
+  const gridSort = sortOf(r.gridSort, KEYS, DEFAULT_HOME.gridSort);
   const oldScale = (r as { sizeScale?: unknown }).sizeScale !== 2;
   const sizesRaw = (r.sizes ?? {}) as Record<string, unknown>;
   const sizes = Object.fromEntries(BOOK_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v], oldScale)])) as Record<BookView, number>;
-  const columns = decodeColumns(r.columns, KEYS, DEFAULT_COLUMNS);
-  return { tab: r.tab === "serials" ? "serials" : "books", serials: decodeSerials(r.serials, oldScale), view, sort, gridSort, sizes, columns, sizeScale: 2 };
-}
-
-function decodeColumns<K extends string>(raw: unknown, keys: K[], fallback: { order: K[]; hidden: K[] }): { order: K[]; hidden: K[] } {
-  const colsRaw = (raw ?? {}) as { order?: unknown; hidden?: unknown };
-  const order = Array.isArray(colsRaw.order) ? colsRaw.order.filter((k): k is K => keys.includes(k as K)) : [];
-  // Columns added later join at the end, in their first order.
-  return {
-    order: [...new Set([...order, ...keys])],
-    hidden: Array.isArray(colsRaw.hidden) ? colsRaw.hidden.filter((k): k is K => keys.includes(k as K) && k !== FIXED) : fallback.hidden,
-  };
+  // A setup file's `columns` (the chooser's order and hidden columns, until 2026-10-17) is ignored.
+  return { tab: r.tab === "serials" ? "serials" : "books", serials: decodeSerials(r.serials, oldScale), view, sort, gridSort, sizes, sizeScale: 2 };
 }
 
 function decodeSerials(raw: unknown, oldScale: boolean): SerialsSetup {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof SerialsSetup, unknown>>;
   const view = SERIAL_VIEWS.some(v => v.view === r.view) ? (r.view as SerialView) : DEFAULT_SERIALS.view;
   const sortRaw = (r.sort ?? {}) as { key?: unknown; reversed?: unknown };
-  const sort = SERIAL_KEYS.includes(sortRaw.key as SerialColumnKey)
-    ? { key: sortRaw.key as SerialColumnKey, reversed: sortRaw.reversed === true }
+  // "updated" was a column until 2026-10-17; Latest chapter sorts by the same date.
+  const key = sortRaw.key === "updated" ? "latest" : sortRaw.key;
+  const sort = SERIAL_DETAIL_COLUMNS.includes(key as SerialColumnKey)
+    ? { key: key as SerialColumnKey, reversed: sortRaw.reversed === true }
     : DEFAULT_SERIALS.sort;
   const sizesRaw = (r.sizes ?? {}) as Record<string, unknown>;
   const sizes = Object.fromEntries(SERIAL_VIEWS.map(({ view: v }) => [v, sizeStep(sizesRaw[v], oldScale)])) as Record<SerialView, number>;
-  return { view, sort, sizes, columns: decodeColumns(r.columns, SERIAL_KEYS, DEFAULT_SERIAL_COLUMNS) };
+  return { view, sort, sizes };
 }
 
 // --- Size ---
@@ -166,21 +154,6 @@ export function textScale(size: number): number {
 
 // --- Columns ---
 
-/** [key] moved to just before [before] (null: to the end). Title doesn't move. */
-export function moveColumn<K extends string>(columns: { order: K[]; hidden: K[] }, key: K, before: K | null): { order: K[]; hidden: K[] } {
-  if (key === FIXED || key === before) return columns;
-  const order = columns.order.filter(k => k !== key);
-  const at = before == null ? order.length : order.indexOf(before);
-  order.splice(at < 0 ? order.length : at, 0, key);
-  return { ...columns, order };
-}
-
-export function toggleColumn<K extends string>(columns: { order: K[]; hidden: K[] }, key: K): { order: K[]; hidden: K[] } {
-  if (key === FIXED) return columns;
-  const hidden = columns.hidden.includes(key) ? columns.hidden.filter(k => k !== key) : [...columns.hidden, key];
-  return { ...columns, hidden };
-}
-
 /**
  * The columns that fit [available] pixels (2026-10-16): the least important go first, in [dropOrder],
  * until the rest fit by their least widths. The first column (Title) always stays.
@@ -196,13 +169,9 @@ export function fitColumns<K extends string>(cols: K[], leastWidth: (key: K) => 
   return kept;
 }
 
-export function shownColumns<K extends string>(columns: { order: K[]; hidden: K[] }): K[] {
-  return columns.order.filter(k => !columns.hidden.includes(k));
-}
-
 /** A click on a column's heading: by that column, or the other way when it's sorted by it already. */
 export function clickSort(sort: HomeSort, key: ColumnKey): HomeSort {
-  const by = key === "cover" ? FIXED : key;
+  const by: ColumnKey = key === "cover" ? "title" : key;
   return sort.key === by ? { key: by, reversed: !sort.reversed } : { key: by, reversed: false };
 }
 

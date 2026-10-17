@@ -1,21 +1,20 @@
 // Home: the full Library (WEB.md → Home, agreed 2026-10-15): Covers and Details (Cards went 2026-10-16), a book's or a
-// series' panel at the right, the size control, Details' columns and Continue. The data and the
+// series' panel at the right, the size control, Details and Continue. The data and the
 // actions (the book menu, Edit details, opening a book) are the page's own, passed in.
 
 import { sharpCover } from "./covers";
 import {
-  ago, besideReadingNow, BOOK_VIEWS, clickSort, column, curatedHome, DEFAULT_COLUMNS, DEFAULT_SERIAL_COLUMNS, detailsRows, FIXED, homeItems, inOrder, megabytes,
-  fitColumns, menuSort, moveColumn, nextInSeries, SERIAL_VIEWS, seriesLine, shortDate, shownColumns, SIZES, sortMenuChoice, textScale, titleWord, toggleColumn,
+  ago, besideReadingNow, BOOK_VIEWS, clickSort, column, curatedHome, DETAIL_COLUMNS, detailsRows, homeItems, inOrder, megabytes,
+  fitColumns, menuSort, nextInSeries, SERIAL_VIEWS, seriesLine, SIZES, sortMenuChoice, textScale, titleWord,
   viewFor, type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
 } from "./home";
 import {
-  chapterDateLabel, lastCheck, lastReadSerial, newChaptersText, numbersOnly, panelChapters, readingOrderOf, searchSerials, serialColumn, shortChapter, sortSerials,
+  chapterDateLabel, lastCheck, lastReadSerial, newChaptersText, panelChapters, readingOrderOf, searchSerials, SERIAL_DETAIL_COLUMNS, serialColumn, shortChapter, sortSerials,
   type Serial, type SerialColumnKey,
 } from "./serials";
 import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
 import { lastReadBook, type LibraryBook, type LibraryItem, type Place, type SortBy } from "./library";
 import type { Chrome, Setup } from "./looks";
-import { NO_SELECTION, pruneSelection, toggleAll, toggleRow, type Selection } from "./select";
 import { styleFor } from "./styleTokens";
 import { parseNumber, type DetailsEdit } from "./details";
 import { bookState, furthestPlace, goLabel, seriesLine as seriesProgress, statusAction } from "./panelState";
@@ -48,11 +47,7 @@ export interface HomeContext {
   /** The panel's Mark as read: with a message and Undo. */
   markRead(book: LibraryBook): void;
   /** The selection's actions (Details, 2026-10-16): the same marks for every ticked book, one message. */
-  setReadMany(books: LibraryBook[], read: true | null): void;
-  markUnreadMany(books: LibraryBook[]): void;
-  setHiddenMany(books: LibraryBook[], hidden: boolean): void;
   /** Set details… for the ticked books: a series and an author for them all. */
-  setDetails(books: LibraryBook[]): void;
   signOut(): void;
   offline(): boolean;
   /** Home (true) or Office (false): this browser's choice, in ⚙. */
@@ -82,7 +77,6 @@ const TONES = [["#2E3B2F", "#E6D8B0"], ["#3A2A22", "#E8C9A0"], ["#4A3B5C", "#EAD
 
 const GEAR = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
 const CLOSE = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>';
-const LINES = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M3 8h10M3 11.5h10"/></svg>';
 
 function svgEl(markup: string, cls = "ic"): HTMLElement {
   const el = h("span", { class: cls, "aria-hidden": "true" });
@@ -142,9 +136,6 @@ export function createHome(ctx: HomeContext): {
   let menuOpen: HTMLElement | null = null;
   /** The panel's book, series or serial; null when closed. */
   let panelFor: { book: LibraryBook } | { series: LibraryBook[] } | { serial: string } | null = null;
-  /** The ticked Details rows (WEB.md → Multi-select); only what's shown counts, so a search or Hidden prunes it. */
-  let selected: Selection = NO_SELECTION;
-  let visibleIds: string[] = [];
 
   /** The style in use as tokens (styleTokens.ts): what may differ between Home and Office, read here, never "is this Office". */
   const style = () => styleFor(ctx.isHome());
@@ -186,9 +177,7 @@ export function createHome(ctx: HomeContext): {
   const zoomMore = h("button", { class: "zb", title: "Larger", "aria-label": "Larger" });
   const views = h("div", { class: "hviews", role: "tablist" });
   const addButton = h("button", { class: "hadd" });
-  // The selection's line, in the count's place while rows are ticked (2026-10-16).
-  const selBar = h("div", { class: "hsel", hidden: true });
-  const status = h("div", { class: "hstatus" }, count, selBar, h("span", { class: "grow" }), h("div", { class: "hzoom" }, zoomLess, zoom, zoomMore), views, addButton);
+  const status = h("div", { class: "hstatus" }, count, h("span", { class: "grow" }), h("div", { class: "hzoom" }, zoomLess, zoom, zoomMore), views, addButton);
   const main = h("main", { class: "hmain" });
   const cont = h("button", { class: "hcont", hidden: true });
   const panel = h("aside", { class: "hpanel", "aria-label": "Book" });
@@ -204,7 +193,7 @@ export function createHome(ctx: HomeContext): {
     device: id => ctx.places(id)?.[0]?.device ?? null,
   };
 
-  // --- Menus: the sort menu (the status line), ☰ (Details' columns), ⚙ ---
+  // --- Menus: the sort menu (the status line), ⚙ ---
 
   const closeMenu = () => { menuOpen?.remove(); menuOpen = null; };
   const openMenu = (menu: HTMLElement, anchor: HTMLElement, alignRight = false) => {
@@ -254,61 +243,6 @@ export function createHome(ctx: HomeContext): {
       h("button", { class: "r", role: "menuitem", onclick: () => { closeMenu(); ctx.signOut(); } }, "Sign out")), gear, true);
   });
 
-  /** Details' columns, the Library's or the Serials': what ☰ and dragging change. */
-  type Columns = { order: string[]; hidden: string[] };
-  const table = () => onSerials()
-    ? { cols: serialsSetup().columns as Columns, name: (k: string) => serialColumn(k as SerialColumnKey).name, set: (c: Columns) => setSerials({ columns: c as SerialsSetup["columns"] }), reset: DEFAULT_SERIAL_COLUMNS as Columns }
-    : { cols: home().columns as Columns, name: (k: string) => column(k as ColumnKey).name, set: (c: Columns) => setHome({ columns: c as HomeSetup["columns"] }), reset: DEFAULT_COLUMNS as Columns };
-
-  /** ☰ at the end of Details' headings: a box per column (Title stays), drag a line to move it, and Reset. */
-  const columnsMenu = (anchor: HTMLElement) => {
-    const t = table();
-    const menu = h("div", { role: "menu", class: "colmenu" }, h("div", { class: "lab" }, "Columns"));
-    for (const key of t.cols.order) {
-      if (!style().covers && key === "cover") continue;
-      const fixed = key === FIXED;
-      const box = h("input", { type: "checkbox", "aria-label": t.name(key) });
-      box.checked = !t.cols.hidden.includes(key);
-      box.disabled = fixed;
-      box.addEventListener("change", () => table().set(toggleColumn(table().cols, key)));
-      menu.append(h("label", { class: `ci${fixed ? " fixed" : ""}`, "data-col": key, draggable: fixed ? undefined : "true" },
-        h("span", { class: "grip" }, fixed ? "" : "⋮⋮"), box, t.name(key)));
-    }
-    menu.append(h("hr"), h("button", { class: "r", onclick: () => table().set(table().reset) }, "Reset"));
-    dragColumns(menu);
-    openMenu(menu, anchor, true);
-  };
-
-  /** Dragging a heading, or a line in ☰'s list, moves its column before the one it's dropped on. */
-  let dragging: string | null = null;
-  const dragColumns = (container: HTMLElement) => {
-    container.addEventListener("dragstart", e => {
-      const c = (e.target as HTMLElement).closest<HTMLElement>("[data-col][draggable]");
-      if (!c) return;
-      dragging = c.dataset.col!;
-      e.dataTransfer!.effectAllowed = "move";
-      e.dataTransfer!.setData("text/plain", dragging);
-    });
-    container.addEventListener("dragover", e => {
-      const c = (e.target as HTMLElement).closest<HTMLElement>("[data-col]");
-      if (!dragging || !c || c.dataset.col === FIXED) return;
-      e.preventDefault();
-      container.querySelectorAll(".over").forEach(x => x.classList.remove("over"));
-      c.classList.add("over");
-    });
-    container.addEventListener("dragleave", e => (e.target as HTMLElement).closest?.(".over")?.classList.remove("over"));
-    container.addEventListener("drop", e => {
-      const c = (e.target as HTMLElement).closest<HTMLElement>("[data-col]");
-      container.querySelectorAll(".over").forEach(x => x.classList.remove("over"));
-      if (!dragging || !c) return;
-      e.preventDefault();
-      const moved = moveColumn(table().cols, dragging, c.dataset.col!);
-      dragging = null;
-      table().set(moved);
-    });
-    container.addEventListener("dragend", () => { dragging = null; });
-  };
-
   // --- Progress, read when an item comes into view ---
 
   let renderTimer: number | undefined;
@@ -349,132 +283,72 @@ export function createHome(ctx: HomeContext): {
     const c = column(key);
     // Text in its own span, so a long one ends in "…" a gap short of the next column instead of running into it.
     const td = (child: Node | string, cls = "") => h("div", { class: `td${c.right ? " ra" : ""}${cls ? ` ${cls}` : ""}` }, typeof child === "string" ? h("span", { class: "tx" }, child) : child);
-    const last = ctx.places(b.id)?.[0];
     switch (key) {
       case "cover": return td(cover(b, false), "cvc");
       case "title": return td(h("span", { class: "t" }, b.title));
       case "author": return td(b.author ?? "", "dim");
-      case "series": return td(b.series ?? "", "dim");
-      case "num": return td(b.series && b.seriesIndex != null ? String(b.seriesIndex) : "", "dim");
+      // The series with its number: "Mage Tank 5" (the # column went with the chooser, 2026-10-17).
+      case "series": return td(b.series ? [b.series, b.seriesIndex != null ? String(b.seriesIndex) : ""].filter(Boolean).join(" ") : "", "dim");
       case "progress": {
         const p = b.read ? 1 : ctx.progress(b.id) ?? 0;
         return td(h("span", { class: "prog" }, h("span", { class: "pl" }, h("i", { style: `width:${Math.round(p * 100)}%` })), h("span", { class: "pc" }, `${Math.round(p * 100)}%`)));
       }
       case "last": return td(ago(b.lastRead, Date.now()), "dim");
-      case "on": return td(last?.device ?? "", "dim");
-      case "added": return td(shortDate(b.added ?? null), "dim");
-      case "size": return td(megabytes(b.size), "dim");
+      // Sorts only, never shown (2026-10-17).
+      case "num": case "on": case "added": case "size": return td("");
     }
   };
 
   const details = (list: LibraryBook[]) => {
     // Office has no covers: no Cover column (WEB.md → One app, two styles).
     // A narrow window: the less important columns go until the rest fit (2026-10-16).
-    const cols = fitColumns(shownColumns(home().columns).filter(k => style().covers || k !== "cover"), k => BOOK_LEAST[k] + 24, tableRoom(), ["size", "added", "on", "cover", "num", "series", "last", "progress", "author"]);
+    const cols = fitColumns(DETAIL_COLUMNS.filter(k => style().covers || k !== "cover"), k => BOOK_LEAST[k] + 24, tableRoom(), ["cover", "series", "last", "progress", "author"]);
     const sort = home().sort;
-    const table = h("div", { class: `tbl${selected.ids.length ? " selecting" : ""}`, role: "table", style: `grid-template-columns:28px ${cols.map(widthOf).join(" ")} 40px` });
-    const allBox = h("input", { type: "checkbox", "aria-label": "Select all", onclick: (e: Event) => { e.stopPropagation(); select(toggleAll(selected, visibleIds)); } });
-    const headings = h("div", { class: "tr hd", role: "row" },
-      h("div", { class: "th chk", role: "columnheader" }, allBox),
+    const table = h("div", { class: "tbl", role: "table", style: `grid-template-columns:${cols.map(widthOf).join(" ")}` });
+    table.append(h("div", { class: "tr hd", role: "row" },
       ...cols.map(key => {
         const c = column(key);
         const on = sort.key === key;
         return h("div", {
           class: `th${c.right ? " ra" : ""}${on ? " sort" : ""}`, role: "columnheader", "data-col": key,
-          draggable: key === FIXED ? undefined : "true",
           "aria-sort": on ? (sort.reversed === (c.firstDir === 1) ? "descending" : "ascending") : undefined,
           onclick: () => { if (key !== "cover") setHome({ sort: clickSort(sort, key) }); },
         }, c.heading, on ? (sort.reversed ? " ▴" : " ▾") : "");
-      }),
-      h("div", { class: "th colbtn" }, h("button", { title: "Columns", "aria-label": "Columns", onclick: (e: Event) => { e.stopPropagation(); if (menuOpen?.classList.contains("colmenu")) closeMenu(); else columnsMenu(e.currentTarget as HTMLElement); } }, svgEl(LINES))));
-    dragColumns(headings);
-    table.append(headings);
+      })));
     for (const b of list) {
-      const on = selected.ids.includes(b.id);
-      const box = h("input", { type: "checkbox", "aria-label": `Select ${b.title}`, onclick: (e: Event) => { e.stopPropagation(); select(toggleRow(selected, b.id, visibleIds, (e as MouseEvent).shiftKey)); } });
-      box.checked = on;
-      table.append(h("div", { class: `tr${panelFor && "book" in panelFor && panelFor.book.id === b.id ? " on" : ""}${on ? " sel" : ""}`, role: "row", "data-id": b.id, onclick: () => openBook(b) },
-        h("div", { class: "td chk", onclick: (e: Event) => { e.stopPropagation(); box.click(); } }, box), ...cols.map(key => cell(b, key)), h("div", { class: "td" })));
+      table.append(h("div", { class: `tr${panelFor && "book" in panelFor && panelFor.book.id === b.id ? " on" : ""}`, role: "row", "data-id": b.id, onclick: () => openBook(b) },
+        ...cols.map(key => cell(b, key))));
     }
-    // Shift-click on a box ticks a range, so the browser mustn't extend a text selection over the rows meanwhile.
-    table.addEventListener("mousedown", e => { if (e.shiftKey && (e.target as HTMLElement).closest(".chk")) e.preventDefault(); });
-    applySelection(table);
     return table;
   };
 
-  // --- The selection (2026-10-16): the boxes' state and the line of actions in the status row ---
-
-  /** The ticked rows' boxes and highlight, and the heading's box (all, some, none), without drawing the table again. */
-  const applySelection = (table: Element | null = main.querySelector(".tbl")) => {
-    if (!table) return;
-    const n = selected.ids.length;
-    table.classList.toggle("selecting", n > 0);
-    table.querySelectorAll<HTMLElement>(".tr[data-id]").forEach(row => {
-      const on = selected.ids.includes(row.dataset.id!);
-      row.classList.toggle("sel", on);
-      const box = row.querySelector<HTMLInputElement>(".chk input");
-      if (box) box.checked = on;
-    });
-    const all = table.querySelector<HTMLInputElement>(".hd .chk input");
-    if (all) {
-      all.checked = n > 0 && visibleIds.every(id => selected.ids.includes(id));
-      all.indeterminate = n > 0 && !all.checked;
-    }
-    renderSelBar();
-  };
-  const select = (next: Selection) => {
-    selected = next;
-    applySelection();
-  };
-  const clearSelection = () => select(NO_SELECTION);
-  const selectedBooks = () => { const all = ctx.books(); return selected.ids.map(id => all.find(b => b.id === id)).filter((b): b is LibraryBook => b != null); };
-  /** "3 selected · Mark as read · Mark as unread · Automatic · Hide · Set details… · Clear", in the count's place. */
-  const renderSelBar = () => {
-    const n = selected.ids.length;
-    selBar.hidden = n === 0;
-    count.hidden = n > 0;
-    // While rows are ticked the line is the selection's: the size, the views and Add books step aside.
-    status.classList.toggle("selecting", n > 0);
-    if (!n) return;
-    const act = (name: string, run: () => void) => h("button", { onclick: run }, name);
-    selBar.replaceChildren(
-      h("b", {}, `${n} selected`),
-      act("Mark as read", () => ctx.setReadMany(selectedBooks(), true)),
-      act("Mark as unread", () => ctx.markUnreadMany(selectedBooks())),
-      act("Automatic", () => ctx.setReadMany(selectedBooks(), null)),
-      act(ctx.showHidden() ? "Unhide" : "Hide", () => ctx.setHiddenMany(selectedBooks(), !ctx.showHidden())),
-      act("Set details…", () => ctx.setDetails(selectedBooks())),
-      act("Clear", clearSelection));
-  };
-
   /** Each column's least width (the minmax minimum, or its fixed width), for fitting a narrow window. */
-  const BOOK_LEAST: Record<ColumnKey, number> = { cover: 36, title: 220, author: 140, series: 140, num: 48, progress: 170, last: 120, on: 80, added: 110, size: 80 };
-  const SERIAL_LEAST: Record<SerialColumnKey, [number, number]> = { title: [220, 220], author: [130, 130], site: [110, 110], new: [100, 64], unread: [130, 72], updated: [100, 100], latest: [200, 200], reading: [200, 200], lastread: [110, 110] };
-  /** The room for a Details table's columns: the books' area less its padding and the ☰ column; no limit before it's laid out. */
+  const BOOK_LEAST: Record<ColumnKey, number> = { cover: 36, title: 220, author: 140, series: 170, num: 0, progress: 170, last: 120, on: 0, added: 0, size: 0 };
+  const SERIAL_LEAST: Record<SerialColumnKey, number> = { title: 220, author: 200, site: 0, new: 0, unread: 0, updated: 0, latest: 200, reading: 200, lastread: 110 };
+  /** The room for a Details table's columns: the books' area less its padding; no limit before it's laid out. */
   const tableRoom = () => {
     if (!main.clientWidth) return Infinity;
     const cs = getComputedStyle(main);
-    return main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 40 - 28;
+    return main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   };
   const widthOf = (key: ColumnKey) => ({
-    cover: "calc(36px*var(--z))", title: "minmax(220px,2.2fr)", author: "minmax(140px,1.3fr)", series: "minmax(140px,1.2fr)",
-    num: "48px", progress: "minmax(170px,1.3fr)", last: "120px", on: "80px", added: "110px", size: "80px",
+    cover: "calc(36px*var(--z))", title: "minmax(220px,2.2fr)", author: "minmax(140px,1.3fr)", series: "minmax(170px,1.3fr)",
+    num: "0", progress: "minmax(170px,1.3fr)", last: "120px", on: "0", added: "0", size: "0",
   })[key];
 
   // --- Serials (WEB.md → Home, step 3a): from the phones' chapter lists, read only ---
 
-  const SERIAL_WIDTHS: Record<SerialColumnKey, [string, string]> = {
-    title: ["minmax(220px,2fr)", "minmax(220px,2fr)"], author: ["minmax(130px,1.2fr)", "minmax(130px,1.2fr)"], site: ["110px", "110px"],
-    new: ["100px", "64px"], unread: ["130px", "72px"], updated: ["100px", "100px"],
-    latest: ["minmax(200px,1.8fr)", "minmax(200px,1.8fr)"], reading: ["minmax(200px,1.8fr)", "minmax(200px,1.8fr)"], lastread: ["110px", "110px"],
+  const SERIAL_WIDTHS: Record<SerialColumnKey, string> = {
+    title: "minmax(220px,2fr)", author: "minmax(200px,1.4fr)", site: "0", new: "0", unread: "0", updated: "0",
+    latest: "minmax(200px,1.8fr)", reading: "minmax(200px,1.8fr)", lastread: "110px",
   };
-  /** "2 NEW" in the seal's colours; just "2" where Details is crowded. */
-  const newTag = (x: Serial, numbers = false) => x.progress.newCount ? h("span", { class: `tag new${numbers ? " n" : ""}` }, numbers ? String(x.progress.newCount) : `${x.progress.newCount} ${badges() ? "NEW" : "new"}`) : null;
-  /** "30 UNREAD" (the unread ones not NEW), or CAUGHT UP; in Details only the number, never CAUGHT UP. */
-  const unreadTag = (x: Serial, inDetails = false, numbers = false) => {
+  /** "2 NEW" in the seal's colours. */
+  const newTag = (x: Serial) => x.progress.newCount ? h("span", { class: "tag new" }, `${x.progress.newCount} ${badges() ? "NEW" : "new"}`) : null;
+  /** "30 UNREAD" (the unread ones not NEW), or CAUGHT UP. */
+  const unreadTag = (x: Serial) => {
     const n = x.progress.olderUnreadCount;
-    if (n) return h("span", { class: `tag${numbers ? " n" : ""}` }, numbers ? String(n) : `${n} ${badges() ? "UNREAD" : "unread"}`);
-    return x.caughtUp && !inDetails ? h("span", { class: "tag cu" }, badges() ? "CAUGHT UP" : "Caught up") : null;
+    if (n) return h("span", { class: "tag" }, `${n} ${badges() ? "UNREAD" : "unread"}`);
+    return x.caughtUp ? h("span", { class: "tag cu" }, badges() ? "CAUGHT UP" : "Caught up") : null;
   };
   const tagRow = (x: Serial) => h("span", { class: "tagrow" }, ...present(newTag(x), unreadTag(x)));
   const updatedLabel = (x: Serial) => chapterDateLabel(x.latest?.published, Date.now(), true);
@@ -503,48 +377,40 @@ export function createHome(ctx: HomeContext): {
       expanded ? lines() : h("span", { class: "m" }, h("span", { class: "grow" }), updated ? `Updated ${updated}` : ""));
   };
 
-  const serialCell = (x: Serial, key: SerialColumnKey, numbers: boolean) => {
+  const serialCell = (x: Serial, key: SerialColumnKey) => {
     const td = (child: Node | string | null, cls = "") => h("div", { class: `td${cls ? ` ${cls}` : ""}` }, ...present(typeof child === "string" ? document.createTextNode(child) : child));
     switch (key) {
       case "title": return td(h("span", { class: "t" }, x.title));
-      case "author": return td(x.author ?? "", "dim");
-      case "site": return td(x.site, "dim");
-      case "new": return td(newTag(x, numbers));
-      case "unread": return td(unreadTag(x, true, numbers));
-      case "updated": return td(updatedLabel(x) ?? "", "dim");
+      case "author": return td(bySite(x), "dim");
       case "latest": return td(x.latest?.title ?? "", "dim");
       case "reading": return td(x.current?.title ?? (x.chapters.length ? "Not started" : ""), "dim");
       case "lastread": return td(x.lastRead ? ago(new Date(x.lastRead).toISOString(), Date.now()) : "", "dim");
+      // Sorts only, never shown (2026-10-17).
+      case "site": case "new": case "unread": case "updated": return td("");
     }
   };
 
   const serialDetails = (list: Serial[]) => {
-    const all = shownColumns(serialsSetup().columns);
     const sort = serialsSetup().sort;
-    const numbers = numbersOnly(all.length, window.innerWidth);
-    const cols = fitColumns(all, k => SERIAL_LEAST[k][numbers ? 1 : 0] + 24, tableRoom(), ["lastread", "reading", "latest", "site", "author", "updated", "unread", "new"]);
-    const box = h("div", { class: "tbl ser", role: "table", style: `grid-template-columns:${cols.map(k => SERIAL_WIDTHS[k][numbers ? 1 : 0]).join(" ")} 40px` });
-    const headings = h("div", { class: "tr hd", role: "row" },
+    const cols = fitColumns(SERIAL_DETAIL_COLUMNS, k => SERIAL_LEAST[k] + 24, tableRoom(), ["lastread", "reading", "latest", "author"]);
+    const box = h("div", { class: "tbl ser", role: "table", style: `grid-template-columns:${cols.map(k => SERIAL_WIDTHS[k]).join(" ")}` });
+    box.append(h("div", { class: "tr hd", role: "row" },
       ...cols.map(key => {
         const on = sort.key === key;
         return h("div", {
           class: `th${on ? " sort" : ""}`, role: "columnheader", "data-col": key,
-          draggable: key === FIXED ? undefined : "true",
           onclick: () => setSerials({ sort: sort.key === key ? { key, reversed: !sort.reversed } : { key, reversed: false } }),
         }, serialColumn(key).heading, on ? (sort.reversed ? " ▴" : " ▾") : "");
-      }),
-      h("div", { class: "th colbtn" }, h("button", { title: "Columns", "aria-label": "Columns", onclick: (e: Event) => { e.stopPropagation(); if (menuOpen?.classList.contains("colmenu")) closeMenu(); else columnsMenu(e.currentTarget as HTMLElement); } }, svgEl(LINES))));
-    dragColumns(headings);
-    box.append(headings);
+      })));
     for (const x of list) {
       box.append(h("div", { class: `tr${serialOpen(x) ? " on" : ""}`, role: "row", "data-sid": x.id, onclick: () => openSerial(x) },
-        ...cols.map(key => serialCell(x, key, numbers)), h("div", { class: "td" })));
+        ...cols.map(key => serialCell(x, key))));
     }
     return box;
   };
 
   /** The Serials side: its status line, views and size, and the serials found, in Details' sort. */
-  const renderSerials = (columnsOpen: boolean) => {
+  const renderSerials = () => {
     const ss = serialsSetup();
     // Office: Details only.
     const view: SerialView = viewFor(ss.view, style().views);
@@ -570,8 +436,6 @@ export function createHome(ctx: HomeContext): {
     else if (!shown.length) main.replaceChildren(h("p", { class: "hempty" }, all.length ? "No serials match." : "No serials yet."));
     else if (view === "details") main.replaceChildren(serialDetails(shown));
     else main.replaceChildren(h("div", { class: `scards${view === "expanded" ? " long" : ""}` }, ...shown.map(x => serialCard(x, view === "expanded"))));
-    const anchor = columnsOpen ? main.querySelector<HTMLElement>(".colbtn button") : null;
-    if (anchor) columnsMenu(anchor);
     // Continue: the serial read last on any device, and its chapter.
     const last = all && lastReadSerial(all);
     cont.hidden = !last;
@@ -635,8 +499,6 @@ export function createHome(ctx: HomeContext): {
   const render = () => {
     renderedWithPanel = panelFor != null;
     queueAlign();
-    // ☰'s list stays open while its boxes change the columns; other menus close.
-    const columnsOpen = menuOpen?.classList.contains("colmenu") ?? false;
     closeMenu();
     renderMark(reading ? reading.side === "books" : !onSerials());
     addButton.textContent = badges() ? "+ Add books" : "Add books";
@@ -645,12 +507,7 @@ export function createHome(ctx: HomeContext): {
     // Continue is a small pill in the middle of the bar (Office's C1, then Home's too, 2026-10-16).
     cont.classList.add("pill");
     if (cont.parentElement !== header) header.append(cont);
-    if (onSerials()) {
-      visibleIds = [];
-      selected = NO_SELECTION;
-      renderSelBar();
-      return renderSerials(columnsOpen);
-    }
+    if (onSerials()) return renderSerials();
     count.classList.remove("plain");
     const hs = home();
     // Office: Details only.
@@ -667,8 +524,6 @@ export function createHome(ctx: HomeContext): {
     const listSort = curated ? hs.gridSort : sort;
     const sortName = column(listSort.key).sortName + (listSort.reversed ? " ▴" : "");
     const shown = view === "details" ? detailsRows(all, sort, query, facts) : null;
-    visibleIds = shown ? shown.map(b => b.id) : [];
-    selected = pruneSelection(selected, visibleIds);
     const items = view === "details" ? null : homeItems(all, listSort, query, ctx.setup().groupSeries, facts);
     const n = shown ? shown.length : items!.reduce((k, i) => k + (i.kind === "book" ? 1 : i.books.length), 0);
     const what = ctx.showHidden() ? `${n} hidden` : query.trim() ? `${n} found` : `${n} books`;
@@ -696,17 +551,12 @@ export function createHome(ctx: HomeContext): {
       }
     } else if (curated && items!.length) {
       main.replaceChildren(...curatedPage(all, items!, `${count.textContent}`));
-      renderSelBar();
     } else {
       const box = h("div", { class: "grid" }, ...items!.map(gridItem));
       main.replaceChildren(items!.length ? box : empty());
-      renderSelBar();
     }
-    if (shown && !shown.length) renderSelBar();
     // Details' rows have no box of their own (display: contents): their first cell is watched.
     main.querySelectorAll<HTMLElement>("[data-id]").forEach(x => { if (ctx.progress(x.dataset.id!) == null) seen.observe(x.classList.contains("tr") ? x.firstElementChild! : x); });
-    const anchor = columnsOpen ? main.querySelector<HTMLElement>(".colbtn button") : null;
-    if (anchor) columnsMenu(anchor);
     renderContinue();
     renderPanel();
   };
@@ -1091,13 +941,12 @@ export function createHome(ctx: HomeContext): {
   el.addEventListener("click", e => {
     const path = e.composedPath();
     if (!panelFor || path.includes(panel)) return;
-    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark, .hsel") || x.closest(".bookmenu, .dialog, .toast")))) return;
+    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark") || x.closest(".bookmenu, .dialog, .toast")))) return;
     closePanel();
   });
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape" || !el.isConnected) return;
     if (menuOpen) closeMenu();
-    else if (el.offsetParent && selected.ids.length) clearSelection();
     else if (el.offsetParent) closePanel();
   });
 

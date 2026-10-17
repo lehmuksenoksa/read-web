@@ -1,7 +1,7 @@
 import "./style.css";
 import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
-import { parseDetails, parseNumber, withDetails, withDetailsMany, type BookDetails, type DetailsBase, type DetailsEdit } from "./details";
+import { parseDetails, parseNumber, withDetails, type BookDetails, type DetailsEdit } from "./details";
 import { Dropbox, RevConflict } from "./dropbox";
 import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
 import { coverPath, largeCover, loadSharpCovers } from "./covers";
@@ -19,7 +19,6 @@ import { keptFile } from "./store";
 import { showReader } from "./reader";
 import { marksOf, withMarks, type Marks, type ReadMark } from "./sync";
 import { forgetAll, keepBook, keptBooks, keepValue, keptValue } from "./store";
-import { sharedValue } from "./select";
 import { styleFor, tokenClasses } from "./styleTokens";
 import { h, icon, ICONS } from "./ui";
 
@@ -293,10 +292,9 @@ async function showApp() {
     await writeMarks(book.id, change).catch(failed);
   };
 
-  /** Mark as unread: back to 0% on every device, as on the phones; Undo before it's sent. */
+  /** Mark as unread: back to 0% on every device, as on the phones; Undo before it's sent (sent after 10 s). */
   const unreadTimers = new Map<string, number>();
   const markUnread = (book: LibraryBook) => markUnreadMany([book]);
-  /** The selection's Mark as unread (2026-10-16): one message and one Undo for them all, sent together after 10 s. */
   const markUnreadMany = (list: LibraryBook[]) => {
     if (!list.length) return;
     const before = list.map(book => ({ book, marks: marks[book.id], known: known.get(book.id) }));
@@ -342,100 +340,6 @@ async function showApp() {
     setMarks(book.id, change);
     tell(hidden ? `Hid “${book.title}”` : `“${book.title}” is back`, () => void setHidden(book, !hidden));
     await writeMarks(book.id, change).catch(failed);
-  };
-
-  /** The selection's Mark as read / Automatic (2026-10-16): each book's sync file, one failure message at most. */
-  const setReadMany = async (list: LibraryBook[], read: true | null) => {
-    const change: Marks = { read: { read, updatedAt: Date.now() } };
-    for (const book of list) setMarks(book.id, change);
-    const results = await Promise.allSettled(list.map(book => writeMarks(book.id, change)));
-    if (results.some(r => r.status === "rejected")) failed();
-  };
-  /** The selection's Hide / Unhide: "Hid 3 books", one Undo. */
-  const setHiddenMany = async (list: LibraryBook[], hidden: boolean) => {
-    if (list.length === 1) return setHidden(list[0], hidden);
-    const change: Marks = { hidden: { hidden, updatedAt: Date.now() } };
-    for (const book of list) setMarks(book.id, change);
-    tell(hidden ? `Hid ${list.length} books` : `${list.length} books are back`, () => void setHiddenMany(list, !hidden));
-    const results = await Promise.allSettled(list.map(book => writeMarks(book.id, change)));
-    if (results.some(r => r.status === "rejected")) failed();
-  };
-
-  /** Set details… for a selection (2026-10-16): a series and an author for them all, in one write to the details file. */
-  const setDetails = (list: LibraryBook[]) => {
-    if (!list.length) return;
-    const field = (label: string, value: string, placeholder: string) => {
-      const input = h("input", { value, "aria-label": label, placeholder });
-      return [h("label", {}, label, input), input] as const;
-    };
-    const [seriesRow, seriesIn] = field("Series", sharedValue(list.map(b => b.series)) ?? "", "Leave empty to keep each book's own");
-    const [authorRow, authorIn] = field("Author", sharedValue(list.map(b => b.author)) ?? "", "Leave empty to keep each book's own");
-    const preview = h("ul", { class: "preview" });
-    const save = h("button", { class: "btn primary", type: "submit" }, "Save");
-    const form = h("form", { class: "box" },
-      h("h2", {}, `Set details for ${list.length} books`),
-      seriesRow, authorRow, preview,
-      h("div", { class: "btns" }, h("button", { class: "btn", type: "button", onclick: () => close() }, "Cancel"), save));
-    const dialog = h("div", { class: "dialog", role: "dialog", "aria-modal": "true", "aria-label": "Set details" }, form);
-    const close = () => { dialog.remove(); document.removeEventListener("keydown", onKey, true); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
-    const edit = () => ({
-      ...(seriesIn.value.trim() ? { series: seriesIn.value.trim() } : {}),
-      ...(authorIn.value.trim() ? { author: authorIn.value.trim() } : {}),
-    });
-    /** Each book as it would read: "Title · Series 3 · Author", the first eight. */
-    const check = () => {
-      const e = edit();
-      save.disabled = !e.series && !e.author;
-      const line = (b: LibraryBook) => {
-        const series = e.series ?? b.series;
-        return [b.title, series ? [series, b.seriesIndex != null ? String(b.seriesIndex) : ""].filter(Boolean).join(" ") : "", e.author ?? b.author ?? ""].filter(Boolean).join(" · ");
-      };
-      preview.replaceChildren(...list.slice(0, 8).map(b => h("li", {}, line(b))), ...(list.length > 8 ? [h("li", { class: "more" }, `and ${list.length - 8} more`)] : []));
-    };
-    form.addEventListener("input", check);
-    check();
-    dialog.addEventListener("click", e => { if (e.target === dialog) close(); });
-    document.addEventListener("keydown", onKey, true);
-    form.addEventListener("submit", async ev => {
-      ev.preventDefault();
-      check();
-      if (save.disabled) return;
-      const e = edit();
-      close();
-      const ids = new Set(list.map(b => b.id));
-      const booksBefore = books;
-      const detailsBefore = detailsNow;
-      const now = Date.now();
-      books = books.map(b => (ids.has(b.id) ? { ...b, ...(e.series !== undefined ? { series: e.series } : {}), ...(e.author !== undefined ? { author: e.author } : {}) } : b));
-      detailsNow = { ...detailsNow };
-      const bases: Record<string, DetailsBase> = {};
-      for (const b of list) {
-        bases[b.id] = { title: b.title, author: b.author, series: b.series, number: b.seriesIndex };
-        detailsNow[b.id] = { ...(detailsNow[b.id] ?? bases[b.id]), ...e, updatedAt: now };
-      }
-      saveLibrary();
-      render();
-      try {
-        for (let attempt = 0; ; attempt++) {
-          const remote = await api.readText(DETAILS_PATH);
-          try {
-            await api.writeText(DETAILS_PATH, withDetailsMany(remote?.text ?? null, bases, e, Date.now()), remote?.rev ?? null);
-            break;
-          } catch (err) {
-            if (!(err instanceof RevConflict) || attempt >= 2) throw err;
-          }
-        }
-      } catch {
-        books = booksBefore;
-        detailsNow = detailsBefore;
-        render();
-        failed();
-      }
-    });
-    root.append(dialog);
-    seriesIn.focus();
-    seriesIn.select();
   };
 
   /** Edit details…: title, author, series and number, into the shared details file (the newer edit wins per book). */
@@ -770,10 +674,6 @@ async function showApp() {
     saveDetails: (book, edit) => void saveDetails(book, edit),
     saveSerial: (x, title, author) => void saveDetails(serialAsBook(x), { title, author, series: null, number: null }),
     markRead: book => void setRead(book, true, true),
-    setReadMany: (list, read) => void setReadMany(list, read),
-    markUnreadMany: list => markUnreadMany(list),
-    setHiddenMany: (list, hidden) => void setHiddenMany(list, hidden),
-    setDetails: list => setDetails(list),
     signOut: () => void signOut(api),
     offline: () => offline,
     isHome: homeMode,

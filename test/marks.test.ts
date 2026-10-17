@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDetails, parseNumber, withDetails, withDetailsMany } from "../src/details";
+import { parseDetails, parseNumber, withDetails } from "../src/details";
 import type { FileEntry } from "../src/dropbox";
 import { libraryBooks, markedBook, READ_AT, type LibraryBook } from "../src/library";
 import { marksOf, withMarks } from "../src/sync";
@@ -44,23 +44,6 @@ describe("Edit details (details.json, shared with the phones)", () => {
     expect(file.books[id]).toEqual({ title: "Mage Tank 5", author: "Cornman", series: "Mage Tank", number: 5, coverUrl: "https://x/c.jpg", updatedAt: 99 });
     expect(file.books[other]).toEqual({ title: "Other", updatedAt: 2 });
     expect(parseDetails(withDetails(null, id, { title: "T", author: null, series: null, number: null }, 5)).books[id].coverUrl).toBeNull();
-  });
-
-  it("sets a series or an author on many books in one write; a field left out keeps each book's own", () => {
-    const other = "c".repeat(64);
-    const third = "d".repeat(64);
-    const remote = JSON.stringify({ books: { [id]: { title: "Old", author: "Cornman", series: "Mage Tank", number: 5, coverUrl: "https://x/c.jpg", updatedAt: 1 }, [third]: { title: "Third", updatedAt: 3 } }, version: 1 });
-    const bases = { [id]: { title: "Shown", author: "Shown A", series: "Shown S", number: 9 }, [other]: { title: "Other", author: "B", series: null, number: 2 } };
-    const file = parseDetails(withDetailsMany(remote, bases, { series: "Shelf" }, 99));
-    // In the file already: its title, number and cover stay; the series changes.
-    expect(file.books[id]).toEqual({ title: "Old", author: "Cornman", series: "Shelf", number: 5, coverUrl: "https://x/c.jpg", updatedAt: 99 });
-    // Not in the file yet: starts from what the Library shows, so its title and number survive on the phones.
-    expect(file.books[other]).toEqual({ title: "Other", author: "B", series: "Shelf", number: 2, coverUrl: null, updatedAt: 99 });
-    // Not selected: untouched.
-    expect(file.books[third]).toEqual({ title: "Third", updatedAt: 3 });
-    const both = parseDetails(withDetailsMany(null, bases, { series: "Shelf", author: "Someone" }, 5));
-    expect(both.books[id]).toMatchObject({ series: "Shelf", author: "Someone", title: "Shown", number: 9 });
-    expect(both.version).toBe(1);
   });
 
   it("reads the number as the phones do", () => {

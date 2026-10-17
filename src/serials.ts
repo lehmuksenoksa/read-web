@@ -332,6 +332,8 @@ export const SERIAL_COLUMNS: SerialColumn[] = [
   { key: "lastread", name: "Last read", heading: "Last read", firstDir: -1 },
 ];
 export const serialColumn = (key: SerialColumnKey) => SERIAL_COLUMNS.find(c => c.key === key)!;
+/** Serials' Details, fixed (2026-10-17): the serial, "author · site", the latest chapter, the one being read, last read. */
+export const SERIAL_DETAIL_COLUMNS: SerialColumnKey[] = ["title", "author", "latest", "reading", "lastread"];
 
 const sortKey = (text: string | null) => (text ?? "").replace(/^(the|a|an)\s+/i, "").toLocaleLowerCase();
 
@@ -360,11 +362,6 @@ export function sortSerials(serials: Serial[], sort: { key: SerialColumnKey; rev
     const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y));
     return c * dir || byTitle;
   });
-}
-
-/** Details shows New and Unread as plain numbers when it's crowded: seven columns or more, or a window under 1200 px. */
-export function numbersOnly(shownColumns: number, windowWidth: number): boolean {
-  return shownColumns >= 7 || windowWidth < 1200;
 }
 
 // --- Reading a serial on the web (WEB.md → Home, step 3b) ---

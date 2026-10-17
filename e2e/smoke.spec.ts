@@ -1,7 +1,7 @@
 // The smoke test (2026-10-16): the built page in Chromium with a stand-in Dropbox. It catches what
 // the unit tests can't: the Library drawn, a book and a serial opened and read, the place saved.
 import { expect, test } from "@playwright/test";
-import { EMMA, KATABASIS, pageText, SERIAL, standIn } from "./standin";
+import { EMMA, pageText, SERIAL, standIn } from "./standin";
 
 test("Office: the Library, a book, Contents, the place saved", async ({ page }) => {
   const dropbox = await standIn(page, false);
@@ -9,8 +9,8 @@ test("Office: the Library, a book, Contents, the place saved", async ({ page }) 
   await expect(page.locator(".hmark")).toHaveText(/Library\s*&\s*Serials/);
   await expect(page.locator(".home .tbl .tr[data-id]")).toHaveCount(2);
   await expect(page.locator(".hhead > .hcont")).toContainText("Continue");
-  // The book's panel, as a list of facts, then the book (the row's title cell: the first cell is its select box).
-  await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(2)`);
+  // The book's panel, as a list of facts, then the book (the row's title cell).
+  await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(1)`);
   await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
   await page.click(".hpanel .bp-go");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
@@ -80,53 +80,11 @@ test("a narrow window: Details fits, Continue at the foot", async ({ page }) => 
   expect(dropbox.errors).toEqual([]);
 });
 
-test("Office: two rows ticked, Set details… puts the series on both in one write", async ({ page }) => {
-  const dropbox = await standIn(page, false);
-  await page.goto("./");
-  await expect(page.locator(".home .tbl .tr[data-id]")).toHaveCount(2);
-  // Clicks in the box's cell, beside the box, as a mouse does: the first one anchors a text selection in the browser.
-  // The table is drawn again when Emma's progress comes in: wait for it, then measure until the cell is there.
-  await expect(page.locator(`.home .tr[data-id="${EMMA}"]`)).toContainText("43%");
-  const boxCell = async (id: string) => {
-    let b: { x: number; y: number; height: number } | null = null;
-    await expect.poll(async () => (b = await page.locator(`.home .tr[data-id="${id}"] .td.chk`).boundingBox())).not.toBeNull();
-    return [b!.x + 3, b!.y + b!.height / 2] as const;
-  };
-  const [x1, y1] = await boxCell(KATABASIS);
-  await page.mouse.click(x1, y1);
-  const [x2, y2] = await boxCell(EMMA);
-  await page.keyboard.down("Shift");
-  await page.mouse.click(x2, y2);
-  await page.keyboard.up("Shift");
-  await expect(page.locator(".hsel b")).toHaveText("2 selected");
-  // A shift-click ticks the range without selecting the rows' text.
-  expect(await page.evaluate(() => window.getSelection()?.toString() ?? "")).toBe("");
-  // The plain click still opens the panel, with the selection kept.
-  await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(2)`);
-  await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
-  await expect(page.locator(".home .tr.sel")).toHaveCount(2);
-  await page.click(".hsel button:text('Set details…')");
-  const series = page.locator('.dialog input[aria-label="Series"]');
-  await expect(series).toHaveValue("Test Series");
-  await series.fill("Shared Shelf");
-  await expect(page.locator(".dialog .preview li")).toHaveCount(2);
-  await page.click(".dialog .btn.primary");
-  await expect.poll(() => dropbox.uploads.find(u => u.path === "/Apps/Read/Sync/details.json")?.text ?? "", { timeout: 10_000 }).toContain("Shared Shelf");
-  const file = JSON.parse(dropbox.uploads.filter(u => u.path === "/Apps/Read/Sync/details.json").pop()!.text) as { books: Record<string, { series: string; title: string; number: number }> };
-  expect(file.books[KATABASIS]).toMatchObject({ title: "Katabasis", series: "Shared Shelf", number: 1 });
-  expect(file.books[EMMA]).toMatchObject({ title: "Emma", series: "Shared Shelf", number: 2 });
-  await expect(page.locator(`.home .tr[data-id="${EMMA}"]`)).toContainText("Shared Shelf");
-  // Esc clears the selection.
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".hsel")).toBeHidden();
-  expect(dropbox.errors).toEqual([]);
-});
-
 test("Office: the book's panel: the title edited in place, the devices, Mark as read", async ({ page }) => {
   const dropbox = await standIn(page, false);
   await page.goto("./");
   await expect(page.locator(`.home .tr[data-id="${EMMA}"]`)).toContainText("43%");
-  await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(2)`);
+  await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(1)`);
   // One line: the furthest place; a click shows the devices.
   await expect(page.locator(".hpanel .bp-line .bp-l")).toHaveText("43%");
   await page.click(".hpanel button.bp-line");

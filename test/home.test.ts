@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  ago, besideReadingNow, clickSort, curatedHome, decodeHome, RECENT_DAYS, seriesLine, fitColumns, DEFAULT_COLUMNS, DEFAULT_HOME, detailsRows, homeItems, megabytes, menuSort, moveColumn,
-  nextInSeries, shownColumns, sizeStep, SIZES, sortMenuChoice, sortRows, textScale, titleWord, toggleColumn, type Facts,
+  ago, besideReadingNow, clickSort, curatedHome, decodeHome, RECENT_DAYS, seriesLine, fitColumns, DETAIL_COLUMNS, DEFAULT_HOME, detailsRows, homeItems, megabytes, menuSort,
+  nextInSeries, sizeStep, SIZES, sortMenuChoice, sortRows, textScale, titleWord, type Facts,
 } from "../src/home";
 import type { LibraryBook } from "../src/library";
 import { placesOf } from "../src/library";
@@ -14,23 +14,23 @@ const book = (id: string, title: string, more: Partial<LibraryBook> = {}): Libra
 const none: Facts = { progress: () => null, device: () => null };
 
 describe("Home's setup", () => {
-  it("reads an old setup file (no home) as Covers, Recent, the middle size and the first columns", () => {
+  it("reads an old setup file (no home) as Covers, Recent and the middle size", () => {
     const setup = decodeSetup(JSON.stringify({ looks: [{ id: "office", name: "Office" }], lookId: "office" }));
     expect(setup.home).toEqual(DEFAULT_HOME);
-    expect(shownColumns(setup.home.columns)).toEqual(["title", "author", "series", "num", "progress", "last", "on"]);
+    expect(DETAIL_COLUMNS).toEqual(["cover", "title", "author", "series", "progress", "last"]);
   });
 
-  it("keeps what it knows and drops what it doesn't; Title is never hidden; new columns join at the end", () => {
+  it("keeps what it knows and drops what it doesn't; the chooser's columns and its sorts are ignored (2026-10-17)", () => {
     const home = decodeHome({
-      view: "details", sort: { key: "size", reversed: true }, sizes: { grid: 4, details: 0 }, sizeScale: 2,
+      view: "details", sort: { key: "author", reversed: true }, sizes: { grid: 4, details: 0 }, sizeScale: 2,
       columns: { order: ["author", "title", "nope"], hidden: ["title", "series"] },
     });
     expect(home.view).toBe("details");
-    expect(home.sort).toEqual({ key: "size", reversed: true });
+    expect(home.sort).toEqual({ key: "author", reversed: true });
     expect(home.sizes).toEqual({ grid: 4, details: 0 });
-    expect(home.columns.order.slice(0, 3)).toEqual(["author", "title", "cover"]);
-    expect(home.columns.order).toHaveLength(DEFAULT_COLUMNS.order.length);
-    expect(home.columns.hidden).toEqual(["series"]);
+    expect(home).not.toHaveProperty("columns");
+    // A sort by a column that went with the chooser (Size, On, Added) is Recent again.
+    expect(decodeHome({ sort: { key: "size", reversed: true } }).sort).toEqual({ key: "last", reversed: false });
     expect(decodeHome({ view: "shelf", sort: { key: "cover" } })).toMatchObject({ view: "grid", sort: { key: "last", reversed: false } });
   });
 
@@ -41,21 +41,6 @@ describe("Home's setup", () => {
 });
 
 describe("Details' columns", () => {
-  it("moves a column before another, or to the end; Title stays", () => {
-    const moved = moveColumn(DEFAULT_COLUMNS, "last", "author");
-    expect(moved.order.slice(0, 4)).toEqual(["cover", "title", "last", "author"]);
-    expect(moveColumn(DEFAULT_COLUMNS, "author", null).order.at(-1)).toBe("author");
-    expect(moveColumn(DEFAULT_COLUMNS, "title", "size")).toBe(DEFAULT_COLUMNS);
-  });
-
-  it("hides and shows a column; Title can't be hidden", () => {
-    const hidden = toggleColumn(DEFAULT_COLUMNS, "series");
-    expect(shownColumns(hidden)).not.toContain("series");
-    expect(shownColumns(toggleColumn(hidden, "series"))).toContain("series");
-    expect(toggleColumn(DEFAULT_COLUMNS, "title")).toBe(DEFAULT_COLUMNS);
-    expect(shownColumns(toggleColumn(DEFAULT_COLUMNS, "size"))).toContain("size");
-  });
-
   it("a heading sorts by its column, and the other way on a second click; Cover sorts by title", () => {
     const byAuthor = clickSort(DEFAULT_HOME.sort, "author");
     expect(byAuthor).toEqual({ key: "author", reversed: false });
@@ -180,17 +165,19 @@ describe("Words and sizes", () => {
 });
 
 describe("Details' columns in a narrow window (2026-10-16)", () => {
-  const least = (k: string) => ({ title: 244, author: 164, series: 164, num: 72, progress: 194, last: 144, on: 104, added: 134, size: 104 } as Record<string, number>)[k];
-  const order = ["size", "added", "on", "cover", "num", "series", "last", "progress", "author"];
+  const least = (k: string) => ({ cover: 60, title: 244, author: 164, series: 194, progress: 194, last: 144 } as Record<string, number>)[k];
+  const order = ["cover", "series", "last", "progress", "author"];
 
   it("keeps every column when they fit", () => {
     expect(fitColumns(["title", "author", "progress"], least, 2000, order)).toEqual(["title", "author", "progress"]);
   });
 
   it("drops the least important first, until the rest fit", () => {
-    const cols = ["title", "author", "series", "num", "progress", "last", "on"];
-    // 1086 needed; 760 of room: size and added aren't shown, on (104) and num (72) go, then series (164).
+    const cols = ["title", "author", "series", "progress", "last"];
+    // 940 needed; 760 of room: series (194) goes and the rest fit.
     expect(fitColumns(cols, least, 760, order)).toEqual(["title", "author", "progress", "last"]);
+    // 610: last (144) goes too.
+    expect(fitColumns(cols, least, 610, order)).toEqual(["title", "author", "progress"]);
   });
 
   it("never drops Title", () => {
