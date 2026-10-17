@@ -576,6 +576,7 @@ export function createHome(ctx: HomeContext): {
     const last = all && lastReadSerial(all);
     cont.hidden = !last;
     if (last) {
+      cont.classList.add("sv");
       cont.replaceChildren(...quietLine(last.title, [last.current?.title ?? "", last.progress.unreadCount ? `${last.progress.unreadCount} unread` : "Up to date"]));
       cont.onclick = () => ctx.openSerial(last);
     }
@@ -812,6 +813,7 @@ export function createHome(ctx: HomeContext): {
     cont.hidden = !last || (hideContinue && !onSerials() && !reading);
     if (!last) return;
     const p = progressOf(last) ?? 0;
+    cont.classList.remove("sv");
     cont.replaceChildren(...quietLine(last.title, [ctx.places(last.id)?.[0]?.chapter ?? "", p > 0 ? `${Math.round(p * 100)}%` : ""]));
     cont.onclick = () => ctx.open(last);
     if (ctx.progress(last.id) == null && last.hasSyncFile) void ctx.load(last).then(renderSoon);
@@ -859,9 +861,10 @@ export function createHome(ctx: HomeContext): {
    * Text that turns into fields on a click: Enter or a click away saves, Esc puts it back. [save] gets the
    * fields' values; the panel is drawn again from the saved details.
    */
-  const editable = (shown: Node | string, cls: string, fields: { value: string; label: string; cls?: string }[], save: (values: string[]) => void) => {
+  /** [hint]: what an empty field says (2026-10-17: "Add author"; a series only a faint "Series", as most books have none). */
+  const editable = (shown: Node | string, cls: string, fields: { value: string; label: string; cls?: string }[], save: (values: string[]) => void, hint?: { text: string; faint?: boolean }) => {
     const empty = typeof shown === "string" && !shown;
-    const text = h("span", { class: `bp-ed ${cls}${empty ? " empty" : ""}`, role: "button", tabindex: "0", title: "Click to edit" }, empty ? fields.map(f => f.label).join(" · ") : shown);
+    const text = h("span", { class: `bp-ed ${cls}${empty ? ` empty${hint?.faint ? " faint" : ""}` : ""}`, role: "button", tabindex: "0", title: "Click to edit" }, empty ? hint?.text ?? fields.map(f => f.label).join(" · ") : shown);
     const start = () => {
       const inputs = fields.map(f => h("input", { class: `bp-in${f.cls ? ` ${f.cls}` : ""}`, value: f.value, placeholder: f.label, "aria-label": f.label }));
       const box = h("span", { class: `bp-edit ${cls}` }, ...inputs);
@@ -924,11 +927,11 @@ export function createHome(ctx: HomeContext): {
       const go = x.caughtUp
         ? h("button", { class: "bp-go off", disabled: "true" }, "Caught up")
         : x.upNext ? h("button", { class: "bp-go", onclick: () => ctx.openSerial(x) }, x.current ? `Continue ${shortChapter(x.upNext.title)}` : "Start") : null;
-      panel.replaceChildren(...present(top, h("div", { class: "bp" },
+      panel.replaceChildren(...present(top, h("div", { class: "bp sv" },
         hero(null,
           editable(panelTitle(x.title), "bp-title", [{ value: x.title, label: "Title" }], ([title]) => { if (title) ctx.saveSerial(x, title, x.author); }),
           h("div", { class: "bp-sub" },
-            editable(x.author ?? "", "bp-by", [{ value: x.author ?? "", label: "Author" }], ([author]) => ctx.saveSerial(x, x.title, author || null)),
+            editable(x.author ?? "", "bp-by", [{ value: x.author ?? "", label: "Author" }], ([author]) => ctx.saveSerial(x, x.title, author || null), { text: "Add author" }),
             h("span", { class: "bp-site" }, "· ", h("a", { class: "bp-sitelink", href: x.url, target: "_blank", rel: "noopener noreferrer", title: `Open on ${x.site}` }, `${x.site} ↗`)))),
         go ? h("div", { class: "bp-acts" }, go) : null,
         chapters ? h("div", { class: "bp-chaps" }, h("div", { class: "bp-head" }, h("span", {}, "Chapters"), h("span", { class: "c" }, counts)), chapters) : null,
@@ -978,14 +981,14 @@ export function createHome(ctx: HomeContext): {
       panel.replaceChildren(...present(top, h("div", { class: "bp" },
         hero(h("div", { class: "cvb" }, cover(b, true)),
           editable(panelTitle(b.title), "bp-title", [{ value: b.title, label: "Title" }], ([title]) => { if (title) save({ title }); }),
-          editable(b.author ?? "", "bp-by", [{ value: b.author ?? "", label: "Author" }], ([author]) => save({ author: author || null })),
+          editable(b.author ?? "", "bp-by", [{ value: b.author ?? "", label: "Author" }], ([author]) => save({ author: author || null }), { text: "Add author" }),
           editable(b.series ? `${b.series}${b.seriesIndex != null ? ` · ${b.seriesIndex}` : ""}` : "", "bp-by",
             [{ value: b.series ?? "", label: "Series" }, { value: b.seriesIndex != null ? String(b.seriesIndex) : "", label: "#", cls: "num" }],
             ([series, number]) => {
               const n = parseNumber(number);
               if (number && n == null) return;
               save({ series: series || null, number: series ? n : null });
-            })),
+            }, { text: "Series", faint: true })),
         lineAndBar(row, state.kind === "read" ? 1 : far?.p ?? 0, devices),
         h("div", { class: "bp-acts" },
           h("button", { class: "bp-go", onclick: () => ctx.open(b) }, goLabel(state)),
@@ -1104,6 +1107,7 @@ export function createHome(ctx: HomeContext): {
     reading = title;
     searchBox.hidden = title != null;
     titleEl.hidden = title == null;
+    titleEl.classList.toggle("sv", title?.side === "serials");
     if (!was !== !title || was?.side !== title?.side) renderMark(title ? title.side === "books" : !onSerials());
     queueAlign();
     if (title) {
