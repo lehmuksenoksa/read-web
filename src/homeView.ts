@@ -84,6 +84,14 @@ function svgEl(markup: string, cls = "ic"): HTMLElement {
   return el;
 }
 
+/**
+ * A sort's ▴ or ▾ (2026-10-18). Figtree has neither, and on Windows the fallback font's taller line pushed
+ * the sorted heading 2px below the others; in its own span with no line height it can't move the text.
+ */
+function sortArrow(up: boolean): HTMLElement {
+  return h("span", { class: "arr" }, up ? " ▴" : " ▾");
+}
+
 /** A title with its first word (not "A", "An", "The") in its own span: wax red on Dark, plain on Light. */
 function redTitle(title: string): HTMLElement {
   const [before, word, after] = titleWord(title);
@@ -304,7 +312,7 @@ export function createHome(ctx: HomeContext): {
       // The number alone (2026-10-17, evening; the bar took too much room): "100%" once read, nothing before the start.
       case "progress": {
         const p = b.read ? 1 : ctx.progress(b.id) ?? 0;
-        return td(p > 0 ? `${Math.round(p * 100)}%` : "", "dim ra");
+        return td(p > 0 ? `${Math.round(p * 100)}%` : "", "dim");
       }
       case "last": return td(ago(b.lastRead, Date.now()), "dim");
       // When the file came to Dropbox (the index has no added time of its own).
@@ -328,7 +336,7 @@ export function createHome(ctx: HomeContext): {
           class: `th${c.right ? " ra" : ""}${on ? " sort" : ""}`, role: "columnheader", "data-col": key,
           "aria-sort": on ? (sort.reversed === (c.firstDir === 1) ? "descending" : "ascending") : undefined,
           onclick: () => { if (key !== "cover") setHome({ sort: clickSort(sort, key) }); },
-        }, c.heading, on ? (sort.reversed ? " ▴" : " ▾") : "");
+        }, h("span", {}, c.heading, on ? sortArrow(sort.reversed) : ""));
       })));
     for (const b of list) {
       table.append(h("div", { class: `tr${panelFor && "book" in panelFor && panelFor.book.id === b.id ? " on" : ""}`, role: "row", "data-id": b.id, onclick: () => openBook(b) },
@@ -338,7 +346,7 @@ export function createHome(ctx: HomeContext): {
   };
 
   /** Each column's least width (the minmax minimum, or its fixed width), for fitting a narrow window. */
-  const BOOK_LEAST: Record<ColumnKey, number> = { cover: 0, title: 220, author: 140, series: 170, num: 0, progress: 80, last: 120, on: 0, added: 120, size: 0 };
+  const BOOK_LEAST: Record<ColumnKey, number> = { cover: 0, title: 220, author: 140, series: 170, num: 0, progress: 100, last: 120, on: 0, added: 120, size: 0 };
   const SERIAL_LEAST: Record<SerialColumnKey, number> = { title: 220, author: 160, site: 100, chapters: 90, unread: 80, updated: 140, lastread: 110 };
   /** The room for a Details table's columns: the books' area less its padding; no limit before it's laid out. */
   const tableRoom = () => {
@@ -348,7 +356,7 @@ export function createHome(ctx: HomeContext): {
   };
   const widthOf = (key: ColumnKey) => ({
     cover: "0", title: "minmax(220px,2.2fr)", author: "minmax(140px,1.3fr)", series: "minmax(170px,1.3fr)",
-    num: "0", progress: "80px", last: "120px", on: "0", added: "120px", size: "0",
+    num: "0", progress: "100px", last: "120px", on: "0", added: "120px", size: "0",
   })[key];
 
   // --- Serials (WEB.md → Home, step 3a): from the phones' chapter lists, read only ---
@@ -428,7 +436,7 @@ export function createHome(ctx: HomeContext): {
         return h("div", {
           class: `th${serialColumn(key).right ? " ra" : ""}${on ? " sort" : ""}`, role: "columnheader", "data-col": key,
           onclick: () => setSerials({ sort: sort.key === key ? { key, reversed: !sort.reversed } : { key, reversed: false } }),
-        }, serialColumn(key).heading, on ? (sort.reversed ? " ▴" : " ▾") : "");
+        }, h("span", {}, serialColumn(key).heading, on ? sortArrow(sort.reversed) : ""));
       })));
     for (const x of list) {
       box.append(h("div", { class: `tr${serialOpen(x) ? " on" : ""}`, role: "row", "data-sid": x.id, onclick: () => openSerial(x) },
@@ -551,12 +559,13 @@ export function createHome(ctx: HomeContext): {
     // Covers without a search or Hidden is the curated page (2026-10-16): its All has its own sort.
     const curated = view === "grid" && !query.trim() && !ctx.showHidden();
     const listSort = curated ? hs.gridSort : sort;
-    const sortName = column(listSort.key).sortName + (listSort.reversed ? " ▴" : "");
+    const sortName = column(listSort.key).sortName;
     const shown = view === "details" ? detailsRows(all, sort, query, facts) : null;
     const items = view === "details" ? null : homeItems(all, listSort, query, ctx.setup().groupSeries, facts);
     const n = shown ? shown.length : items!.reduce((k, i) => k + (i.kind === "book" ? 1 : i.books.length), 0);
     const what = ctx.showHidden() ? `${n} hidden` : query.trim() ? `${n} found` : `${n} books`;
-    count.textContent = [what, sortName, view !== "details" && ctx.setup().groupSeries ? "Series grouped" : ""].filter(Boolean).join(" · ");
+    const grouped = view !== "details" && ctx.setup().groupSeries ? " · Series grouped" : "";
+    count.replaceChildren(`${what} · ${sortName}`, ...(listSort.reversed ? [sortArrow(true)] : []), grouped);
     // On the curated page the count and sort head All instead.
     count.style.visibility = curated ? "hidden" : "";
     hideContinue = false;

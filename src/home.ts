@@ -36,7 +36,7 @@ export const COLUMNS: Column[] = [
   { key: "author", name: "Author", heading: "Author", sortName: "Author", firstDir: 1 },
   { key: "series", name: "Series", heading: "Series", sortName: "Series", firstDir: 1 },
   { key: "num", name: "#", heading: "#", sortName: "Number", firstDir: 1, right: true },
-  { key: "progress", name: "Progress", heading: "Progress", sortName: "Progress", firstDir: -1 },
+  { key: "progress", name: "Progress", heading: "Progress", sortName: "Progress", firstDir: -1, right: true },
   { key: "last", name: "Last read", heading: "Last read", sortName: "Recent", firstDir: -1 },
   { key: "on", name: "On", heading: "On", sortName: "Device", firstDir: 1 },
   { key: "added", name: "Added", heading: "Added", sortName: "Added", firstDir: -1 },

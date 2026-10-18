@@ -659,7 +659,7 @@ section.cur { margin-bottom: 44px; }
    chapter lines and "Continue" in the serif. Home's style only: Office is all sans. */
 #app.t-serif .bp.sv .bp-title, #app.t-serif .hcont.pill.sv b, #app.t-serif .httl.sv .bt { font-family: Figtree, system-ui, sans-serif; font-weight: 600; }
 #app.t-serif .bp.sv .bp-sub, #app.t-serif .hcont.pill.sv .k, #app.t-serif .httl.sv .pl2 { font-family: "Home Literata", Georgia, serif; }
-/* Library's Details: the tick boxes hang in the margin, so titles start under the wordmark as Serials' do (2026-10-17). */
-.home .tbl:not(.ser) { margin-left: -28px; }
+/* A sort's arrow adds no height to its line (2026-10-18): a fallback font's taller line moved the sorted heading down. */
+.arr { line-height: 0; }
 /* An empty series field: "Series", fainter than other hints; most books have none (2026-10-17). */
 .bp-ed.empty.faint { opacity: .55; }
