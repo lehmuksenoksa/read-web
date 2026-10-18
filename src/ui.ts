@@ -53,3 +53,35 @@ export const ICONS = {
   posCentre: aa('<path d="M5.5 5h7M5.5 8h7M5.5 11h7M5.5 14h5" stroke-width="1.6"/>'),
   posRight: aa('<path d="M16 3v12"/><path d="M6 5h7M6 8h7M6 11h7M6 14h5" stroke-width="1.6"/>'),
 };
+
+/**
+ * A menu's keys (2026-10-18): ↑ and ↓ move between its items (round), Home and End to the first and last.
+ * Esc and a click away close it where it's opened.
+ */
+export function menuKeys(menu: HTMLElement): void {
+  menu.addEventListener("keydown", e => {
+    const items = [...menu.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([disabled])')];
+    if (!items.length) return;
+    const to = menuStep(e.key, items.indexOf(document.activeElement as HTMLElement), items.length);
+    if (to < 0) return;
+    e.preventDefault();
+    items[to].focus();
+  });
+}
+
+/** The item a key moves to in a menu of [count] from [at] (-1: none focused); -1 for other keys. */
+export function menuStep(key: string, at: number, count: number): number {
+  if (!count) return -1;
+  switch (key) {
+    case "ArrowDown": return (at + 1) % count;
+    case "ArrowUp": return at <= 0 ? count - 1 : at - 1;
+    case "Home": return 0;
+    case "End": return count - 1;
+    default: return -1;
+  }
+}
+
+/** A menu's first item, focused as it opens (2026-10-18). */
+export function focusFirstItem(menu: HTMLElement): void {
+  menu.querySelector<HTMLElement>('[role^="menuitem"]:not([disabled])')?.focus({ preventScroll: true });
+}

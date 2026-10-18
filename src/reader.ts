@@ -59,7 +59,12 @@ export interface ReaderProps {
   onSaved?: (syncText: string) => void;
   /** A serial (WEB.md → Home, step 3b) instead of an EPUB from /Books/. */
   serial?: SerialReading;
+  /** Open at this chapter instead of the place (a serial's chapter picked in its panel, 2026-10-18). */
+  startAt?: string;
 }
+
+/** The book open in the reader: called, it saves the place and closes; [goTo] turns to a chapter. */
+export type ReaderHandle = (() => Promise<void>) & { goTo(href: string): void };
 
 /** What the reader needs of a serial. */
 export interface SerialReading {
@@ -83,7 +88,7 @@ export interface SerialContentsRow {
 }
 
 /** The book in [root] (the pane beside the Library); returns how to close it, its place saved first. */
-export async function showReader(root: HTMLElement, props: ReaderProps): Promise<() => Promise<void>> {
+export async function showReader(root: HTMLElement, props: ReaderProps): Promise<ReaderHandle> {
   const { dropbox, id, appearance } = props;
   const syncPath = props.serial?.syncPath ?? syncFilePath(id);
   const status = h("div", { class: "foot" }, "Opening…");
@@ -841,20 +846,22 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
           void keepValue(`place:${id}`, null);
           goTo(book.publication.readingOrder.items[0]?.href ?? "");
         }
-        if (next.ask) ask(next.ask);
+        // A chapter picked to open at: no question about another device's place.
+        if (next.ask && !props.startAt) ask(next.ask);
       }).catch(() => undefined);
     } else {
       const plan = openingPlan(await syncRead, null, placeOrder());
       if (plan.start) void keepValue(`place:${id}`, plan.start);
       const saved = pastCaughtUp(plan.start ? Locator.deserialize(plan.start.locator) ?? null : null);
       if (!(await mount(saved))) tell("Couldn't find your place in this book.");
-      if (plan.ask) ask(plan.ask);
+      if (plan.ask && !props.startAt) ask(plan.ask);
     }
+    if (props.startAt) goTo(props.startAt);
   } catch (e) {
     status.textContent = e instanceof Error ? e.message : String(e);
   }
 
-  return close;
+  return Object.assign(close, { goTo });
 }
 
 /** "1.0", "1.25", "0.5": at least one decimal, no trailing zeros (the app's labels). */

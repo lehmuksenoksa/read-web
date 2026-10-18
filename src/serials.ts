@@ -328,7 +328,8 @@ export const SERIAL_COLUMNS: SerialColumn[] = [
   { key: "site", name: "Source", heading: "Source", firstDir: 1 },
   { key: "chapters", name: "Chapters", heading: "Chapters", firstDir: -1, right: true },
   { key: "unread", name: "Unread", heading: "Unread", firstDir: -1, right: true },
-  { key: "updated", name: "Latest published", heading: "Latest published", firstDir: -1 },
+  // "Latest" (2026-10-18, the user's note): the date the newest chapter came out.
+  { key: "updated", name: "Latest", heading: "Latest", firstDir: -1 },
   { key: "lastread", name: "Last read", heading: "Last read", firstDir: -1 },
 ];
 export const serialColumn = (key: SerialColumnKey) => SERIAL_COLUMNS.find(c => c.key === key)!;

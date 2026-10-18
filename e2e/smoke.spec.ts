@@ -53,20 +53,35 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
   await page.click(".hmark .lib");
   await expect(page.locator(".cur-now")).toBeVisible();
+  // The browser's Forward goes back into the book, and Back to the Library (2026-10-18).
+  await page.goForward();
+  await expect(page.locator("#app")).toHaveClass(/\breader\b/);
+  await page.goBack();
+  await expect(page.locator(".cur-now")).toBeVisible();
   await page.click(".hmark .ser");
+  // From the curated Covers page, Serials' status line still shows (it stayed hidden until 2026-10-18).
+  await expect(page.locator(".hstatus .hcount")).toBeVisible();
+  await expect(page.locator(".hstatus .hcount")).toContainText("1 new chapter");
   // Serials' List (2026-10-17): the row with the serial's sharp cover from the covers folder; List · Details to choose from.
   await expect(page.locator(".scard")).toHaveCount(2);
   await expect(page.locator(`.scard[data-sid="${SERIAL}"] .cv img`)).toHaveAttribute("src", /^blob:/);
   await expect(page.locator(".hviews [role=tab]")).toHaveText(["List", "Details"]);
   // The tags are back on the List row (2026-10-17, evening): NEW, UNREAD, CAUGHT UP; no dot there. The new one's latest chapter title is marked; the caught-up one reads LATEST over & READ.
-  await expect(page.locator(`.scard[data-sid="${SERIAL}"] .tag`)).toHaveText(["1 NEW", "2 UNREAD"]);
+  // UNREAD counts every unread chapter, the NEW one too, as the panel and Details do (2026-10-18).
+  await expect(page.locator(`.scard[data-sid="${SERIAL}"] .tag`)).toHaveText(["1 NEW", "3 UNREAD"]);
   await expect(page.locator(`.scard[data-sid="${DONE}"] .tag`)).toHaveText(["CAUGHT UP"]);
   await expect(page.locator(".scard .ndot")).toHaveCount(0);
   await expect(page.locator(`.scard[data-sid="${SERIAL}"] .lines .nwt`)).toHaveText("Chapter 215: Scale");
   await expect(page.locator(`.scard[data-sid="${DONE}"] .lines .k`)).toHaveText(["LATEST", "& READ"]);
   await page.click(".hviews [role=tab]:has-text('Details')");
-  // Details (2026-10-17, evening): Serial · Author · Source · Chapters · Unread · Latest published · Last read; the unread count is empty when caught up.
-  await expect(page.locator(".home .tbl.ser .th")).toHaveText(["Serial", "Author", "Source", "Chapters", "Unread", "Latest published ▾", "Last read"]);
+  // Details (2026-10-17, evening): Serial · Author · Source · Chapters · Unread · Latest · Last read; the unread count is empty when caught up.
+  await expect(page.locator(".home .tbl.ser .th")).toHaveText(["Serial", "Author", "Source", "Chapters", "Unread", "Latest ▾", "Last read"]);
+  // A row by keyboard (2026-10-18): it takes focus, Enter opens its panel, focus goes into the panel and back on Esc.
+  await page.locator(`.tr[data-sid="${SERIAL}"] > .td[tabindex]`).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".hpanel .bp-go")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(`.tr[data-sid="${SERIAL}"] > .td[tabindex]`)).toBeFocused();
   await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td .ndot`)).toHaveCount(1);
   await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td`).nth(2)).toHaveText("Royal Road");
   await expect(page.locator(`.tr[data-sid="${SERIAL}"] .td`).nth(4)).toHaveText("3");
@@ -80,6 +95,12 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   await expect(page.locator(".hpanel .bp-go")).toHaveText("Continue Chapter 212");
   await expect(page.locator(".hpanel .bp-head")).toContainText("3 unread · 1 new");
   await expect(page.locator(".hpanel .bp-sitelink")).toHaveAttribute("href", /royalroad\.com/);
+  // A chapter in Dropbox opens in the reader, at that chapter (2026-10-18), not on the site.
+  await page.click(".hpanel .chap .chl:has-text('Chapter 214')");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter 214: Contour Lines");
+  await page.goBack();
+  await expect(page.locator(".scard").first()).toBeVisible();
+  await page.click(`.scard[data-sid="${SERIAL}"]`);
   await page.click(".hpanel .bp-go");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Paragraph 1.");
   await expect(page.locator(".httl .pl2")).toContainText("unread");

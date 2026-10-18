@@ -18,7 +18,7 @@ import type { Chrome, Setup } from "./looks";
 import { styleFor } from "./styleTokens";
 import { parseNumber, type DetailsEdit } from "./details";
 import { bookState, furthestPlace, goLabel, seriesLine as seriesProgress, statusAction } from "./panelState";
-import { h, icon, ICONS, type Child } from "./ui";
+import { focusFirstItem, h, icon, ICONS, menuKeys, type Child } from "./ui";
 import { WORDMARK_BASELINE, wordmark } from "./wordmark";
 
 export interface HomeContext {
@@ -70,6 +70,10 @@ export interface HomeContext {
   openSerial(serial: Serial): void;
   /** How many of its chapters are in Dropbox; null until listed (then Home is drawn again). */
   chaptersInDropbox(serial: Serial): number | null;
+  /** Which of its chapters are in Dropbox, by id; null until listed. */
+  chapterIdsInDropbox(serial: Serial): Set<string> | null;
+  /** A serial into the reader at one of its chapters (the panel's chapter list, 2026-10-18). */
+  openSerialAt(serial: Serial, chapterId: string): void;
 }
 
 /** The covers' colours when a book has no cover of its own. */
@@ -186,6 +190,8 @@ export function createHome(ctx: HomeContext): {
   });
   const search = h("input", { type: "search", placeholder: "Search title or author", "aria-label": "Search title or author" });
   const searchBox = h("label", { class: "hsearch" }, icon(ICONS.search), search);
+  // A click anywhere in the pill puts the cursor in the field (2026-10-18).
+  searchBox.addEventListener("mousedown", e => { if (e.target !== search) { e.preventDefault(); search.focus(); } });
   const gear = h("button", { class: "hicon", title: "Settings", "aria-label": "Settings" }, svgEl(GEAR));
   const titleBt = h("span", { class: "bt" });
   const titlePlace = h("span", { class: "pl2" });
@@ -215,10 +221,20 @@ export function createHome(ctx: HomeContext): {
 
   // --- Menus: the sort menu (the status line), ⚙ ---
 
-  const closeMenu = () => { menuOpen?.remove(); menuOpen = null; };
+  /** What opened the menu: focus goes back to it when the menu closes with focus inside (2026-10-18). */
+  let menuAnchor: HTMLElement | null = null;
+  const closeMenu = () => {
+    if (!menuOpen) return;
+    const hadFocus = menuOpen.contains(document.activeElement);
+    menuOpen.remove();
+    menuOpen = null;
+    if (hadFocus && menuAnchor?.isConnected) menuAnchor.focus({ preventScroll: true });
+  };
   const openMenu = (menu: HTMLElement, anchor: HTMLElement, alignRight = false) => {
     closeMenu();
+    menuAnchor = anchor;
     menu.classList.add("hmenu");
+    menuKeys(menu);
     // In the app, beside the bar: the menus show over the reader too.
     (header.parentElement ?? el).append(menu);
     const r = anchor.getBoundingClientRect();
@@ -226,6 +242,7 @@ export function createHome(ctx: HomeContext): {
     menu.style.left = `${Math.max(8, Math.min(alignRight ? r.right - w : r.left, window.innerWidth - w - 8))}px`;
     menu.style.top = `${r.bottom + 6}px`;
     menuOpen = menu;
+    focusFirstItem(menu);
   };
   const tick = (on: boolean) => h("span", { class: "v" }, on ? icon(ICONS.check) : null);
   /** The sort menu, for Details' sort or the curated page's All ([which]). */
@@ -339,15 +356,37 @@ export function createHome(ctx: HomeContext): {
         }, h("span", {}, c.heading, on ? sortArrow(sort.reversed) : ""));
       })));
     for (const b of list) {
-      table.append(h("div", { class: `tr${panelFor && "book" in panelFor && panelFor.book.id === b.id ? " on" : ""}`, role: "row", "data-id": b.id, onclick: () => openBook(b) },
-        ...cols.map(key => cell(b, key))));
+      table.append(focusable(h("div", { class: `tr${panelFor && "book" in panelFor && panelFor.book.id === b.id ? " on" : ""}`, role: "row", "data-id": b.id, onclick: () => openBook(b) },
+        ...cols.map(key => cell(b, key)))));
     }
     return table;
   };
 
+  /**
+   * A Details row by keyboard (2026-10-18): its first cell takes focus (a row has no box of its own); Enter opens
+   * the panel, ↑ and ↓ move between rows.
+   */
+  const focusable = (row: HTMLElement) => {
+    row.firstElementChild?.setAttribute("tabindex", "0");
+    return row;
+  };
+  main.addEventListener("keydown", e => {
+    const cellNow = (e.target as HTMLElement).closest<HTMLElement>(".tr > .td[tabindex]");
+    if (!cellNow) return;
+    const row = cellNow.parentElement!;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      row.click();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const rows = [...main.querySelectorAll<HTMLElement>(".tr > .td[tabindex]")];
+      rows[rows.indexOf(cellNow) + (e.key === "ArrowDown" ? 1 : -1)]?.focus();
+    }
+  });
+
   /** Each column's least width (the minmax minimum, or its fixed width), for fitting a narrow window. */
   const BOOK_LEAST: Record<ColumnKey, number> = { cover: 0, title: 220, author: 140, series: 170, num: 0, progress: 100, last: 120, on: 0, added: 120, size: 0 };
-  const SERIAL_LEAST: Record<SerialColumnKey, number> = { title: 220, author: 160, site: 100, chapters: 90, unread: 80, updated: 140, lastread: 110 };
+  const SERIAL_LEAST: Record<SerialColumnKey, number> = { title: 220, author: 160, site: 100, chapters: 100, unread: 80, updated: 120, lastread: 110 };
   /** The room for a Details table's columns: the books' area less its padding; no limit before it's laid out. */
   const tableRoom = () => {
     if (!main.clientWidth) return Infinity;
@@ -362,16 +401,16 @@ export function createHome(ctx: HomeContext): {
   // --- Serials (WEB.md → Home, step 3a): from the phones' chapter lists, read only ---
 
   const SERIAL_WIDTHS: Record<SerialColumnKey, string> = {
-    title: "minmax(220px,2fr)", author: "minmax(160px,1.2fr)", site: "100px", chapters: "90px", unread: "80px", updated: "140px", lastread: "110px",
+    title: "minmax(220px,2fr)", author: "minmax(160px,1.2fr)", site: "100px", chapters: "100px", unread: "80px", updated: "120px", lastread: "110px",
   };
   // No tags on a serial row (2026-10-17, the user's call): LATEST and READING say what the UNREAD count
   // said; new chapters show as the dot and the latest chapter's title in the accent (bold where the style
   // has none); caught up is the one chapter line labelled LATEST over & READ.
   /** "2 NEW" in the seal's colours (back on the List row the evening of 2026-10-17, the user missing the tags). */
   const newTag = (x: Serial) => x.progress.newCount ? h("span", { class: "tag new" }, `${x.progress.newCount} ${badges() ? "NEW" : "new"}`) : null;
-  /** "30 UNREAD" (the unread ones not NEW), or CAUGHT UP. */
+  /** "30 UNREAD": every unread chapter, the NEW ones too, as the panel and Details count (2026-10-18); or CAUGHT UP. */
   const unreadTag = (x: Serial) => {
-    const n = x.progress.olderUnreadCount;
+    const n = x.progress.unreadCount;
     if (n) return h("span", { class: "tag" }, `${n} ${badges() ? "UNREAD" : "unread"}`);
     return x.caughtUp ? h("span", { class: "tag cu" }, badges() ? "CAUGHT UP" : "Caught up") : null;
   };
@@ -427,7 +466,7 @@ export function createHome(ctx: HomeContext): {
 
   const serialDetails = (list: Serial[]) => {
     const sort = serialsSetup().sort;
-    // A narrow window drops Last read, then Source, then Chapters; Unread and Latest published stay.
+    // A narrow window drops Last read, then Source, then Chapters; Unread and Latest stay.
     const cols = fitColumns(SERIAL_DETAIL_COLUMNS, k => SERIAL_LEAST[k] + 24, tableRoom(), ["lastread", "site", "chapters", "author"]);
     const box = h("div", { class: "tbl ser", role: "table", style: `grid-template-columns:${cols.map(k => SERIAL_WIDTHS[k]).join(" ")}` });
     box.append(h("div", { class: "tr hd", role: "row" },
@@ -439,8 +478,8 @@ export function createHome(ctx: HomeContext): {
         }, h("span", {}, serialColumn(key).heading, on ? sortArrow(sort.reversed) : ""));
       })));
     for (const x of list) {
-      box.append(h("div", { class: `tr${serialOpen(x) ? " on" : ""}`, role: "row", "data-sid": x.id, onclick: () => openSerial(x) },
-        ...cols.map(key => serialCell(x, key))));
+      box.append(focusable(h("div", { class: `tr${serialOpen(x) ? " on" : ""}`, role: "row", "data-sid": x.id, onclick: () => openSerial(x) },
+        ...cols.map(key => serialCell(x, key)))));
     }
     return box;
   };
@@ -458,6 +497,7 @@ export function createHome(ctx: HomeContext): {
     main.style.setProperty("--f", String(textScale(z)));
     main.className = `hmain s-${view}`;
     const check = all && lastCheck(all);
+    count.style.visibility = "";
     count.textContent = all == null ? "" : [newChaptersText(all), check ? `checked ${ago(new Date(check.at).toISOString(), Date.now())} on ${check.device}` : ""].filter(Boolean).join(" · ");
     count.classList.add("plain");
     const letter = (n: number) => `<svg width="20" height="20" viewBox="0 0 20 20"><text x="10" y="${(10 + n * 0.36).toFixed(1)}" text-anchor="middle" font-family="Figtree, sans-serif" font-weight="600" font-size="${n}" fill="currentColor">A</text></svg>`;
@@ -496,9 +536,9 @@ export function createHome(ctx: HomeContext): {
     return y;
   };
   /** Moves [el] up or down so its text's baseline is at [y] (screen pixels). */
-  const restOn = (el: HTMLElement, y: number) => {
+  const restOn = (el: HTMLElement, y: number, probeIn: HTMLElement = el) => {
     const now = Number(el.dataset.shift ?? 0);
-    const next = now + (y - baselineOf(el));
+    const next = now + (y - baselineOf(probeIn));
     el.dataset.shift = String(next);
     el.style.translate = `0 ${next.toFixed(1)}px`;
   };
@@ -509,7 +549,7 @@ export function createHome(ctx: HomeContext): {
     const svg = markEl.querySelector("svg");
     const base = svg ? svg.getBoundingClientRect().top + WORDMARK_BASELINE * 40 : baselineOf(markEl.querySelector<HTMLElement>(".lib") ?? markEl);
     if (!titleEl.hidden) { restOn(titleBt, base); restOn(titlePlace, base); }
-    if (cont.parentElement === header && !cont.hidden && getComputedStyle(cont).position === "absolute") restOn(cont, base);
+    if (cont.parentElement === header && !cont.hidden && getComputedStyle(cont).position === "absolute") restOn(cont, base, cont.querySelector<HTMLElement>(".ct") ?? cont);
     // The icons' middle on the capitals of the smaller text (the place, or Continue): about 0.7 of its size.
     const small = parseFloat(getComputedStyle(titleEl.hidden ? cont : titlePlace).fontSize) || 13;
     header.style.setProperty("--icons-y", `${(base - top - small * 0.35 - header.offsetHeight / 2).toFixed(1)}px`);
@@ -684,7 +724,7 @@ export function createHome(ctx: HomeContext): {
     return out;
   };
 
-  const empty = () => h("p", { class: "hempty" }, ctx.showHidden() ? "No hidden books." : ctx.books().length ? "No books match." : "No books in Dropbox's /Books/ yet.");
+  const empty = () => h("p", { class: "hempty" }, ctx.showHidden() ? "No hidden books." : ctx.books().length ? "No books match." : ctx.offline() ? "Couldn't reach Dropbox. Your books will show when it's back." : "No books in Dropbox's /Books/ yet.");
 
   // --- Continue: the book read last on any device ---
 
@@ -712,22 +752,49 @@ export function createHome(ctx: HomeContext): {
 
   // --- The panel ---
 
+  /**
+   * Focus follows the panel (2026-10-18): into it as it opens (its button, else Close), back to the row, card or
+   * cover it was opened from as it closes (found again by its id if the Library was drawn again meanwhile).
+   */
+  let returnTo: { el: HTMLElement; sel: string | null } | null = null;
+  const keepReturn = () => {
+    const at = document.activeElement as HTMLElement | null;
+    if (!at || !main.contains(at)) return;
+    const item = at.closest<HTMLElement>("[data-id], [data-sid]");
+    const sel = !item ? null : item.dataset.sid ? `[data-sid="${item.dataset.sid}"]` : `[data-id="${item.dataset.id}"]`;
+    returnTo = { el: at, sel: sel && (item!.classList.contains("tr") ? `.tr${sel} > .td[tabindex]` : sel) };
+  };
+  const focusPanel = () => (panel.querySelector<HTMLElement>(".bp-go:not([disabled])") ?? panel.querySelector<HTMLElement>(".top .hicon"))?.focus({ preventScroll: true });
+  const focusBack = () => {
+    const at = document.activeElement;
+    if (at && at !== document.body && !panel.contains(at)) return;
+    const back = returnTo?.el.isConnected ? returnTo.el : returnTo?.sel ? main.querySelector<HTMLElement>(returnTo.sel) : null;
+    back?.focus({ preventScroll: true });
+    returnTo = null;
+  };
+
   const openBook = (b: LibraryBook) => {
     if (!(panelFor && "book" in panelFor && panelFor.book.id === b.id)) devicesOpen = false;
+    keepReturn();
     panelFor = { book: b };
     renderPanel();
+    focusPanel();
     if (!ctx.places(b.id) && b.hasSyncFile) void ctx.load(b).then(() => { if (panelFor && "book" in panelFor && panelFor.book.id === b.id) renderPanel(); });
   };
   const openSerial = (x: Serial) => {
     if (!(panelFor && "serial" in panelFor && panelFor.serial === x.id)) chaptersOpen = false;
+    keepReturn();
     panelFor = { serial: x.id };
     main.querySelectorAll(".scard.on, .tr.on").forEach(e => e.classList.remove("on"));
     main.querySelectorAll(`[data-sid="${x.id}"]`).forEach(e => e.classList.add("on"));
     renderPanel();
+    focusPanel();
   };
   const openSeries = (members: LibraryBook[]) => {
+    keepReturn();
     panelFor = { series: members.map(m => m.id).map(id => ctx.books().find(b => b.id === id)!).filter(Boolean) };
     renderPanel();
+    focusPanel();
     for (const m of members) if (ctx.progress(m.id) == null && m.hasSyncFile) void ctx.load(m).then(renderSoon);
   };
   const closePanel = () => {
@@ -736,6 +803,7 @@ export function createHome(ctx: HomeContext): {
     panel.classList.remove("open");
     main.querySelectorAll(".tr.on, .scard.on").forEach(e => e.classList.remove("on"));
     refitForPanel();
+    focusBack();
   };
   let fromSeries: LibraryBook[] | null = null;
 
@@ -791,10 +859,23 @@ export function createHome(ctx: HomeContext): {
   const hero = (art: HTMLElement | null, ...lines: (HTMLElement | null)[]) =>
     h("div", { class: "bp-hero" }, ...present(style().covers ? art : null, h("div", { class: "bp-info" }, ...present(...lines))));
 
+  /** ⋯ at the end of the fine print (2026-10-18): the book menu, as a right-click opens it. */
+  const more = (b: LibraryBook) => {
+    const button = h("button", { class: "bp-more", title: "More", "aria-label": "More: Edit details, Hide", "aria-haspopup": "menu" }, "⋯");
+    button.addEventListener("click", e => {
+      e.stopPropagation();
+      const r = button.getBoundingClientRect();
+      ctx.menu(b, r.right - 230, r.bottom + 6);
+    });
+    return button;
+  };
+
   const renderPanel = () => {
     if (!panelFor) return;
     // Not while a field is being edited: the panel is drawn again once it's saved.
     if (panel.querySelector(".bp-edit")) return;
+    // Drawn again with focus inside (its progress read, a mark set): the focus stays in the panel.
+    const hadFocus = panel.contains(document.activeElement);
     const top = h("div", { class: "top" });
     const closeButton = h("button", { class: "hicon", title: "Close", "aria-label": "Close", onclick: closePanel }, svgEl(CLOSE));
     if ("serial" in panelFor) {
@@ -803,7 +884,11 @@ export function createHome(ctx: HomeContext): {
       if (!x) return closePanel();
       top.append(h("span", { class: "grow" }), closeButton);
       const now = Date.now();
-      const link = (c: { title: string; url: string }, cls = "") => h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", class: cls }, c.title);
+      // A chapter in Dropbox opens in the reader; one that isn't (locked, or not fetched yet) opens on the site, marked ↗ (2026-10-18).
+      const inReader = ctx.chapterIdsInDropbox(x);
+      const link = (c: { id: string; title: string; url: string; locked?: boolean }, cls = "") => inReader?.has(c.id) && !c.locked
+        ? h("button", { class: `chl${cls ? ` ${cls}` : ""}`, onclick: () => ctx.openSerialAt(x, c.id) }, c.title)
+        : h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", class: cls, title: `Open on ${x.site}` }, c.title, h("span", { class: "out", "aria-hidden": "true" }, " ↗"));
       // The list (2026-10-16): with a long backlog, the newest and where you pick up, "N more" between.
       const rows = panelChapters(x, chaptersOpen);
       const chapters = rows.length ? h("div", { class: "chap" }, ...rows.flatMap(r => {
@@ -884,9 +969,10 @@ export function createHome(ctx: HomeContext): {
         h("div", { class: "bp-acts" },
           h("button", { class: "bp-go", onclick: () => ctx.open(b) }, goLabel(state)),
           h("button", { class: "bp-word", onclick: () => (action === "Mark as read" ? ctx.markRead(b) : ctx.markUnread(b)) }, action)),
-        h("div", { class: "bp-fine" }, file))));
+        h("div", { class: "bp-fine" }, h("span", {}, file), more(b)))));
     }
     panel.classList.add("open");
+    if (hadFocus && !panel.contains(document.activeElement)) focusPanel();
     refitForPanel();
     main.querySelectorAll(".tr.on").forEach(x => x.classList.remove("on"));
     if ("book" in panelFor) main.querySelector(`.tr[data-id="${panelFor.book.id}"]`)?.classList.add("on");
@@ -1001,7 +1087,8 @@ export function createHome(ctx: HomeContext): {
     if (!was !== !title || was?.side !== title?.side) renderMark(title ? title.side === "books" : !onSerials());
     queueAlign();
     if (title) {
-      titleBt.replaceChildren(redTitle(title.title));
+      // Over the page, the page is the only colour (2026-10-18, as on the phones): the title in plain ink.
+      titleBt.textContent = title.title;
       titlePlace.textContent = title.place;
       // Over the page, but clear of the name and ⚙ when the page is wider than the gap between them.
       const bar = header.getBoundingClientRect();

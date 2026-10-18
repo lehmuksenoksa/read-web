@@ -16,17 +16,17 @@ import {
   type ChapterList, type Serial, type Subscription,
 } from "./serials";
 import { keptFile } from "./store";
-import { showReader } from "./reader";
+import { showReader, type ReaderHandle } from "./reader";
 import { marksOf, withMarks, type Marks, type ReadMark } from "./sync";
 import { forgetAll, keepBook, keptBooks, keepValue, keptValue } from "./store";
 import { styleFor, tokenClasses } from "./styleTokens";
-import { h, icon, ICONS } from "./ui";
+import { focusFirstItem, h, icon, ICONS, menuKeys } from "./ui";
 
 const root = document.getElementById("app")!;
 /** Web's setup and the fonts, read once per visit. */
 let appearance: Appearance | null = null;
-/** Closes the book open in the reader (its place saved first). */
-let closeReader: (() => Promise<void>) | null = null;
+/** Closes the book open in the reader (its place saved first); turns it to a chapter. */
+let closeReader: ReaderHandle | null = null;
 /** Stops the page following setup changes. */
 let stopFollowing: (() => void) | null = null;
 
@@ -36,7 +36,12 @@ document.title = "Read.web";
 /** Closes a book's menu on a click outside it or Esc (set while it can be open). */
 let closeMenu: ((e?: Event) => void) | null = null;
 document.addEventListener("click", e => closeMenu?.(e));
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu?.(); });
+// Esc closes an open book menu and only that (2026-10-18: it closed the book's panel behind it too).
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || !document.querySelector(".bookmenu:not([hidden])")) return;
+  e.stopImmediatePropagation();
+  closeMenu?.();
+});
 
 function dropbox(): Dropbox | null {
   const token = currentToken();
@@ -209,6 +214,9 @@ async function showApp() {
   // --- A book's menu: ⋯ on hover, or a right-click (WEB.md → The book menu, 2026-10-14) ---
 
   const bookMenu = h("div", { class: "panel menu bookmenu", role: "menu", hidden: true });
+  menuKeys(bookMenu);
+  /** Where focus was when the book menu opened: it goes back there when the menu closes with focus inside. */
+  let menuReturn: HTMLElement | null = null;
   const toast = h("div", { class: "msg toast", hidden: true });
   closeMenu = (e?: Event) => { if (!e?.composedPath().includes(bookMenu)) closeBookMenu(); };
   /** The book whose menu is open: its row keeps the hover outline. */
@@ -222,8 +230,10 @@ async function showApp() {
   };
   const closeBookMenu = () => {
     if (bookMenu.hidden) return;
+    const hadFocus = bookMenu.contains(document.activeElement);
     bookMenu.hidden = true;
     menuFor = null;
+    if (hadFocus && menuReturn?.isConnected) menuReturn.focus({ preventScroll: true });
   };
   const tick = (on: boolean) => h("span", { class: "v" }, on ? icon(ICONS.check) : null);
   /** The newer of two read marks. */
@@ -236,9 +246,9 @@ async function showApp() {
       h("button", { class: "r", role: on === undefined ? "menuitem" : "menuitemradio", "aria-checked": on === undefined ? undefined : String(on), onclick: () => { closeBookMenu(); action(); } }, name, on === undefined ? null : tick(on));
     bookMenu.replaceChildren(
       h("div", { class: "lab" }, book.title),
-      item("Mark as read", () => void setRead(book, true), mark?.read === true),
+      // As on the phones (2026-10-18): Mark as read again, while it's ticked, gives the mark back to the place.
+      item("Mark as read", () => void setRead(book, mark?.read === true ? null : true), mark?.read === true),
       ...(p > 0 || shownBook.read ? [item("Mark as unread", () => markUnread(book))] : []),
-      item("Automatic", () => void setRead(book, null), !mark || mark.read === null),
       h("hr"),
       item("Edit details…", () => editDetails(book)),
       h("hr"),
@@ -247,9 +257,11 @@ async function showApp() {
   };
   const openBookMenu = (book: LibraryBook, x: number, y: number) => {
     closeMenu?.();
+    menuReturn = document.activeElement as HTMLElement | null;
     menuFor = book.id;
     fillBookMenu(book);
     bookMenu.hidden = false;
+    focusFirstItem(bookMenu);
     const r = bookMenu.getBoundingClientRect();
     bookMenu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - r.width - 8))}px`;
     bookMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - r.height - 8))}px`;
@@ -257,7 +269,7 @@ async function showApp() {
     if (!syncMarks.has(book.id) && book.hasSyncFile) {
       void api.readText(syncFilePath(book.id)).then(r => {
         syncMarks.set(book.id, marksOf(r ? JSON.parse(r.text) : null));
-        if (menuFor === book.id) fillBookMenu(book);
+        if (menuFor === book.id) { fillBookMenu(book); focusFirstItem(bookMenu); }
       }).catch(() => undefined);
     }
   };
@@ -417,16 +429,44 @@ async function showApp() {
   let pageBox = { left: 0, width: 0 };
   let reading: { title: string; side: "books" | "serials"; place: string } | null = null;
   const showTitle = () => { if (screen === "reader") home?.setReading(reading && { ...reading, ...pageBox }); };
+  /**
+   * The browser's Back and Forward (2026-10-18): opening a book or serial is a step in this tab's history, so
+   * Back returns to the Library side it came from and Forward to the book. The name still goes back too.
+   */
+  const READER_STEP = { read: "reader" };
+  const inReaderStep = () => (history.state as { read?: string } | null)?.read === "reader";
+  /** The side the name's click asked for, while the Back it started arrives. */
+  let backTo: "books" | "serials" | null = null;
+  history.replaceState(inReaderStep() ? history.state : { read: "library" }, "");
+  if (screen === "reader" && !inReaderStep()) history.pushState(READER_STEP, "");
+  window.addEventListener("popstate", () => {
+    if (inReaderStep()) {
+      if (screen === "library" && currentId) toReader();
+      return;
+    }
+    if (screen === "reader") showLibraryNow(backTo ?? reading?.side ?? setup.home.tab);
+    backTo = null;
+  });
   /** The reader in front: the Library's panel closes. */
   const toReader = () => {
+    if (!inReaderStep()) history.pushState(READER_STEP, "");
     if (screen === "reader") return;
     screen = "reader";
     home?.closePanel();
     layout();
     showTitle();
   };
-  /** The Library or Serials page, from the bar's name; the book stays open behind it. */
+  /** The Library or Serials page, from the bar's name: the step back in this tab's history, as Back is. */
   const showLibrary = (side: "books" | "serials") => {
+    if (screen === "reader" && inReaderStep()) {
+      backTo = side;
+      history.back();
+      return;
+    }
+    showLibraryNow(side);
+  };
+  /** The Library or Serials page; the book stays open behind it. */
+  const showLibraryNow = (side: "books" | "serials") => {
     screen = "library";
     rememberPlace({ kind: "library" });
     home?.setReading(null);
@@ -484,10 +524,11 @@ async function showApp() {
     return opening;
   };
   /** A serial into the reader (WEB.md → Home, step 3b): its chapters from Dropbox, its place in its sync file. */
-  const openSerialNow = (x: Serial) => {
+  const openSerialNow = (x: Serial, chapterId?: string) => {
     toReader();
     rememberPlace({ kind: "serial", id: x.id });
-    if (x.id === currentId) return opening;
+    // Already open: it turns to the chapter.
+    if (x.id === currentId) return chapterId ? (opening = opening.then(() => closeReader?.goTo(chapterHref(chapterId)))) : opening;
     currentId = x.id;
     const order = readingOrderOf(x.chapters).map(c => c.id);
     /** The serial as last read (its NEW marks and chapters change while it's open). */
@@ -508,6 +549,7 @@ async function showApp() {
         .then(bytes => (bytes ? new TextDecoder().decode(bytes) : null));
       closeReader = await showReader(pane, {
         ...props, dropbox: api, appearance: look, id: x.id, path: "", title: x.title,
+        startAt: chapterId ? chapterHref(chapterId) : undefined,
         onSaved: saved => {
           if (serialData) serialData = { ...serialData, places: { ...serialData.places, [x.id]: JSON.parse(saved) } };
         },
@@ -549,6 +591,8 @@ async function showApp() {
     return got;
   };
   const inDropboxCount = new Map<string, number>();
+  /** The same lists as sets, for the panel's chapters (in the reader or on the site). */
+  const inDropboxIds = new Map<string, Set<string>>();
   /** The phones' "keep author notes" setting, from their setup backups; read once. */
   let phonesKeepRead: Promise<boolean> | null = null;
   const phonesKeep = () => phonesKeepRead ??= (async () => {
@@ -701,8 +745,10 @@ async function showApp() {
     loadSerials,
     editSerial: x => editDetails(serialAsBook(x), true),
     openSerial: x => void openSerialNow(x),
+    openSerialAt: (x, chapterId) => void openSerialNow(x, chapterId),
+    chapterIdsInDropbox: x => inDropboxIds.get(x.id) ?? null,
     chaptersInDropbox: x => {
-      if (!inDropboxCount.has(x.id)) void chaptersInDropbox(x.id).then(set => { inDropboxCount.set(x.id, set.size); render(); });
+      if (!inDropboxCount.has(x.id)) void chaptersInDropbox(x.id).then(set => { inDropboxCount.set(x.id, set.size); inDropboxIds.set(x.id, set); render(); });
       inDropboxCount.set(x.id, inDropboxCount.get(x.id) ?? -1);
       const n = inDropboxCount.get(x.id)!;
       return n < 0 ? null : n;
@@ -766,7 +812,6 @@ async function showApp() {
     offline = true;
     render();
     restore(true);
-    if (!kept) tell(`Couldn't reach Dropbox: ${e instanceof Error ? e.message : e}`);
     return;
   }
   progress = new Map();
@@ -783,7 +828,7 @@ async function showApp() {
     }
     if (Date.now() - hiddenAt < RECHECK_AFTER_MS || !currentToken()) return;
     // The serials are read again too, when they've been shown.
-    if (serialData) { serialsLoading = null; inDropboxNow.clear(); inDropboxCount.clear(); void loadSerials().then(render); }
+    if (serialData) { serialsLoading = null; inDropboxNow.clear(); inDropboxCount.clear(); inDropboxIds.clear(); void loadSerials().then(render); }
     const syncFiles = await api.listFolder(SYNC_FOLDER, false).catch(() => null);
     const next = syncFiles && withSyncTimes(books, syncFiles);
     if (!next) return;
