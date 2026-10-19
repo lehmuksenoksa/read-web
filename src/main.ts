@@ -245,7 +245,7 @@ async function showApp() {
     const item = (name: string, action: () => void, on?: boolean) =>
       h("button", { class: "r", role: on === undefined ? "menuitem" : "menuitemradio", "aria-checked": on === undefined ? undefined : String(on), onclick: () => { closeBookMenu(); action(); } }, name, on === undefined ? null : tick(on));
     bookMenu.replaceChildren(
-      h("div", { class: "lab" }, book.title),
+      h("div", { class: "lab plain" }, book.title),
       // As on the phones (2026-10-18): Mark as read again, while it's ticked, gives the mark back to the place.
       item("Mark as read", () => void setRead(book, mark?.read === true ? null : true), mark?.read === true),
       ...(p > 0 || shownBook.read ? [item("Mark as unread", () => markUnread(book))] : []),

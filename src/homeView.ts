@@ -267,7 +267,7 @@ export function createHome(ctx: HomeContext): {
     if (menuOpen) return closeMenu();
     const homeNow = ctx.isHome();
     openMenu(h("div", { role: "menu" },
-      ctx.offline() ? h("div", { class: "lab" }, "Dropbox: offline") : null,
+      ctx.offline() ? h("div", { class: "lab plain" }, "Dropbox: offline") : null,
       h("div", { class: "lab" }, "Style"),
       h("button", { class: "r", role: "menuitemradio", "aria-checked": String(homeNow), onclick: () => { closeMenu(); if (!homeNow) ctx.setHome(true); } }, "Home", tick(homeNow)),
       h("button", { class: "r", role: "menuitemradio", "aria-checked": String(!homeNow), onclick: () => { closeMenu(); if (homeNow) ctx.setHome(false); } }, "Office", tick(!homeNow)),

@@ -65,7 +65,10 @@ button:disabled { opacity: .35; cursor: default; }
 .tabs button { padding: 12px; color: var(--ink2); }
 .tabs button.cur { color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
 .sec { padding: 8px 20px 0; display: flex; flex-direction: column; }
-.lab { color: var(--ink3); font-size: var(--t-fine); margin: 10px 0 6px; }
+/* Group labels: spaced capitals everywhere, as the table headings (2026-10-19, the user's pick B). */
+.lab { color: var(--ink3); font: 700 var(--t-caps) var(--font-sans); letter-spacing: .14em; text-transform: uppercase; margin: 10px 0 6px; }
+/* A title or a status line in a menu's label place stays as it is written. */
+.lab.plain { font: var(--t-fine) var(--font-sans); letter-spacing: normal; text-transform: none; }
 .r { display: flex; align-items: center; gap: 12px; padding: 7px 10px; border-radius: var(--r-row); width: 100%; }
 button.r:hover { background: var(--sel); }
 .r.sel { background: var(--sel); }
@@ -268,7 +271,7 @@ button.r:hover { background: var(--sel); }
 
 /* Menus: sort, ⚙. */
 .hmenu { position: fixed; z-index: var(--z-over); background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: var(--shadow); padding: 6px; min-width: 210px; font-size: var(--t-small); }
-.hmenu .lab { color: var(--ink3); font-size: var(--t-fine); margin: 6px 10px 4px; }
+.hmenu .lab { margin: 6px 10px 4px; }
 .hmenu .r { display: flex; align-items: center; gap: 12px; padding: 7px 10px; border-radius: var(--r-row); width: 100%; }
 .hmenu .r:hover { background: var(--well); }
 .hmenu .v { margin-left: auto; display: inline-flex; color: var(--ink2); }
@@ -535,6 +538,7 @@ button.bp-line:hover .bp-r, button.bp-line:hover .chev { color: var(--ink); }
 .t-ink .bp-go.off { padding: 6px 16px; }
 .bp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid var(--rule); color: var(--ink2); }
 .bp-head .c { color: var(--ink3); font-size: var(--t-small); }
+.bp-head > span:first-child { font: 700 var(--t-caps) var(--font-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--ink3); }
 .hpanel .chap .chapmore { text-align: left; color: var(--ink3); font: var(--t-small) var(--font-sans); padding: 4px 0; }
 .hpanel .chap .chapmore:hover { color: var(--ink); }
 
