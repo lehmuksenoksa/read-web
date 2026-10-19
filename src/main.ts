@@ -313,9 +313,11 @@ async function showApp() {
     const now = Date.now();
     for (const book of list) {
       setMarks(book.id, { read: { read: null, updatedAt: now }, reset: { at: now } });
-      showProgress(book.id, 0);
+      // Every device's place from before goes too: the panel and Reading now show places, not only the number (2026-10-19).
+      showProgress(book.id, 0, []);
       window.clearTimeout(unreadTimers.get(book.id));
     }
+    render();
     const timer = window.setTimeout(async () => {
       for (const book of list) unreadTimers.delete(book.id);
       // The open book closes first (its place is saved before the reset, so it doesn't count), then opens at the start.

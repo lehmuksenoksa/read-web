@@ -161,5 +161,8 @@ test("Office: the book's panel: the title edited in place, the devices, Mark as 
   await expect(page.locator(".hpanel .bp-word")).toHaveText("Mark as unread");
   await expect.poll(() => dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/${EMMA}.json` && u.text.includes('"read":true'))).toBe(true);
   expect(dropbox.uploads.filter(u => u.path === "/Apps/Read/Sync/details.json").some(u => u.text.includes("Nobody"))).toBe(false);
+  // Mark as unread after Mark as read: back to the start at once, every device's place too (2026-10-19).
+  await page.click(".hpanel .bp-word");
+  await expect(page.locator(".hpanel .bp-line")).toContainText("Not started");
   expect(dropbox.errors).toEqual([]);
 });
