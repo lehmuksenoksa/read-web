@@ -486,7 +486,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const fillAa = async () => {
     const look = shown(setup);
     const tabs = h("div", { class: "tabs" }, ...(["Text", "Layout"] as AaTab[]).map(tab =>
-      h("button", { class: tab === aaTab ? "cur" : "", onclick: () => { aaTab = tab; aa.replaceChildren(); void fillAa(); } }, tab)));
+      h("button", { class: tab === aaTab ? "cur" : "", "data-label": tab, onclick: () => { aaTab = tab; aa.replaceChildren(); void fillAa(); } }, tab)));
     let body: HTMLElement;
     switch (aaTab) {
       case "Text": {

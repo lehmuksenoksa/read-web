@@ -506,7 +506,7 @@ export function createHome(ctx: HomeContext): {
     zoom.value = String(ss.sizes[view]);
     zoomLess.disabled = ss.sizes[view] === 0;
     zoomMore.disabled = ss.sizes[view] === SIZES.length - 1;
-    views.replaceChildren(...SERIAL_VIEWS.map(v => h("button", { class: v.view === view ? "on" : "", role: "tab", "aria-selected": String(v.view === view), onclick: () => setSerials({ view: v.view }) }, v.name)));
+    views.replaceChildren(...SERIAL_VIEWS.map(v => h("button", { class: v.view === view ? "on" : "", role: "tab", "aria-selected": String(v.view === view), "data-label": v.name, onclick: () => setSerials({ view: v.view }) }, v.name)));
     seen.disconnect();
     if (all == null) main.replaceChildren();
     else if (!shown.length) main.replaceChildren(h("p", { class: "hempty" }, all.length ? "No serials match." : "No serials yet."));
@@ -618,7 +618,7 @@ export function createHome(ctx: HomeContext): {
     zoom.value = String(hs.sizes[view]);
     zoomLess.disabled = hs.sizes[view] === 0;
     zoomMore.disabled = hs.sizes[view] === SIZES.length - 1;
-    views.replaceChildren(...BOOK_VIEWS.map(v => h("button", { class: v.view === view ? "on" : "", role: "tab", "aria-selected": String(v.view === view), onclick: () => setHome({ view: v.view }) }, v.name)));
+    views.replaceChildren(...BOOK_VIEWS.map(v => h("button", { class: v.view === view ? "on" : "", role: "tab", "aria-selected": String(v.view === view), "data-label": v.name, onclick: () => setHome({ view: v.view }) }, v.name)));
 
     seen.disconnect();
     if (shown) {
