@@ -51,10 +51,12 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   // Everything in Reading now but Continue opens the book's panel (2026-10-19): the title, the place line.
   await page.click(".cur-now .cur-title");
   await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
+  // Open, not only filled: a click outside the panel closes it, and Reading now isn't outside (2026-10-19).
+  await expect(page.locator(".hpanel")).toHaveClass(/\bopen\b/);
   await expect(page.locator("#app")).not.toHaveClass(/\breader\b/);
   await page.keyboard.press("Escape");
   await page.click(".cur-now .cur-place");
-  await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
+  await expect(page.locator(".hpanel")).toHaveClass(/\bopen\b/);
   await page.keyboard.press("Escape");
   // Continue opens the book; the name goes back.
   await page.click(".cur-go");

@@ -85,3 +85,30 @@ export function withPageTop(locator: Record<string, unknown>, top: PageTop | nul
   const locations = { ...((locator.locations as Record<string, unknown>) ?? {}), cssSelector: top.cssSelector };
   return { ...locator, locations, text: { highlight: top.highlight, before: top.before } };
 }
+
+/**
+ * Where the text in view really runs, left to right, in the page window [wnd]: the lines' own
+ * edges, so the bar's title lines up with them whatever the book's styles do to its margins
+ * (2026-10-19). Null when the page shows no text.
+ */
+export function textEdges(wnd: Window): { left: number; right: number } | null {
+  const doc = wnd.document;
+  const width = wnd.innerWidth;
+  const height = wnd.innerHeight;
+  let left = Infinity;
+  let right = -Infinity;
+  let seen = 0;
+  const range = doc.createRange();
+  for (const block of Array.from(doc.body?.querySelectorAll("p") ?? [])) {
+    if (!block.textContent?.trim()) continue;
+    range.selectNodeContents(block);
+    for (const r of Array.from(range.getClientRects())) {
+      if (r.width <= 0 || r.height <= 0 || r.right <= 0 || r.left >= width || r.bottom <= 0 || r.top >= height) continue;
+      left = Math.min(left, Math.max(0, r.left));
+      right = Math.max(right, Math.min(width, r.right));
+      seen++;
+    }
+    if (seen > 60) break;
+  }
+  return seen && right > left ? { left, right } : null;
+}

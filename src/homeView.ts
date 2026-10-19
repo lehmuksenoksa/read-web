@@ -385,7 +385,7 @@ export function createHome(ctx: HomeContext): {
   });
 
   /** Each column's least width (the minmax minimum, or its fixed width), for fitting a narrow window. */
-  const BOOK_LEAST: Record<ColumnKey, number> = { cover: 0, title: 220, author: 140, series: 170, num: 0, progress: 100, last: 120, on: 0, added: 120, size: 0 };
+  const BOOK_LEAST: Record<ColumnKey, number> = { cover: 0, title: 220, author: 140, series: 170, num: 0, progress: 120, last: 120, on: 0, added: 120, size: 0 };
   const SERIAL_LEAST: Record<SerialColumnKey, number> = { title: 220, author: 160, site: 100, chapters: 100, unread: 80, updated: 120, lastread: 110 };
   /** The room for a Details table's columns: the books' area less its padding; no limit before it's laid out. */
   const tableRoom = () => {
@@ -395,7 +395,7 @@ export function createHome(ctx: HomeContext): {
   };
   const widthOf = (key: ColumnKey) => ({
     cover: "0", title: "minmax(220px,2.2fr)", author: "minmax(140px,1.3fr)", series: "minmax(170px,1.3fr)",
-    num: "0", progress: "100px", last: "120px", on: "0", added: "120px", size: "0",
+    num: "0", progress: "120px", last: "120px", on: "0", added: "120px", size: "0",
   })[key];
 
   // --- Serials (WEB.md → Home, step 3a): from the phones' chapter lists, read only ---
@@ -1070,7 +1070,7 @@ export function createHome(ctx: HomeContext): {
   el.addEventListener("click", e => {
     const path = e.composedPath();
     if (!panelFor || path.includes(panel)) return;
-    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark") || x.closest(".bookmenu, .dialog, .toast")))) return;
+    if (path.some(x => x instanceof HTMLElement && (x.matches(".cell, .scard, .tr[data-id], .tr[data-sid], .hcont, .hmenu, .hmark, .cur-feat") || x.closest(".bookmenu, .dialog, .toast")))) return;
     closePanel();
   });
   document.addEventListener("keydown", e => {

@@ -14,7 +14,7 @@ import {
   preferences, removeFont, restoreFont, SANS_FONTS,
   shown, step, stepOptional, STEPS, stepWeight, weightName, type Look, type Setup, type TextPosition, type Steps,
 } from "./looks";
-import { pageTop, withPageTop, type PageTop } from "./pagetop";
+import { pageTop, textEdges, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
 import { chapterHref, chapterIdOf, nextAfterCaughtUp } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
@@ -569,6 +569,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     positionChanged: (locator: Locator) => {
       current = locator;
       currentTop = readPageTop();
+      measureText();
       props.serial?.onChapter(locator.href);
       showPlace();
       tellPlace();
@@ -690,6 +691,17 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     // The text's own edges: Readium keeps a gutter inside the page (20 px), so the bar's title lines up with the text.
     const box = (page.parentElement as HTMLElement).getBoundingClientRect();
     props.onPageBox?.({ left: box.left + PAGE_GUTTER, width: Math.max(0, box.width - 2 * PAGE_GUTTER) });
+  };
+  /** The bar's title over the text's own edges, once a page shows (a book's styles may widen or narrow it). */
+  const measureText = () => {
+    try {
+      const wnd = frameWindow();
+      const frame = wnd?.frameElement?.getBoundingClientRect();
+      const edges = wnd && frame ? textEdges(wnd) : null;
+      if (edges && frame) props.onPageBox?.({ left: frame.left + edges.left, width: edges.right - edges.left });
+    } catch {
+      // The guess from the page's width stays.
+    }
   };
 
   /**
