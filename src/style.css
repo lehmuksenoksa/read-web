@@ -570,14 +570,16 @@ section.cur { margin-bottom: 44px; }
 .cur-cover .cv { width: 100%; aspect-ratio: 5 / 8; border-radius: var(--r-row); box-shadow: 0 22px 50px rgba(0,0,0,.45); --f: .9; }
 .cur-info { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; min-width: 220px; max-width: 360px; }
 .cur-title { text-align: left; font: 600 clamp(28px, 2.6vw, 38px)/1.12 var(--font-serif); color: var(--ink); }
-.cur-title:hover { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; }
+.cur-feat { cursor: pointer; }
+/* Anywhere on Reading now but Continue opens the panel: the title underlines to say so. */
+.cur-feat:hover:not(:has(.cur-go:hover)) .cur-title, .cur-title:focus-visible { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; }
 .cur-by { color: var(--ink2); font-size: var(--t-item); }
 .cur-series { color: var(--ink3); font-size: var(--t-small); }
 .cur-bar { margin-top: 22px; }
 .cur-place { color: var(--ink2); font-size: var(--t-small); margin-top: 2px; }
 .cur-go { align-self: flex-start; margin-top: 18px; display: inline-flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 600; }
 .cur-go .play { width: 34px; height: 34px; border-radius: 50%; background: var(--seal); color: var(--onseal); display: inline-flex; align-items: center; justify-content: center; font-size: var(--t-fine); padding-left: 2px; }
-.cur-go:hover { text-decoration: underline; text-underline-offset: 4px; }
+.cur-go:hover .lbl { text-decoration: underline; text-underline-offset: 4px; }
 .cur-also { min-width: 0; }
 .cur-alsorow { display: flex; gap: 24px; height: calc(var(--fw) * 1.5); align-items: flex-end; }
 .home .cur-alsorow .cell { width: calc(var(--fw) - 50px); flex: none; }

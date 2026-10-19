@@ -698,15 +698,16 @@ export function createHome(ctx: HomeContext): {
       hideContinue = true;
       const top: HTMLElement = h("section", { class: "cur cur-top" },
         h("div", { class: "cur-now" }, head("Reading now"),
-          h("div", { class: "cur-feat" },
-            h("button", { class: "cur-cover", "data-id": f.id, onclick: () => openBook(f), "aria-label": `${f.title}: details` }, cover(f, true)),
+          // All of it opens the book's panel, as a book in All does; only Continue opens the book (2026-10-19).
+          h("div", { class: "cur-feat", onclick: (e: Event) => { if (!(e.target as Element).closest(".cur-go")) openBook(f); } },
+            h("button", { class: "cur-cover", "data-id": f.id, tabindex: "-1", "aria-hidden": "true" }, cover(f, true)),
             h("div", { class: "cur-info" },
-              h("button", { class: "cur-title", onclick: () => ctx.open(f) }, redTitle(f.title)),
+              h("button", { class: "cur-title", "aria-label": `${f.title}: details` }, redTitle(f.title)),
               h("div", { class: "cur-by" }, f.author ?? ""),
               series ? h("div", { class: "cur-series" }, series) : null,
               h("div", { class: "cur-bar" }, bar(p)),
               h("div", { class: "cur-place" }, [pct(p), far?.chapter ?? ""].filter(Boolean).join(" · ")),
-              h("button", { class: "cur-go", onclick: () => ctx.open(f) }, h("span", { class: "play", "aria-hidden": "true" }, "▶"), "Continue")))),
+              h("button", { class: "cur-go", onclick: () => ctx.open(f) }, h("span", { class: "play", "aria-hidden": "true" }, "▶"), h("span", { class: "lbl" }, "Continue"))))),
         // The books beside it sit in the grid's own columns, as the covers below do (2026-10-16).
         beside ? h("div", { class: `cur-also ${beside.kind}` }, head(beside.title, beside.kind === "added" ? String(beside.books.length) : null),
           ...beside.books.map(b => (beside.kind === "also" ? reading(b) : added(b)))) : null);

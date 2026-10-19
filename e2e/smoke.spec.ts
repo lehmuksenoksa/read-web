@@ -48,6 +48,14 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   await expect(page.locator(".home .grid .cell")).toHaveCount(1);
   await page.fill(".hsearch input", "");
   await expect(page.locator(".cur-now")).toBeVisible();
+  // Everything in Reading now but Continue opens the book's panel (2026-10-19): the title, the place line.
+  await page.click(".cur-now .cur-title");
+  await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
+  await expect(page.locator("#app")).not.toHaveClass(/\breader\b/);
+  await page.keyboard.press("Escape");
+  await page.click(".cur-now .cur-place");
+  await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
+  await page.keyboard.press("Escape");
   // Continue opens the book; the name goes back.
   await page.click(".cur-go");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
