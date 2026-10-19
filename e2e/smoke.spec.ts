@@ -166,3 +166,20 @@ test("Office: the book's panel: the title edited in place, the devices, Mark as 
   await expect(page.locator(".hpanel .bp-line")).toContainText("Not started");
   expect(dropbox.errors).toEqual([]);
 });
+
+test("Serials kept in the browser: shown at once on the next visit, only changed files read again", async ({ page }) => {
+  const dropbox = await standIn(page, true);
+  await page.goto("./");
+  await page.click(".hmark .ser");
+  await expect(page.locator(`.scard[data-sid="${SERIAL}"] .lines .nwt`)).toHaveText("Chapter 215: Scale");
+  await page.waitForTimeout(1500); // kept in the browser
+  const before = dropbox.downloads.length;
+  await page.reload();
+  await page.click(".hmark .ser");
+  await expect(page.locator(`.scard[data-sid="${SERIAL}"] .lines .nwt`)).toHaveText("Chapter 215: Scale");
+  await page.waitForTimeout(1500);
+  const again = dropbox.downloads.slice(before);
+  // Nothing changed in Dropbox: no chapter list, sync file or subscriptions file read again.
+  expect(again.filter(p => /\/chapters\/[^/]+\.json$|\/(rr-\d+|subscriptions)\.json$/.test(p))).toEqual([]);
+  expect(dropbox.errors).toEqual([]);
+});

@@ -22,6 +22,8 @@ export interface StandIn {
   uploads: { path: string; text: string }[];
   /** Console errors and page errors, with the 409s of files not found left out. */
   errors: string[];
+  /** Every file read, in order. */
+  downloads: string[];
 }
 
 export async function standIn(page: Page, home: boolean): Promise<StandIn> {
@@ -61,11 +63,13 @@ export async function standIn(page: Page, home: boolean): Promise<StandIn> {
   };
   for (const c of chapters) files[`/Apps/Read/Sync/chapters/${SERIAL}/${c.id}.xhtml`] = chapterPage(c.title);
 
-  const result: StandIn = { uploads: [], errors: [] };
+  const result: StandIn = { uploads: [], errors: [], downloads: [] };
   page.on("console", m => { if (m.type() === "error" && !m.text().includes("409")) result.errors.push(m.text()); });
   page.on("pageerror", e => result.errors.push(`pageerror: ${e.message}`));
   const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "POST, OPTIONS", "access-control-expose-headers": "Dropbox-API-Result" };
-  const entry = (path: string) => ({ ".tag": "file", name: path.split("/").pop(), path_display: path, path_lower: path.toLowerCase(), size: 1, content_hash: "h", server_modified: new Date(now - H).toISOString() });
+  // The content hash follows the text, so a file written since reads as changed (serials kept in the browser).
+  const textHash = (text: string | undefined) => { let h = 7; for (const c of text ?? "") h = (h * 31 + c.charCodeAt(0)) | 0; return `h${h >>> 0}`; };
+  const entry = (path: string) => ({ ".tag": "file", name: path.split("/").pop(), path_display: path, path_lower: path.toLowerCase(), size: 1, content_hash: textHash(files[path]), server_modified: new Date(now - H).toISOString() });
   await page.route(/dropboxapi\.com/, async route => {
     const req = route.request();
     if (req.method() === "OPTIONS") return route.fulfill({ status: 200, headers: cors });
@@ -82,6 +86,7 @@ export async function standIn(page: Page, home: boolean): Promise<StandIn> {
       return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ entries, cursor: "c", has_more: false }) });
     }
     if (url.endsWith("/files/download")) {
+      result.downloads.push(arg.path);
       if (files[arg.path]) return ok(files[arg.path], "X");
       if (arg.path === `/Apps/Read/Sync/covers/${EMMA}.jpg` || arg.path === `/Apps/Read/Sync/covers/${SERIAL}.jpg`) return ok(COVER, "C");
       if (String(arg.path).startsWith("/Books/")) return ok(EPUB);

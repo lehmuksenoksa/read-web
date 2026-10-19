@@ -658,29 +658,60 @@ async function showApp() {
     return book && was && stillKnown(was, book) != null ? was : null;
   };
   // Serials (WEB.md → Home, step 3a): the subscriptions file, each serial's chapter list and sync file, read when Serials is first shown.
-  let serialData: { subs: Subscription[]; lists: Record<string, ChapterList | null>; places: Record<string, Parameters<typeof homeSerials>[2][string]> } | null = null;
+  type SerialData = { subs: Subscription[]; lists: Record<string, ChapterList | null>; places: Record<string, Parameters<typeof homeSerials>[2][string]> };
+  let serialData: SerialData | null = null;
+  /*
+   * Serials kept in this browser (2026-10-19, as the books' Library is): the list shows at once from
+   * the last visit; then one listing of each folder says which files changed (Dropbox's content hash),
+   * and only those are read again. Which chapters of a serial with locked posts are in Dropbox is kept too.
+   */
+  type KeptSerials = SerialData & { hashes: Record<string, string>; inDropbox: Record<string, string[]> };
+  let keptSerials = await keptValue<KeptSerials>("serials");
+  const keepSerials = () => {
+    if (!serialData || !currentToken()) return;
+    keptSerials = { ...serialData, hashes: keptSerials?.hashes ?? {}, inDropbox: Object.fromEntries([...inDropboxIds].map(([id, set]) => [id, [...set]])) };
+    void keepValue("serials", keptSerials);
+  };
   let serialsLoading: Promise<void> | null = null;
   const loadSerials = () => serialsLoading ??= (async () => {
+    if (!serialData && keptSerials) {
+      serialData = { subs: keptSerials.subs, lists: keptSerials.lists, places: keptSerials.places };
+      for (const [id, ids] of Object.entries(keptSerials.inDropbox ?? {})) { inDropboxIds.set(id, new Set(ids)); inDropboxCount.set(id, ids.length); }
+      render();
+    }
     try {
-      const [subsText, listed, syncListed] = await Promise.all([
-        api.readText(SUBSCRIPTIONS_PATH), api.listFolder(CHAPTERS_FOLDER, false), api.listFolder(SYNC_FOLDER, false),
-      ]);
-      const subs = parseSubscriptions(subsText?.text ?? null).filter(sub => !sub.removed && isSerialId(sub.bookId));
+      const [listed, syncListed] = await Promise.all([api.listFolder(CHAPTERS_FOLDER, false), api.listFolder(SYNC_FOLDER, false)]);
+      const was = keptSerials?.hashes ?? {};
+      const hashes: Record<string, string> = {};
+      const hashOf = (files: { name: string; contentHash: string }[], prefix: string) => {
+        const map = new Map(files.map(f => [f.name.toLowerCase(), f.contentHash]));
+        return (name: string) => { const h = map.get(name.toLowerCase()); if (h) hashes[prefix + name.toLowerCase()] = h; return h; };
+      };
+      const listHash = hashOf(listed, "chapters/");
+      const syncHash = hashOf(syncListed, "sync/");
+      // A file unchanged since it was kept isn't read again.
+      const unchanged = (key: string, hash: string | undefined) => hash != null && was[key] === hash && keptSerials != null;
+      const subsHash = syncHash("subscriptions.json");
+      const subs = unchanged("sync/subscriptions.json", subsHash) ? keptSerials!.subs
+        : parseSubscriptions((await api.readText(SUBSCRIPTIONS_PATH))?.text ?? null).filter(sub => !sub.removed && isSerialId(sub.bookId));
       const lists: Record<string, ChapterList | null> = {};
       const places: Record<string, Parameters<typeof homeSerials>[2][string]> = {};
-      const named = (files: { name: string }[]) => new Set(files.map(f => f.name.toLowerCase()));
-      const haveList = named(listed);
-      const haveSync = named(syncListed);
       await Promise.all(subs.map(async sub => {
-        const file = `${sub.bookId}.json`.toLowerCase();
+        const file = `${sub.bookId}.json`;
+        const lh = listHash(file);
+        const sh = syncHash(file);
         const [list, sync] = await Promise.all([
-          haveList.has(file) ? api.readText(chapterListPath(sub.bookId)).then(r => parseChapterList(r?.text ?? null)).catch(() => null) : null,
-          haveSync.has(file) ? api.readText(serialSyncPath(sub.bookId)).then(r => (r ? JSON.parse(r.text) : null)).catch(() => null) : null,
+          !lh ? null : unchanged(`chapters/${file.toLowerCase()}`, lh) ? keptSerials!.lists[sub.bookId] ?? null
+            : api.readText(chapterListPath(sub.bookId)).then(r => parseChapterList(r?.text ?? null)).catch(() => null),
+          !sh ? null : unchanged(`sync/${file.toLowerCase()}`, sh) ? keptSerials!.places[sub.bookId] ?? null
+            : api.readText(serialSyncPath(sub.bookId)).then(r => (r ? JSON.parse(r.text) : null)).catch(() => null),
         ]);
         lists[sub.bookId] = list;
         places[sub.bookId] = sync;
       }));
       serialData = { subs, lists, places };
+      keptSerials = { ...serialData, hashes, inDropbox: keptSerials?.inDropbox ?? {} };
+      keepSerials();
       // Which chapters' text is in Dropbox matters only where the site has locked posts (a Patreon
       // subscription that ended): those serials' folders are listed after the list shows, one each, and
       // the list is drawn again (2026-10-19; one listing of every chapter first made Serials slow).
@@ -689,6 +720,7 @@ async function showApp() {
         void chaptersInDropbox(sub.bookId).then(set => {
           inDropboxIds.set(sub.bookId, set);
           inDropboxCount.set(sub.bookId, set.size);
+          keepSerials();
           render();
         });
       }
