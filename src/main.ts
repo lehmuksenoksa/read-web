@@ -2,7 +2,7 @@ import "./style.css";
 import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
 import { parseDetails, parseNumber, withDetails, type BookDetails, type DetailsEdit } from "./details";
-import { Dropbox, type FileEntry, RevConflict } from "./dropbox";
+import { Dropbox, RevConflict } from "./dropbox";
 import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
 import { coverPath, largeCover, loadSharpCovers } from "./covers";
 import { createHome, showSharpCover } from "./homeView";
@@ -12,7 +12,7 @@ import { shown, type Setup } from "./looks";
 import { backupPath, BOOKS_FOLDER, chapterFolderPath, chapterListPath, CHAPTERS_FOLDER, chapterTextPath, DETAILS_PATH, DEVICES_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { openSerial } from "./serialBook";
 import {
-  chapterDateLabel, chapterHref, chapterIdOf, chapterTextsListed, homeSerials, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, readingOrderOf, withEndMark,
+  chapterDateLabel, chapterHref, chapterIdOf, homeSerials, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, readingOrderOf, withEndMark,
   type ChapterList, type Serial, type Subscription,
 } from "./serials";
 import { keptFile } from "./store";
@@ -662,18 +662,14 @@ async function showApp() {
   let serialsLoading: Promise<void> | null = null;
   const loadSerials = () => serialsLoading ??= (async () => {
     try {
-      const withTexts = (files: FileEntry[]) => chapterTextsListed(files, CHAPTERS_FOLDER);
-      const [subsText, chaptersListed, syncListed] = await Promise.all([
-        api.readText(SUBSCRIPTIONS_PATH),
-        // The chapters folder with its serials' folders (2026-10-19): which chapters' text is in Dropbox, so a
-        // post the site has locked since is still read and counted (one listing, paged, for every serial).
-        api.listFolder(CHAPTERS_FOLDER, true).then(withTexts), api.listFolder(SYNC_FOLDER, false),
+      const [subsText, listed, syncListed] = await Promise.all([
+        api.readText(SUBSCRIPTIONS_PATH), api.listFolder(CHAPTERS_FOLDER, false), api.listFolder(SYNC_FOLDER, false),
       ]);
       const subs = parseSubscriptions(subsText?.text ?? null).filter(sub => !sub.removed && isSerialId(sub.bookId));
       const lists: Record<string, ChapterList | null> = {};
       const places: Record<string, Parameters<typeof homeSerials>[2][string]> = {};
       const named = (files: { name: string }[]) => new Set(files.map(f => f.name.toLowerCase()));
-      const haveList = named(chaptersListed.top);
+      const haveList = named(listed);
       const haveSync = named(syncListed);
       await Promise.all(subs.map(async sub => {
         const file = `${sub.bookId}.json`.toLowerCase();
@@ -684,13 +680,18 @@ async function showApp() {
         lists[sub.bookId] = list;
         places[sub.bookId] = sync;
       }));
-      for (const sub of subs) {
-        const texts = chaptersListed.texts.get(sub.bookId.toLowerCase()) ?? new Set<string>();
-        inDropboxIds.set(sub.bookId, texts);
-        inDropboxCount.set(sub.bookId, texts.size);
-        inDropboxNow.set(sub.bookId, Promise.resolve(texts));
-      }
       serialData = { subs, lists, places };
+      // Which chapters' text is in Dropbox matters only where the site has locked posts (a Patreon
+      // subscription that ended): those serials' folders are listed after the list shows, one each, and
+      // the list is drawn again (2026-10-19; one listing of every chapter first made Serials slow).
+      for (const sub of subs) {
+        if (!lists[sub.bookId]?.chapters.some(c => c.locked)) continue;
+        void chaptersInDropbox(sub.bookId).then(set => {
+          inDropboxIds.set(sub.bookId, set);
+          inDropboxCount.set(sub.bookId, set.size);
+          render();
+        });
+      }
     } catch {
       // ⚙ says so; the serials as last read stay (none: an empty list).
       offline = true;
