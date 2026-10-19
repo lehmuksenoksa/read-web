@@ -885,7 +885,8 @@ export function createHome(ctx: HomeContext): {
       if (!x) return closePanel();
       top.append(h("span", { class: "grow" }), closeButton);
       const now = Date.now();
-      // A chapter in Dropbox opens in the reader; one that isn't (locked, or not fetched yet) opens on the site, marked ↗ (2026-10-18).
+      // A chapter in Dropbox opens in the reader, locked on the site or not (2026-10-19); one that isn't (locked, or not fetched
+      // yet) opens on the site, marked ↗ (2026-10-18). Its panel's listing also updates the serial's chapters (homeSerials).
       const inReader = ctx.chapterIdsInDropbox(x);
       const link = (c: { id: string; title: string; url: string; locked?: boolean }, cls = "") => inReader?.has(c.id) && !c.locked
         ? h("button", { class: `chl${cls ? ` ${cls}` : ""}`, onclick: () => ctx.openSerialAt(x, c.id) }, c.title)

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decodeHome, DEFAULT_SERIALS } from "../src/home";
 import { chapterListPath, isSerialId, isWritablePath, serialSyncPath } from "../src/paths";
 import {
-  chapterDateLabel, chapterHref, currentChapterIndex, estimatedLengths, freshIndexes, furthestPlace, homeSerials, keepsNotes, lastCheck, lastReadSerial,
+  chapterDateLabel, chapterHref, chapterTextsListed, currentChapterIndex, estimatedLengths, freshIndexes, furthestPlace, homeSerials, keepsNotes, lastCheck, lastReadSerial,
   missingChapterPage, NEW_FOR_MS, newChaptersText, nextAfterCaughtUp, panelChapters, parseChapterList, shortChapter, parseSubscriptions, phonesKeepNotes,
   progressLabel, readingOrderOf, searchSerials, sortSerials, storyProgress, withEndMark,
   type ChapterList, type SharedChapter, type Subscription,
@@ -147,6 +147,34 @@ describe("Serials on Home", () => {
     expect(s.latest?.title).toBe("Chapter 2");
     // The panel lists newest first, empty posts left out.
     expect(panelChapters(s).map(r => r.chapter.title)).toEqual(["Chapter 4", "Chapter 2", "Chapter 1"]);
+  });
+
+  it("a post locked since but whose text is in Dropbox is yours: readable, unread, the latest (2026-10-19)", () => {
+    const cs = chapters(4, i => ({ locked: i >= 1, empty: i === 2, seenAt: null }));
+    const ids = cs.map(c => c.id);
+    // Chapters 2 and 3 are in Dropbox (3 is an empty post); 4 isn't.
+    const [s] = homeSerials([sub("pt-c1", "Lanterns", { site: "pt" })], { "pt-c1": list("pt-c1", cs) }, {}, {}, NOW, { "pt-c1": new Set([ids[1], ids[2]]) });
+    expect(s.progress.unreadCount).toBe(2);
+    expect(s.latest?.title).toBe("Chapter 2");
+    expect(readingOrderOf(s.chapters).map(c => c.title)).toEqual(["Chapter 1", "Chapter 2"]);
+    expect(s.chapters[1].locked).toBeFalsy();
+    expect(s.chapters[3].locked).toBe(true);
+    // Without the Dropbox copies, only chapter 1.
+    const [bare] = homeSerials([sub("pt-c1", "Lanterns", { site: "pt" })], { "pt-c1": list("pt-c1", cs) }, {}, {}, NOW);
+    expect(bare.progress.unreadCount).toBe(1);
+    expect(bare.latest?.title).toBe("Chapter 1");
+  });
+
+  it("reads which chapters' text is in Dropbox from one listing of the chapters folder", () => {
+    const f = (path: string) => ({ path, pathLower: path.toLowerCase(), name: path.split("/").pop()! });
+    const { top, texts } = chapterTextsListed([
+      f("/Apps/Read/Sync/chapters/pt-c1.json"), f("/Apps/Read/Sync/chapters/pt-c1/101.xhtml"), f("/Apps/Read/Sync/chapters/pt-c1/102.xhtml"),
+      f("/Apps/Read/Sync/chapters/rr-7/9.xhtml"), f("/Apps/Read/Sync/chapters/rr-7/notes.txt"), f("/Apps/Read/Sync/chapters/rr-7/x/1.xhtml"),
+      f("/Apps/Read/Sync/other/1.xhtml"),
+    ], "/Apps/Read/Sync/chapters");
+    expect(top.map(e => e.name)).toEqual(["pt-c1.json"]);
+    expect([...texts.get("pt-c1")!]).toEqual(["101", "102"]);
+    expect([...texts.get("rr-7")!]).toEqual(["9"]);
   });
 
   it("the panel lists down to the chapter before the one being read, at most twelve", () => {

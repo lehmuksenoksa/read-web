@@ -34,6 +34,8 @@ export async function standIn(page: Page, home: boolean): Promise<StandIn> {
     url: `https://www.royalroad.com/fiction/101/x/chapter/${chapterId(i + 1)}/c`,
     published: new Date(now - 8 * H - (214 - i) * 3 * D).toISOString(), length: 9000,
     ...(i >= 214 ? {} : { seenAt: 0 }),
+    // Locked on the site since (a subscription ended), but their text is in Dropbox: still read and counted (2026-10-19).
+    ...(i >= 213 ? { locked: true } : {}),
   }));
   const doneChapters = Array.from({ length: 3 }, (_, i) => ({
     id: chapterId(i + 1), title: `Chapter ${i + 1}: ${["Ashes", "Embers", "Smoke"][i]}`,
@@ -76,7 +78,7 @@ export async function standIn(page: Page, home: boolean): Promise<StandIn> {
       const entries = folder === "/Books"
         ? titles.map(([t], i) => ({ ...entry(`/Books/${t}.epub`), content_hash: hashOf(i), size: 300_000 }))
         : folder === "/Apps/Read/Sync/covers" ? [{ ...entry(`${folder}/${EMMA}.jpg`), content_hash: "c1" }, { ...entry(`${folder}/${SERIAL}.jpg`), content_hash: "c2" }]
-        : Object.keys(files).filter(p => p.startsWith(folder + "/") && !p.slice(folder.length + 1).includes("/")).map(entry);
+        : Object.keys(files).filter(p => p.startsWith(folder + "/") && (body.recursive || !p.slice(folder.length + 1).includes("/"))).map(entry);
       return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ entries, cursor: "c", has_more: false }) });
     }
     if (url.endsWith("/files/download")) {

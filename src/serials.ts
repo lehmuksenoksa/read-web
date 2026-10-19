@@ -223,11 +223,22 @@ export interface SerialPlace {
 
 const readable = (c: SharedChapter) => !c.locked && !c.empty;
 
-/** The subscribed serials (not unsubscribed), with their chapters, places and edited titles. */
-export function homeSerials(subs: Subscription[], lists: Record<string, ChapterList | null>, places: Record<string, SerialPlace["syncFile"]>, details: Record<string, BookDetails>, now: number): Serial[] {
+/**
+ * A chapter whose text is in Dropbox is yours whatever the site says now (2026-10-19: a Patreon
+ * subscription that ended locks every post): it's readable, counted and opened like any other.
+ */
+export function heldChapters(chapters: SharedChapter[], inDropbox: Set<string> | undefined): SharedChapter[] {
+  return inDropbox?.size ? chapters.map(c => (c.locked && inDropbox.has(c.id) ? { ...c, locked: false } : c)) : chapters;
+}
+
+/**
+ * The subscribed serials (not unsubscribed), with their chapters, places and edited titles.
+ * [inDropbox]: each serial's chapters whose text is in Dropbox (a locked post there is readable).
+ */
+export function homeSerials(subs: Subscription[], lists: Record<string, ChapterList | null>, places: Record<string, SerialPlace["syncFile"]>, details: Record<string, BookDetails>, now: number, inDropbox: Record<string, Set<string>> = {}): Serial[] {
   return subs.filter(s => !s.removed).map(sub => {
     const list = lists[sub.bookId] ?? null;
-    const chapters = list?.chapters ?? [];
+    const chapters = heldChapters(list?.chapters ?? [], inDropbox[sub.bookId]);
     const ids = chapters.map(c => c.id);
     const syncFile = places[sub.bookId] ?? null;
     const place = furthestPlace(syncFile, ids);
@@ -375,7 +386,7 @@ export const chapterHref = (id: string) => `ch/${id}.xhtml`;
 /** Until any chapter's size is known, chapters are taken to be about this long (the phones' DEFAULT_CHAPTER_BYTES). */
 const DEFAULT_CHAPTER_BYTES = 12_000;
 
-/** The chapters in the serial as a book: the readable ones (Patreon's locked and empty posts left out, as on the phones). */
+/** The chapters in the serial as a book: the readable ones (empty posts, and locked ones not in Dropbox, left out, as on the phones). */
 export function readingOrderOf(chapters: SharedChapter[]): SharedChapter[] {
   return chapters.filter(readable);
 }
@@ -444,4 +455,24 @@ export function progressLabel(p: StoryProgress): string {
 /** The serial read last on any device: Continue on Serials. */
 export function lastReadSerial(serials: Serial[]): Serial | null {
   return serials.filter(s => s.lastRead != null && s.chapters.length).sort((a, b) => b.lastRead! - a.lastRead!)[0] ?? null;
+}
+
+/**
+ * The chapters folder listed with its subfolders: the top-level files (the chapter lists) and, per
+ * serial (lower case, as Dropbox's paths), the ids of the chapters whose text is there.
+ */
+export function chapterTextsListed<F extends { pathLower: string; name: string }>(files: F[], folder: string): { top: F[]; texts: Map<string, Set<string>> } {
+  const base = folder.toLowerCase() + "/";
+  const top: F[] = [];
+  const texts = new Map<string, Set<string>>();
+  for (const f of files) {
+    if (!f.pathLower.startsWith(base)) continue;
+    const parts = f.pathLower.slice(base.length).split("/");
+    if (parts.length === 1) top.push(f);
+    else if (parts.length === 2 && f.name.endsWith(".xhtml")) {
+      if (!texts.has(parts[0])) texts.set(parts[0], new Set());
+      texts.get(parts[0])!.add(f.name.slice(0, -".xhtml".length));
+    }
+  }
+  return { top, texts };
 }
