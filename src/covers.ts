@@ -84,8 +84,8 @@ export async function largeCover(cover: { bytes: Uint8Array; type: string }): Pr
 }
 
 // --- Covers chosen by hand (2026-10-20): from a file, uploaded to `covers/chosen/<id>.jpg` and named in
-// details.json as `dropbox:<path>`; or a link (an https address). The page's policy shows images from
-// itself only, so a link shows once a phone has fetched it and put its sharp copy in the covers folder. ---
+// details.json as `dropbox:<path>`; or a link (an https address), shown straight from its site (the
+// page's policy allows https images, 2026-10-20). ---
 
 /** Covers chosen from a file (their image here), or picked in this browser: shown before the phones' sharp copy. */
 const chosen = new Map<string, string>();
@@ -115,8 +115,8 @@ export function hasChosen(id: string): boolean {
 }
 
 /**
- * The covers chosen from a file in [details], fetched from Dropbox once per choice (kept in this
- * browser); [shown] is called as each one is ready. A link's cover is the phones' sharp copy.
+ * The covers chosen in [details]: a file's fetched from Dropbox once per choice (kept in this browser),
+ * a link's shown from its address; [shown] is called as each one is ready.
  */
 export async function loadChosenCovers(
   api: Dropbox,
@@ -125,7 +125,13 @@ export async function loadChosenCovers(
 ): Promise<void> {
   await Promise.all(Object.entries(details).map(async ([id, d]) => {
     const url = d.coverUrl;
-    if (!url?.startsWith("dropbox:") || ownAgain.has(id) || chosen.has(id)) return;
+    if (!url || ownAgain.has(id) || chosen.has(id)) return;
+    if (url.startsWith("https://")) {
+      chosen.set(id, url);
+      shown(id, url);
+      return;
+    }
+    if (!url.startsWith("dropbox:")) return;
     const path = url.slice("dropbox:".length);
     const bytes = await keptFile(`${path}?${d.updatedAt ?? 0}`, async () => (await api.download(path).catch(() => null))?.bytes ?? null).catch(() => null);
     if (!bytes || chosen.has(id) || ownAgain.has(id)) return;

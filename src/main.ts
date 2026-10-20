@@ -457,6 +457,7 @@ async function showApp() {
     if ("link" in pick) {
       coverUrl = coverLink(pick.link);
       if (!coverUrl) { tell("That isn't a link to an image."); return false; }
+      shown = coverUrl;
     } else if ("file" in pick) {
       const bytes = await chosenCoverBytes(pick.file);
       if (!bytes) { tell("Couldn't use that image."); return false; }
@@ -473,8 +474,7 @@ async function showApp() {
     const detailsBefore = detailsNow;
     const shownDetails: DetailsEdit = { title: target.title, author: target.author, series: target.series, number: target.seriesIndex };
     detailsNow = { ...detailsNow, [target.id]: { ...shownDetails, ...detailsNow[target.id], coverUrl, updatedAt: Date.now() } };
-    // A link shows once a phone has fetched it (the page shows only its own images).
-    if (!("link" in pick)) choose(target.id, shown);
+    choose(target.id, shown);
     if (shown) showSharpCover(target.id, shown);
     render();
     try {
@@ -482,7 +482,6 @@ async function showApp() {
         const remote = await api.readText(DETAILS_PATH);
         try {
           await api.writeText(DETAILS_PATH, withCover(remote?.text ?? null, target.id, coverUrl, shownDetails, Date.now()), remote?.rev ?? null);
-          if ("link" in pick) tell("Cover link saved. It shows here once a phone has fetched it.");
           return true;
         } catch (err) {
           if (!(err instanceof RevConflict) || attempt >= 2) throw err;

@@ -257,6 +257,8 @@ test("Furthest read: the bar's menu goes there or says you're there, and sets it
 
 test("Choosing a cover: a link and a file in Home, the word in Office", async ({ page }) => {
   const dropbox = await standIn(page, true);
+  // The linked image, from its own site (images from https addresses are allowed, 2026-10-20).
+  await page.route("https://example.com/cover.jpg", route => route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from(PNG, "base64") }));
   await page.goto("./");
   await expect(page.locator(".cur-now .cur-title")).toHaveText("Emma");
   await page.click(".cur-now .cur-title");
@@ -269,8 +271,8 @@ test("Choosing a cover: a link and a file in Home, the word in Office", async ({
   await page.click(".hpanel .bp-link .bp-go");
   await expect(page.locator(".hpanel .bp-link")).toHaveCount(0);
   await expect.poll(() => dropbox.uploads.some(u => u.path === "/Apps/Read/Sync/details.json" && u.text.includes('"coverUrl":"https://example.com/cover.jpg"'))).toBe(true);
-  // The page shows only its own images: a link's cover comes once a phone has fetched it.
-  await expect(page.locator(".toast")).toContainText("Cover link saved");
+  // The link's cover shows at once, straight from its address.
+  await expect(page.locator(".hpanel .cvpick img")).toHaveAttribute("src", "https://example.com/cover.jpg");
   // A file: scaled, uploaded to the chosen covers' folder, named in details.json as dropbox:.
   await page.click(".hpanel .cvpick");
   await expect(page.locator(".hmenu .r")).toHaveText(["From a file…", "From a link…", "Use the book's own"]);
