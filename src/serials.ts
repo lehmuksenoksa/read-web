@@ -293,25 +293,33 @@ export function newChaptersText(serials: Serial[]): string {
   return n === 0 ? "No new chapters" : n === 1 ? "1 new chapter" : `${n} new chapters`;
 }
 
-/** A row of the panel's chapter list: a chapter, or "··· 48 more" standing for the ones left out. */
-export type PanelRow = { chapter: SharedChapter; index: number } | { more: number };
+/** A row of the panel's chapter list: a chapter, "··· 48 more" standing for the ones left out, or "··· 210 earlier" for those before. */
+export type PanelRow = { chapter: SharedChapter; index: number } | { more: number } | { earlier: number };
 
 /**
  * The chapters the panel lists, newest first down to the one before the current chapter (empty posts
  * left out). More than [fits] (2026-10-16): the four newest, "N more", then the next three, the current
  * chapter and the one before it, so both what's new and where you pick up show; [expanded] lists them all.
- * Not started: the newest, then the first chapters.
+ * The chapters before those stand behind a last "··· N earlier" row (2026-10-20, so a place jumped past
+ * by mistake can be found again); [earlierShown] lists them, newest first. Not started: the newest, then the first chapters.
  */
-export function panelChapters(serial: Serial, expanded = false, fits = 12): PanelRow[] {
+export function panelChapters(serial: Serial, expanded = false, fits = 12, earlierShown = false): PanelRow[] {
   const rows = serial.chapters.map((chapter, index) => ({ chapter, index })).filter(r => !r.chapter.empty).reverse();
   const at = serial.progress.currentIndex ?? -1;
   const upTo = rows.filter(r => r.index >= at - 1);
   if (!upTo.length) return rows.slice(0, fits);
-  if (expanded || upTo.length <= fits) return upTo;
+  const before = rows.filter(r => r.index < at - 1);
+  const tail: PanelRow[] = !before.length ? [] : earlierShown ? before : [{ earlier: before.length }];
+  if (expanded || upTo.length <= fits) return [...upTo, ...tail];
   const bottom = upTo.filter(r => r.index <= at + 3);
   const top = upTo.slice(0, 4).filter(r => !bottom.includes(r));
   const more = upTo.length - top.length - bottom.length;
-  return more > 0 ? [...top, { more }, ...bottom] : [...top, ...bottom];
+  return [...(more > 0 ? [...top, { more }, ...bottom] : [...top, ...bottom]), ...tail];
+}
+
+/** The reader's way back after a jump: "‹ Back to Chapter 212", or "‹ Back" when the place has no name. */
+export function backLabel(where: string | null): string {
+  return where ? `‹ Back to ${where}` : "‹ Back";
 }
 
 /** A chapter's name in the button: "Chapter 213" out of "Chapter 213: Ink and Stone"; other titles whole. */

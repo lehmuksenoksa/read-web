@@ -16,7 +16,7 @@ import {
 } from "./looks";
 import { pageTop, textEdges, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
-import { chapterHref, chapterIdOf, nextAfterCaughtUp } from "./serials";
+import { backLabel, chapterHref, chapterIdOf, nextAfterCaughtUp, shortChapter } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
 import { afterKeptOpening, BOOK_ORDER, openingPlan, positionFromLocator, serialOrder, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
 import { h, icon, ICONS } from "./ui";
@@ -115,6 +115,12 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   /** The words at the top of the page shown, read when it settles after a move. */
   let currentTop: PageTop | null = null;
   let moved = false;
+  /**
+   * A jump (a Contents row, a serial's chapter picked in its panel) doesn't move your place until you
+   * read on: [jumpedFrom] is where you were, offered as "‹ Back to …" until two page turns (2026-10-20).
+   */
+  let jumpedFrom: Locator | null = null;
+  let turnsSinceJump = 0;
   let uploadTimer: number | undefined;
   let dismissedAt: number | null = null;
   let closed = false;
@@ -195,6 +201,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (!forward && mountedQuiet && current && (current.locations.progression ?? 0) === 0 && onlyBlankBefore(current.href.split("#")[0])) return;
     moved = true;
     anchor = null;
+    if (jumpedFrom && ++turnsSinceJump >= 2) clearBack();
     if (forward) nav.goForward(false, ok => {
       // A serial read past the end of its newest chapter: CAUGHT UP.
       if (!ok && props.serial && current && book && current.href.split("#")[0] === book.readingOrder[book.readingOrder.length - 1]) props.serial.onPastEnd(current.href);
@@ -317,6 +324,31 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     prompt.hidden = false;
     if (action) undoTimer = window.setTimeout(() => { prompt.hidden = true; }, 8000);
   };
+  /** "‹ Back to Chapter 212" after a jump: the chapter as Contents names it, else "‹ Back". */
+  const backRow = h("button", { class: "link strong back" });
+  const showBack = () => {
+    if (!jumpedFrom) return;
+    const title = jumpedFrom.title?.trim();
+    backRow.textContent = backLabel(title ? (props.serial ? shortChapter(title) : title) : null);
+    backRow.onclick = () => {
+      const to = jumpedFrom;
+      const read = turnsSinceJump > 0;
+      clearBack();
+      if (!to || !nav) return;
+      // Back where you were: saved again only if the jump had counted (a page turned in it).
+      moved = read;
+      anchor = null;
+      nav.go(to, false, () => undefined);
+    };
+    window.clearTimeout(undoTimer);
+    prompt.replaceChildren(backRow);
+    prompt.hidden = false;
+  };
+  const clearBack = () => {
+    jumpedFrom = null;
+    turnsSinceJump = 0;
+    if (prompt.firstElementChild === backRow) prompt.hidden = true;
+  };
   /** To [other]'s place; [ownPlace]: Web's own, from another browser, so nothing new to save. */
   const goThere = (other: Position, ownPlace = false) => {
     const locator = Locator.deserialize(other.locator);
@@ -400,7 +432,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const fillSerialContents = (rows: SerialContentsRow[]) => {
     const at = current ? rows.findIndex(r => r.href === current!.href.split("#")[0]) : -1;
     const keep = at < 0 || earlierShown ? rows.length : Math.min(rows.length, at + 11);
-    const pick = (href: string) => { if (overlay()) closePanels(); goTo(href); };
+    const pick = (href: string) => { if (overlay()) closePanels(); jump(href); };
     contents.replaceChildren(h("div", { class: "lab" }, "Chapters"), ...rows.slice(0, keep).map((r, i) => h("button", {
       class: `item${i === at ? " cur" : at >= 0 && i > at ? " read" : ""}`,
       onclick: () => pick(r.href),
@@ -417,9 +449,25 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       ? flat.map(({ entry, depth }, i) => h("button", {
           class: `item${i === at ? " cur" : i < at ? " read" : ""}`,
           style: depth ? `padding-left: ${12 + depth * 20}px` : undefined,
-          onclick: () => { if (overlay()) closePanels(); goTo(entry.href); },
+          onclick: () => { if (overlay()) closePanels(); jump(entry.href); },
         }, h("span", { class: "nm" }, entry.title || "Untitled"), i === at ? h("span", { class: "d" }, percent) : null))
       : [h("div", { class: "item" }, "This book has no contents.")]));
+  };
+  /**
+   * A jump you chose (Contents, a serial's chapter from its panel): the place moves only once you turn
+   * a page in it; until then "‹ Back to …" returns, and leaving saves nothing new (2026-10-20).
+   */
+  const jump = (href: string) => {
+    if (!book || !nav) return;
+    // A place still waiting to be saved goes as it is, before the page moves.
+    void flush();
+    // A second jump before reading on: Back still goes to where you were before the first.
+    const from = jumpedFrom && turnsSinceJump === 0 ? jumpedFrom : current;
+    goTo(href);
+    moved = false;
+    jumpedFrom = from;
+    turnsSinceJump = 0;
+    showBack();
   };
   const goTo = (href: string) => {
     if (!book || !nav) return;
@@ -868,12 +916,12 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       if (!(await mount(saved))) tell("Couldn't find your place in this book.");
       if (plan.ask && !props.startAt) ask(plan.ask);
     }
-    if (props.startAt) goTo(props.startAt);
+    if (props.startAt) jump(props.startAt);
   } catch (e) {
     status.textContent = e instanceof Error ? e.message : String(e);
   }
 
-  return Object.assign(close, { goTo });
+  return Object.assign(close, { goTo: jump });
 }
 
 /** "1.0", "1.25", "0.5": at least one decimal, no trailing zeros (the app's labels). */

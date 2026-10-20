@@ -783,7 +783,7 @@ export function createHome(ctx: HomeContext): {
     if (!ctx.places(b.id) && b.hasSyncFile) void ctx.load(b).then(() => { if (panelFor && "book" in panelFor && panelFor.book.id === b.id) renderPanel(); });
   };
   const openSerial = (x: Serial) => {
-    if (!(panelFor && "serial" in panelFor && panelFor.serial === x.id)) chaptersOpen = false;
+    if (!(panelFor && "serial" in panelFor && panelFor.serial === x.id)) { chaptersOpen = false; earlierOpen = false; }
     keepReturn();
     panelFor = { serial: x.id };
     main.querySelectorAll(".scard.on, .tr.on").forEach(e => e.classList.remove("on"));
@@ -816,6 +816,8 @@ export function createHome(ctx: HomeContext): {
   let devicesOpen = false;
   /** A serial's whole chapter list, after a click on "N more", until another serial's panel. */
   let chaptersOpen = false;
+  /** The serial panel's chapters before the one before your place, shown (2026-10-20). */
+  let earlierOpen = false;
 
   /**
    * Text that turns into fields on a click: Enter or a click away saves, Esc puts it back. [save] gets the
@@ -892,9 +894,10 @@ export function createHome(ctx: HomeContext): {
         ? h("button", { class: `chl${cls ? ` ${cls}` : ""}`, onclick: () => ctx.openSerialAt(x, c.id) }, c.title)
         : h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", class: cls, title: `Open on ${x.site}` }, c.title, h("span", { class: "out", "aria-hidden": "true" }, " ↗"));
       // The list (2026-10-16): with a long backlog, the newest and where you pick up, "N more" between.
-      const rows = panelChapters(x, chaptersOpen);
+      const rows = panelChapters(x, chaptersOpen, undefined, earlierOpen);
       const chapters = rows.length ? h("div", { class: "chap" }, ...rows.flatMap(r => {
         if ("more" in r) return [h("button", { class: "chapmore", onclick: () => { chaptersOpen = true; renderPanel(); } }, `··· ${r.more} more`), h("span", {})];
+        if ("earlier" in r) return [h("button", { class: "chapmore", onclick: () => { earlierOpen = true; renderPanel(); } }, `··· ${r.earlier} earlier`), h("span", {})];
         const { chapter: c, index } = r;
         const cls = [index === x.progress.currentIndex ? "cur" : "", x.progress.isRead(index) ? "read" : "", c.locked ? "locked" : ""].filter(Boolean).join(" ");
         return [h("span", {}, link(c, cls), x.progress.isNew(index) ? h("span", { class: "nw" }, badges() ? "NEW" : "new") : null), h("span", { class: "d" }, chapterDateLabel(c.published, now, true) ?? "")];

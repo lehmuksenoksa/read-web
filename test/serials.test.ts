@@ -3,9 +3,9 @@ import { decodeHome, DEFAULT_SERIALS } from "../src/home";
 import { chapterListPath, isSerialId, isWritablePath, serialSyncPath } from "../src/paths";
 import {
   chapterDateLabel, chapterHref, chapterTextsListed, currentChapterIndex, estimatedLengths, freshIndexes, furthestPlace, homeSerials, keepsNotes, lastCheck, lastReadSerial,
-  missingChapterPage, NEW_FOR_MS, newChaptersText, nextAfterCaughtUp, panelChapters, parseChapterList, shortChapter, parseSubscriptions, phonesKeepNotes,
+  backLabel, missingChapterPage, NEW_FOR_MS, newChaptersText, nextAfterCaughtUp, panelChapters, parseChapterList, shortChapter, parseSubscriptions, phonesKeepNotes,
   progressLabel, readingOrderOf, searchSerials, sortSerials, storyProgress, withEndMark,
-  type ChapterList, type SharedChapter, type Subscription,
+  type ChapterList, type PanelRow, type SharedChapter, type Subscription,
 } from "../src/serials";
 
 // The cases are StoryRulesTest.kt's and LibraryStateTest.kt's, so the web counts as the phones do.
@@ -180,7 +180,8 @@ describe("Serials on Home", () => {
   it("the panel lists down to the chapter before the one being read, at most twelve", () => {
     const cs = chapters(30);
     const [s] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, { "rr-1": { positions: { a: place("ch/1027.xhtml", 0, 1, "S23") } } }, {}, NOW);
-    expect(panelChapters(s).map(r => r.index)).toEqual([29, 28, 27, 26, 25]);
+    // The 26 chapters before stand behind one last row (2026-10-20).
+    expect(panelChapters(s).map(r => ("earlier" in r ? `-${r.earlier}` : "index" in r ? r.index : "?"))).toEqual([29, 28, 27, 26, 25, "-25"]);
     const [fresh] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, {}, {}, NOW);
     // Not started with more than twelve: the newest four, the rest left out, then the first three.
     expect(panelChapters(fresh).map(r => ("more" in r ? `+${r.more}` : r.index))).toEqual([29, 28, 27, 26, "+23", 2, 1, 0]);
@@ -191,9 +192,31 @@ describe("Serials on Home", () => {
     const places = { "rr-1": { positions: { a: place("ch/1160.xhtml", 0.5, 1, "S23") } } };
     const [s] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, places, {}, NOW);
     expect(s.progress.currentIndex).toBe(159);
-    expect(panelChapters(s).map(r => ("more" in r ? `+${r.more}` : r.index))).toEqual([214, 213, 212, 211, "+48", 162, 161, 160, 159, 158]);
-    expect(panelChapters(s, true)).toHaveLength(57);
+    const label = (r: PanelRow) => ("more" in r ? `+${r.more}` : "earlier" in r ? `-${r.earlier}` : r.index);
+    expect(panelChapters(s).map(label)).toEqual([214, 213, 212, 211, "+48", 162, 161, 160, 159, 158, "-158"]);
+    expect(panelChapters(s, true)).toHaveLength(58);
     expect(panelChapters(s, true).every(r => !("more" in r))).toBe(true);
+    // The earlier ones shown: newest first under the others, every one of them.
+    const all = panelChapters(s, true, 12, true);
+    expect(all).toHaveLength(57 + 158);
+    expect(all.slice(57, 60).map(label)).toEqual([157, 156, 155]);
+    expect(all.at(-1)).toMatchObject({ index: 0 });
+  });
+
+  it("no earlier row when nothing is before the chapter before your place, or when not started", () => {
+    const cs = chapters(6);
+    const at = (file: string) => ({ "rr-1": { positions: { a: place(file, 0.5, 1, "S23") } } });
+    const [second] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, at("ch/1002.xhtml"), {}, NOW);
+    expect(panelChapters(second).some(r => "earlier" in r)).toBe(false);
+    const [third] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, at("ch/1003.xhtml"), {}, NOW);
+    expect(panelChapters(third).at(-1)).toEqual({ earlier: 1 });
+    const [fresh] = homeSerials([sub("rr-1", "X")], { "rr-1": list("rr-1", cs) }, {}, {}, NOW);
+    expect(panelChapters(fresh).some(r => "earlier" in r)).toBe(false);
+  });
+
+  it("the way back after a jump names where you were", () => {
+    expect(backLabel("Chapter 212")).toBe("‹ Back to Chapter 212");
+    expect(backLabel(null)).toBe("‹ Back");
   });
 
   it("Continue names the chapter it opens: the current, the next after one read to its end, the first, none when caught up", () => {

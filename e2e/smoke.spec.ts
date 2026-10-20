@@ -3,6 +3,9 @@
 import { expect, test } from "@playwright/test";
 import { DONE, EMMA, pageText, SERIAL, standIn } from "./standin";
 
+/** Longer than the reader waits before it saves a place (UPLOAD_DELAY_MS). */
+const UPLOAD_WAIT_MS = 4500;
+
 test("Office: the Library, a book, Contents, the place saved", async ({ page }) => {
   const dropbox = await standIn(page, false);
   await page.goto("./");
@@ -108,9 +111,17 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   // A chapter in Dropbox opens in the reader, at that chapter (2026-10-18), not on the site.
   await page.click(".hpanel .chap .chl:has-text('Chapter 214')");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter 214: Contour Lines");
+  // A jump doesn't move your place until you read on (2026-10-20): the way back is offered, and leaving saves nothing.
+  await expect(page.locator(".msg .back")).toHaveText("‹ Back to Chapter 212");
   await page.goBack();
   await expect(page.locator(".scard").first()).toBeVisible();
+  await page.waitForTimeout(UPLOAD_WAIT_MS);
+  expect(dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/${SERIAL}.json`)).toBe(false);
   await page.click(`.scard[data-sid="${SERIAL}"]`);
+  // The chapters before the one before your place stand behind one last row (2026-10-20).
+  await expect(page.locator(".hpanel .chapmore").last()).toHaveText("··· 210 earlier");
+  await page.locator(".hpanel .chapmore").last().click();
+  await expect(page.locator(".hpanel .chap .chl:has-text('Chapter 1: Ink and Stone')")).toBeVisible();
   await page.click(".hpanel .bp-go");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Paragraph 1.");
   await expect(page.locator(".httl .pl2")).toContainText("unread");
@@ -181,5 +192,28 @@ test("Serials kept in the browser: shown at once on the next visit, only changed
   const again = dropbox.downloads.slice(before);
   // Nothing changed in Dropbox: no chapter list, sync file or subscriptions file read again.
   expect(again.filter(p => /\/chapters\/[^/]+\.json$|\/(rr-\d+|subscriptions)\.json$/.test(p))).toEqual([]);
+  expect(dropbox.errors).toEqual([]);
+});
+
+test("a jump counts once you read on, and ‹ Back returns to your place", async ({ page }) => {
+  const dropbox = await standIn(page, true);
+  await page.goto("./");
+  await page.click(".hmark .ser");
+  await page.click(`.scard[data-sid="${SERIAL}"]`);
+  await page.click(".hpanel .chap .chl:has-text('Chapter 214')");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter 214: Contour Lines");
+  await expect(page.locator(".msg .back")).toHaveText("‹ Back to Chapter 212");
+  await page.waitForTimeout(UPLOAD_WAIT_MS);
+  const synced = () => dropbox.uploads.filter(u => u.path === `/Apps/Read/Sync/${SERIAL}.json`);
+  expect(synced()).toEqual([]);
+  // A page turned in it: now it's your place.
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => synced().some(u => u.text.includes("ch/00214.xhtml")), { timeout: 20_000 }).toBe(true);
+  // Back (one turn so far): to Chapter 212, saved again.
+  await page.click(".msg .back");
+  await expect(page.locator(".msg .back")).toBeHidden();
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter 212: North by Lantern");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => { const all = synced(); return all.length > 0 && all[all.length - 1].text.includes("ch/00212.xhtml"); }, { timeout: 20_000 }).toBe(true);
   expect(dropbox.errors).toEqual([]);
 });
