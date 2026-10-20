@@ -1,15 +1,15 @@
 import "./style.css";
 import { Appearance, applyLook } from "./appearance";
 import { APP_KEY, currentToken, finishSignIn, forgetSignIn, signIn } from "./auth";
-import { parseDetails, parseNumber, withDetails, type BookDetails, type DetailsEdit } from "./details";
+import { coverLink, DROPBOX_COVER, parseDetails, parseNumber, withCover, withDetails, type BookDetails, type DetailsEdit } from "./details";
 import { Dropbox, RevConflict } from "./dropbox";
 import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
-import { coverPath, largeCover, loadSharpCovers } from "./covers";
+import { choose, chosenCoverBytes, coverPath, hasChosen, largeCover, loadChosenCovers, loadSharpCovers } from "./covers";
 import { createHome, showSharpCover } from "./homeView";
 import { contentsRemembered, CONTENTS_KEY, LAST_PLACE_KEY, lastPlaceText, parseLastPlace, type LastPlace } from "./lastPlace";
 import { booksToFetch, furthest, furthestRead, libraryBooks, markedBook, placesOf, readAt, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook } from "./library";
 import { shown, type Setup } from "./looks";
-import { backupPath, BOOKS_FOLDER, chapterFolderPath, chapterListPath, CHAPTERS_FOLDER, chapterTextPath, DETAILS_PATH, DEVICES_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
+import { backupPath, BOOKS_FOLDER, chosenCoverPath, chapterFolderPath, chapterListPath, CHAPTERS_FOLDER, chapterTextPath, DETAILS_PATH, DEVICES_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { openSerial } from "./serialBook";
 import {
   chapterDateLabel, chapterHref, chapterIdOf, homeSerials, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, readingOrderOf, setBeforeEnd, withEndMark,
@@ -446,6 +446,56 @@ async function showApp() {
       }
   };
 
+  /**
+   * A cover chosen for a book or serial (2026-10-20, WEB.md → the panels): a file (scaled, uploaded to
+   * `covers/chosen/<id>.jpg`), a link (kept as the address), or the book's own again. Into details.json as
+   * an edit; shown here at once, back as it was if Dropbox refuses. True when it was saved.
+   */
+  const chooseCover = async (target: LibraryBook, pick: { file: Blob } | { link: string } | { own: true }): Promise<boolean> => {
+    let coverUrl: string | null = null;
+    let shown: string | null = null;
+    if ("link" in pick) {
+      coverUrl = coverLink(pick.link);
+      if (!coverUrl) { tell("That isn't a link to an image."); return false; }
+    } else if ("file" in pick) {
+      const bytes = await chosenCoverBytes(pick.file);
+      if (!bytes) { tell("Couldn't use that image."); return false; }
+      const path = chosenCoverPath(target.id);
+      try {
+        await api.putChosenCover(path, bytes);
+      } catch {
+        failed();
+        return false;
+      }
+      coverUrl = DROPBOX_COVER + path;
+      shown = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "image/jpeg" }));
+    }
+    const detailsBefore = detailsNow;
+    const shownDetails: DetailsEdit = { title: target.title, author: target.author, series: target.series, number: target.seriesIndex };
+    detailsNow = { ...detailsNow, [target.id]: { ...shownDetails, ...detailsNow[target.id], coverUrl, updatedAt: Date.now() } };
+    // A link shows once a phone has fetched it (the page shows only its own images).
+    if (!("link" in pick)) choose(target.id, shown);
+    if (shown) showSharpCover(target.id, shown);
+    render();
+    try {
+      for (let attempt = 0; ; attempt++) {
+        const remote = await api.readText(DETAILS_PATH);
+        try {
+          await api.writeText(DETAILS_PATH, withCover(remote?.text ?? null, target.id, coverUrl, shownDetails, Date.now()), remote?.rev ?? null);
+          if ("link" in pick) tell("Cover link saved. It shows here once a phone has fetched it.");
+          return true;
+        } catch (err) {
+          if (!(err instanceof RevConflict) || attempt >= 2) throw err;
+        }
+      }
+    } catch {
+      detailsNow = detailsBefore;
+      failed();
+      render();
+      return false;
+    }
+  };
+
   // --- The reader ---
 
   /** The page's box on screen, and what's open: the bar shows its title over the page. */
@@ -791,6 +841,13 @@ async function showApp() {
     edit: book => editDetails(book),
     saveDetails: (book, edit) => void saveDetails(book, edit),
     saveSerial: (x, title, author) => void saveDetails(serialAsBook(x), { title, author, series: null, number: null }),
+    chosenCover: id => detailsNow[id]?.coverUrl ?? null,
+    chooseCover: (id, pick) => {
+      const book = books.find(b => b.id === id);
+      const serial = book ? null : serialsNow()?.find(x => x.id === id);
+      const target = book ? marked(book) : serial ? serialAsBook(serial) : null;
+      return target ? chooseCover(target, pick) : Promise.resolve(false);
+    },
     markRead: book => void setRead(book, true, true),
     signOut: () => void signOut(api),
     offline: () => offline,
@@ -877,6 +934,8 @@ async function showApp() {
       api.readText(DETAILS_PATH).then(r => parseDetails(r?.text ?? null).books).catch(() => ({})),
     ]);
     detailsNow = details;
+    // Covers chosen by hand: a file's image from Dropbox, a link as it is (the phones' sharp copy wins for a link).
+    void loadChosenCovers(api, details, showSharpCover);
     books = libraryBooks(files, index, syncFiles, details, addedHere);
     // Once a phone has listed a book added here, its entry is the one shown.
     const listed = Object.keys(addedHere).filter(id => (index as Record<string, IndexEntry>)[id]);
@@ -892,7 +951,7 @@ async function showApp() {
   saveLibrary();
   render();
   // Sharp covers, the books read last first (covers.ts).
-  void loadSharpCovers(api, [...books].sort((a, b) => (b.lastRead ?? "").localeCompare(a.lastRead ?? "")).map(b => b.id), showSharpCover);
+  void loadSharpCovers(api, [...books].sort((a, b) => (b.lastRead ?? "").localeCompare(a.lastRead ?? "")).map(b => b.id), (id, url) => { if (!hasChosen(id)) showSharpCover(id, url); });
   // Back to this tab after a while: other devices may have read meanwhile, and their progress shows.
   let hiddenAt = 0;
   document.addEventListener("visibilitychange", async () => {

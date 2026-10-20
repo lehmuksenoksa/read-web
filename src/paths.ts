@@ -67,6 +67,14 @@ export function isAddablePath(path: string): boolean {
   return /^\/Apps\/Read\/Fonts\/[A-Za-z0-9-]+\.(woff2|json)$/.test(path) || isNewBookPath(path) || /^\/Apps\/Read\/Sync\/covers\/[0-9a-f]{64}\.jpg$/.test(path);
 }
 
+/** A cover chosen from a file (2026-10-20): the image the phones and Read.web upload, one per book or serial. */
+export const chosenCoverPath = (id: string) => `${SYNC_FOLDER}/covers/chosen/${id}.jpg`;
+
+/** The one place Read.web overwrites a file of its own besides the sync files: a chosen cover. */
+export function isChosenCoverPath(path: string): boolean {
+  return /^\/Apps\/Read\/Sync\/covers\/chosen\/([0-9a-f]{64}|(rr|pt)-[A-Za-z0-9_-]+)\.jpg$/.test(path);
+}
+
 /** An EPUB straight in /Books/ (not in a folder in it), its name without "..". */
 export function isNewBookPath(path: string): boolean {
   return /^\/Books\/[^/]+\.[eE][pP][uU][bB]$/.test(path) && !path.includes("..");

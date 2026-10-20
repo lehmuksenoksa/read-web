@@ -254,3 +254,48 @@ test("Furthest read: the bar's menu goes there or says you're there, and sets it
   await expect.poll(() => dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/${EMMA}.json` && u.text.includes('"set":true')), { timeout: 15_000 }).toBe(true);
   expect(dropbox.errors).toEqual([]);
 });
+
+test("Choosing a cover: a link and a file in Home, the word in Office", async ({ page }) => {
+  const dropbox = await standIn(page, true);
+  await page.goto("./");
+  await expect(page.locator(".cur-now .cur-title")).toHaveText("Emma");
+  await page.click(".cur-now .cur-title");
+  await expect(page.locator(".hpanel")).toHaveClass(/\bopen\b/);
+  // Home: the panel's cover opens the menu; no "own" line while no cover was chosen.
+  await page.click(".hpanel .cvpick");
+  await expect(page.locator(".hmenu .r")).toHaveText(["From a file…", "From a link…"]);
+  await page.click(".hmenu .r:has-text('From a link…')");
+  await page.fill(".hpanel .cvlink", "http://example.com/cover.jpg");
+  await page.click(".hpanel .bp-link .bp-go");
+  await expect(page.locator(".hpanel .bp-link")).toHaveCount(0);
+  await expect.poll(() => dropbox.uploads.some(u => u.path === "/Apps/Read/Sync/details.json" && u.text.includes('"coverUrl":"https://example.com/cover.jpg"'))).toBe(true);
+  // The page shows only its own images: a link's cover comes once a phone has fetched it.
+  await expect(page.locator(".toast")).toContainText("Cover link saved");
+  // A file: scaled, uploaded to the chosen covers' folder, named in details.json as dropbox:.
+  await page.click(".hpanel .cvpick");
+  await expect(page.locator(".hmenu .r")).toHaveText(["From a file…", "From a link…", "Use the book's own"]);
+  const chooser = page.waitForEvent("filechooser");
+  await page.click(".hmenu .r:has-text('From a file…')");
+  await (await chooser).setFiles({ name: "cover.png", mimeType: "image/png", buffer: Buffer.from(PNG, "base64") });
+  await expect.poll(() => dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/covers/chosen/${EMMA}.jpg`)).toBe(true);
+  await expect.poll(() => dropbox.uploads.some(u => u.path === "/Apps/Read/Sync/details.json" && u.text.includes(`"coverUrl":"dropbox:/Apps/Read/Sync/covers/chosen/${EMMA}.jpg"`))).toBe(true);
+  await expect(page.locator(`.hpanel .cv[data-cover="${EMMA}"] img`)).toHaveAttribute("src", /^blob:/);
+  // The book's own again.
+  await page.click(".hpanel .cvpick");
+  await page.click(".hmenu .r:has-text(\"Use the book's own\")");
+  await expect.poll(() => dropbox.uploads.filter(u => u.path === "/Apps/Read/Sync/details.json").at(-1)?.text.includes('"coverUrl":null')).toBe(true);
+  expect(dropbox.errors).toEqual([]);
+});
+
+test("Office: Change cover under the panel's lines", async ({ page }) => {
+  await standIn(page, false);
+  await page.goto("./");
+  await page.click(`.home .tr[data-id="${EMMA}"] .td:nth-child(1)`);
+  await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
+  await expect(page.locator(".hpanel .cvpick")).toHaveCount(0);
+  await page.click(".hpanel .cvword");
+  await expect(page.locator(".hmenu .r")).toHaveText(["From a file…", "From a link…"]);
+});
+
+/** A 2 × 3 PNG, red. */
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAEElEQVR4nGM4Y2wMRAwoFABO+QctICjTzAAAAABJRU5ErkJggg==";

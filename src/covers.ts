@@ -82,3 +82,75 @@ export async function largeCover(cover: { bytes: Uint8Array; type: string }): Pr
     return null;
   }
 }
+
+// --- Covers chosen by hand (2026-10-20): from a file, uploaded to `covers/chosen/<id>.jpg` and named in
+// details.json as `dropbox:<path>`; or a link (an https address). The page's policy shows images from
+// itself only, so a link shows once a phone has fetched it and put its sharp copy in the covers folder. ---
+
+/** Covers chosen from a file (their image here), or picked in this browser: shown before the phones' sharp copy. */
+const chosen = new Map<string, string>();
+/** Books whose own cover was picked again here: the sharp copy may still be the old choice. */
+const ownAgain = new Set<string>();
+
+/** What a book's cover shows: [small] is its own (the index's), null when it has none. */
+export function coverSrc(id: string, small: string | null): string | null {
+  if (ownAgain.has(id)) return small;
+  return chosen.get(id) ?? sharp.get(id) ?? small;
+}
+
+/** A cover just chosen here: [src] an image's address, or null for the book's own. */
+export function choose(id: string, src: string | null): void {
+  if (src == null) {
+    chosen.delete(id);
+    ownAgain.add(id);
+  } else {
+    ownAgain.delete(id);
+    chosen.set(id, src);
+  }
+}
+
+/** Whether a book has a cover chosen from a file or here, which the phones' sharp copy doesn't replace. */
+export function hasChosen(id: string): boolean {
+  return chosen.has(id) || ownAgain.has(id);
+}
+
+/**
+ * The covers chosen from a file in [details], fetched from Dropbox once per choice (kept in this
+ * browser); [shown] is called as each one is ready. A link's cover is the phones' sharp copy.
+ */
+export async function loadChosenCovers(
+  api: Dropbox,
+  details: Record<string, { coverUrl?: string | null; updatedAt?: number }>,
+  shown: (id: string, url: string) => void,
+): Promise<void> {
+  await Promise.all(Object.entries(details).map(async ([id, d]) => {
+    const url = d.coverUrl;
+    if (!url?.startsWith("dropbox:") || ownAgain.has(id) || chosen.has(id)) return;
+    const path = url.slice("dropbox:".length);
+    const bytes = await keptFile(`${path}?${d.updatedAt ?? 0}`, async () => (await api.download(path).catch(() => null))?.bytes ?? null).catch(() => null);
+    if (!bytes || chosen.has(id) || ownAgain.has(id)) return;
+    const src = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "image/jpeg" }));
+    chosen.set(id, src);
+    shown(id, src);
+  }));
+}
+
+/** The longer side of a cover chosen from a file, at most (as on the phones). */
+export const CHOSEN_MAX = 1200;
+
+/** A picked image as a chosen cover: any shape, the longer side at most [CHOSEN_MAX], JPEG; null if it can't be drawn. */
+export async function chosenCoverBytes(file: Blob): Promise<Uint8Array | null> {
+  try {
+    const image = await createImageBitmap(file);
+    const scale = Math.min(CHOSEN_MAX / Math.max(image.width, image.height), 1);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    canvas.getContext("2d")!.drawImage(image, 0, 0, canvas.width, canvas.height);
+    image.close();
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+  } catch {
+    return null;
+  }
+}

@@ -6,7 +6,11 @@ export interface BookDetails {
   author?: string | null;
   series?: string | null;
   number?: number | null;
-  /** A cover chosen on a phone (Hardcover's address): kept as it is. */
+  /**
+   * A chosen cover: an https address (a Hardcover or Royal Road match, or a link pasted on a phone or
+   * here), or `dropbox:<path>` for an image from a file, uploaded to `covers/chosen/<id>.jpg` (2026-10-20).
+   * Null: the book's own (or the site's own, for a serial).
+   */
   coverUrl?: string | null;
   /** Epoch milliseconds of the edit; the newer edit wins. */
   updatedAt?: number;
@@ -52,3 +56,36 @@ export function parseNumber(text: string): number | null {
 }
 
 /** What a selection's Set details… changes: a series and/or an author for them all; a field left out keeps each book's own. */
+
+/** The prefix of a cover chosen from a file: the image is in Dropbox at the path after it. */
+export const DROPBOX_COVER = "dropbox:";
+
+/** The Dropbox path of a cover chosen from a file; null for a link or none. */
+export function dropboxCoverPath(coverUrl: string | null | undefined): string | null {
+  return coverUrl?.startsWith(DROPBOX_COVER) ? coverUrl.slice(DROPBOX_COVER.length) : null;
+}
+
+/** A pasted link as a cover address: https (http upgraded); null when it isn't a web address. */
+export function coverLink(text: string): string | null {
+  const t = text.trim();
+  let url: URL;
+  try {
+    url = new URL(t);
+  } catch {
+    return null;
+  }
+  if (url.protocol === "http:") url.protocol = "https:";
+  if (url.protocol !== "https:" || !url.hostname.includes(".")) return null;
+  return url.toString();
+}
+
+/**
+ * The details file text with [coverUrl] chosen for [bookId] at [now] (null: the book's own). A book
+ * without an entry gets one from [shown], its details as the Library shows them, so nothing else changes.
+ */
+export function withCover(remote: string | null, bookId: string, coverUrl: string | null, shown: DetailsEdit, now: number): string {
+  const file = parseDetails(remote);
+  const before = file.books[bookId] ?? { title: shown.title, author: shown.author, series: shown.series, number: shown.number };
+  const books = { ...file.books, [bookId]: { ...before, coverUrl, updatedAt: now } };
+  return JSON.stringify({ ...file, books, version: file.version ?? 1 });
+}

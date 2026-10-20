@@ -722,3 +722,13 @@ section.cur { margin-bottom: 44px; }
 .hviews button::after, .tabs button::after { content: attr(data-label); content: attr(data-label) / ""; font-weight: 700; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
 .hviews button.on, .tabs button.cur { font-weight: 700; }
 .r[role^="menuitem"][aria-checked="true"], .aapanel .font.inuse .nm { font-weight: 700; }
+
+/* Choosing a cover (2026-10-20): Home's panel cover opens a menu; Office's word; the link box. */
+.bp-hero .cvpick { display: block; cursor: pointer; border-radius: var(--r-tag); }
+.bp-hero .cvpick:hover .cv, .bp-hero .cvpick:focus-visible .cv { outline: 1px solid var(--line); outline-offset: 3px; }
+.bp .cvword { align-self: flex-start; margin-top: 6px; padding: 4px 0; color: var(--ink2); }
+.bp .cvword:hover { color: var(--ink); }
+.bp-link { margin-top: 18px; }
+.bp-link .lab { margin: 0 0 6px; }
+.bp-link .cvlink { width: 100%; padding: 4px 8px; }
+.bp-link .bp-acts { margin-top: 12px; }

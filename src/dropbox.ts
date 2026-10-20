@@ -1,7 +1,7 @@
 // Dropbox through its plain HTTP API (no Dropbox library). Nothing it fetches is cached by the
 // browser (no-store), and it can only write the paths [isWritablePath] allows.
 
-import { isAddablePath, isNewBookPath, isWritablePath } from "./paths";
+import { isAddablePath, isChosenCoverPath, isNewBookPath, isWritablePath } from "./paths";
 
 const API = "https://api.dropboxapi.com/2";
 const CONTENT = "https://content.dropboxapi.com/2";
@@ -130,6 +130,12 @@ export class Dropbox {
       if (e instanceof RevConflict) return null;
       throw e;
     }
+  }
+
+  /** A cover chosen from a file (`covers/chosen/<id>.jpg`, see [isChosenCoverPath]): written over the one before. */
+  async putChosenCover(path: string, bytes: Uint8Array): Promise<void> {
+    if (!isChosenCoverPath(path)) throw new Error(`Read on the web doesn't write ${path}`);
+    await this.upload(path, bytes, "overwrite");
   }
 
   private async upload(path: string, body: Uint8Array, mode: unknown): Promise<string> {

@@ -2,7 +2,7 @@
 // series' panel at the right, the size control, Details and Continue. The data and the
 // actions (the book menu, Edit details, opening a book) are the page's own, passed in.
 
-import { sharpCover } from "./covers";
+import { coverSrc } from "./covers";
 import {
   ago, besideReadingNow, BOOK_VIEWS, clickSort, column, curatedHome, DETAIL_COLUMNS, detailsRows, homeItems, inOrder, megabytes,
   fitColumns, menuSort, nextInSeries, SERIAL_VIEWS, seriesLine, SIZES, sortMenuChoice, textScale, titleWord,
@@ -48,6 +48,10 @@ export interface HomeContext {
   /** The panel's details edited in place (2026-10-16): into the shared details file, as Edit details does. */
   saveDetails(book: LibraryBook, edit: DetailsEdit): void;
   saveSerial(serial: Serial, title: string, author: string | null): void;
+  /** A book's or serial's chosen cover (details.json's coverUrl); null: its own. */
+  chosenCover(id: string): string | null;
+  /** Chooses a cover from a file or a link, or the book's own again; true when it was saved. */
+  chooseCover(id: string, pick: { file: Blob } | { link: string } | { own: true }): Promise<boolean>;
   /** The panel's Mark as read: with a message and Undo. */
   markRead(book: LibraryBook): void;
   /** The selection's actions (Details, 2026-10-16): the same marks for every ticked book, one message. */
@@ -129,7 +133,7 @@ function serialCover(x: Serial): HTMLElement {
 }
 
 function coverBox(id: string, title: string, author: string | null, small: string | null, withText: boolean): HTMLElement {
-  const src = sharpCover(id) ?? small;
+  const src = coverSrc(id, small);
   if (src) return h("div", { class: "cv", "data-cover": id }, h("img", { src, alt: "" }));
   const [bg, fg] = toneOf(id);
   return h("div", { class: "cv", "data-cover": id, style: `background:${bg};color:${fg}` },
@@ -871,6 +875,52 @@ export function createHome(ctx: HomeContext): {
   const hero = (art: HTMLElement | null, ...lines: (HTMLElement | null)[]) =>
     h("div", { class: "bp-hero" }, ...present(style().covers ? art : null, h("div", { class: "bp-info" }, ...present(...lines))));
 
+  // Choosing a cover (2026-10-20, the user's pick a): in Home a click on the panel's cover opens a small
+  // menu; Office, whose panel has no cover, has a "Change cover" word. From a link opens a box in the panel.
+  let coverLinkFor: string | null = null;
+  const coverMenu = (id: string, serial: boolean, anchor: HTMLElement) => {
+    const item = (name: string, run: () => void) => h("button", { class: "r", role: "menuitem", onclick: () => { closeMenu(); run(); } }, name);
+    openMenu(h("div", { role: "menu" }, ...present(
+      item("From a file…", () => pickCoverFile(id)),
+      item("From a link…", () => { coverLinkFor = id; renderPanel(); }),
+      ctx.chosenCover(id) != null ? item(serial ? "Use the site's own" : "Use the book's own", () => void ctx.chooseCover(id, { own: true }).then(() => renderPanel())) : null,
+    )), anchor);
+  };
+  const pickCoverFile = (id: string) => {
+    const input = h("input", { type: "file", accept: "image/*", class: "cvfile", hidden: true });
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      input.remove();
+      if (file) void ctx.chooseCover(id, { file }).then(() => renderPanel());
+    });
+    el.append(input);
+    input.click();
+  };
+  const opensCoverMenu = (id: string, serial: boolean) => (e: Event) => {
+    e.stopPropagation();
+    coverMenu(id, serial, e.currentTarget as HTMLElement);
+  };
+  /** Home's cover in the panel, which opens the menu. */
+  const coverArt = (id: string, serial: boolean, art: HTMLElement) =>
+    h("button", { class: "cvb cvpick", title: "Change cover", "aria-label": "Change cover", "aria-haspopup": "menu", onclick: opensCoverMenu(id, serial) }, art);
+  /** Office's word for it (no cover there). */
+  const changeWord = (id: string, serial: boolean) =>
+    style().covers ? null : h("button", { class: "cvword", "aria-haspopup": "menu", onclick: opensCoverMenu(id, serial) }, "Change cover");
+  /** From a link: the box under the panel's top, Use and Cancel. */
+  const linkBox = (id: string) => {
+    if (coverLinkFor !== id) return null;
+    const input = h("input", { type: "url", class: "bp-in cvlink", placeholder: "https://…", "aria-label": "Link to an image" });
+    const cancel = () => { coverLinkFor = null; renderPanel(); };
+    const use = () => void ctx.chooseCover(id, { link: input.value }).then(ok => { if (ok) cancel(); });
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); use(); }
+      if (e.key === "Escape") { e.stopPropagation(); cancel(); }
+    });
+    queueMicrotask(() => input.focus());
+    return h("div", { class: "bp-link" }, h("div", { class: "lab" }, "Link to an image"), input,
+      h("div", { class: "bp-acts" }, h("button", { class: "bp-go", onclick: use }, "Use"), h("button", { class: "bp-word", onclick: cancel }, "Cancel")));
+  };
+
   /** ⋯ at the end of the fine print (2026-10-18): the book menu, as a right-click opens it. */
   const more = (b: LibraryBook) => {
     const button = h("button", { class: "bp-more", title: "More", "aria-label": "More: Edit details, Hide", "aria-haspopup": "menu" }, "⋯");
@@ -918,11 +968,13 @@ export function createHome(ctx: HomeContext): {
         ? h("button", { class: "bp-go off", disabled: "true" }, "Caught up")
         : x.upNext ? h("button", { class: "bp-go", onclick: () => ctx.openSerial(x) }, x.current ? `Continue ${shortChapter(x.upNext.title)}` : "Start") : null;
       panel.replaceChildren(...present(top, h("div", { class: "bp sv" },
-        hero(h("div", { class: "cvb" }, serialCover(x)),
+        hero(coverArt(x.id, true, serialCover(x)),
           editable(panelTitle(x.title), "bp-title", [{ value: x.title, label: "Title" }], ([title]) => { if (title) ctx.saveSerial(x, title, x.author); }),
           h("div", { class: "bp-sub" },
             editable(x.author ?? "", "bp-by", [{ value: x.author ?? "", label: "Author" }], ([author]) => ctx.saveSerial(x, x.title, author || null), { text: "Add author" }),
-            h("span", { class: "bp-site" }, "· ", h("a", { class: "bp-sitelink", href: x.url, target: "_blank", rel: "noopener noreferrer", title: `Open on ${x.site}` }, `${x.site} ↗`)))),
+            h("span", { class: "bp-site" }, "· ", h("a", { class: "bp-sitelink", href: x.url, target: "_blank", rel: "noopener noreferrer", title: `Open on ${x.site}` }, `${x.site} ↗`))),
+          changeWord(x.id, true)),
+        linkBox(x.id),
         go ? h("div", { class: "bp-acts" }, go) : null,
         chapters ? h("div", { class: "bp-chaps" }, h("div", { class: "bp-head" }, h("span", {}, "Chapters"), h("span", { class: "c" }, counts)), chapters) : null,
         h("div", { class: "bp-fine" }, checked))));
@@ -969,7 +1021,7 @@ export function createHome(ctx: HomeContext): {
         h("span", {}, pl.device), h("span", { class: "n" }, pct(pl.p)), h("span", { class: "c" }, pl.chapter ?? ""), h("span", { class: "w" }, ago(new Date(pl.at).toISOString(), Date.now()))))) : null;
       const action = statusAction(state);
       panel.replaceChildren(...present(top, h("div", { class: "bp" },
-        hero(h("div", { class: "cvb" }, cover(b, true)),
+        hero(coverArt(b.id, false, cover(b, true)),
           editable(panelTitle(b.title), "bp-title", [{ value: b.title, label: "Title" }], ([title]) => { if (title) save({ title }); }),
           editable(b.author ?? "", "bp-by", [{ value: b.author ?? "", label: "Author" }], ([author]) => save({ author: author || null }), { text: "Add author" }),
           editable(b.series ? `${b.series}${b.seriesIndex != null ? ` · ${b.seriesIndex}` : ""}` : "", "bp-by",
@@ -978,7 +1030,9 @@ export function createHome(ctx: HomeContext): {
               const n = parseNumber(number);
               if (number && n == null) return;
               save({ series: series || null, number: series ? n : null });
-            }, { text: "Series", faint: true })),
+            }, { text: "Series", faint: true }),
+          changeWord(b.id, false)),
+        linkBox(b.id),
         lineAndBar(row, state.kind === "read" ? 1 : far?.p ?? 0, devices),
         h("div", { class: "bp-acts" },
           h("button", { class: "bp-go", onclick: () => ctx.open(b) }, goLabel(state)),
