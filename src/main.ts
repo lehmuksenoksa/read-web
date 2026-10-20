@@ -468,7 +468,7 @@ async function showApp() {
         failed();
         return false;
       }
-      coverUrl = DROPBOX_COVER + path;
+      coverUrl = `${DROPBOX_COVER}${path}#${Date.now()}`;
       shown = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "image/jpeg" }));
     }
     const detailsBefore = detailsNow;

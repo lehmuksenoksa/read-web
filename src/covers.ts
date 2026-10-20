@@ -3,6 +3,7 @@
 // load, keeps each cover in this browser with its content hash, and fetches only new or changed
 // ones, a few at a time in the page's order. Until a book's sharp cover is here, the index's small
 // one shows. Every failure is quiet: the small covers stay.
+import { dropboxCoverPath } from "./details";
 import type { Dropbox, FileEntry } from "./dropbox";
 import { forgetFiles, keepValue, keptFile, keptValue } from "./store";
 
@@ -131,8 +132,8 @@ export async function loadChosenCovers(
       shown(id, url);
       return;
     }
-    if (!url.startsWith("dropbox:")) return;
-    const path = url.slice("dropbox:".length);
+    const path = dropboxCoverPath(url);
+    if (!path) return;
     const bytes = await keptFile(`${path}?${d.updatedAt ?? 0}`, async () => (await api.download(path).catch(() => null))?.bytes ?? null).catch(() => null);
     if (!bytes || chosen.has(id) || ownAgain.has(id)) return;
     const src = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "image/jpeg" }));

@@ -20,6 +20,8 @@ describe("a cover chosen by hand", () => {
     const path = chosenCoverPath(ID);
     expect(path).toBe(`/Apps/Read/Sync/covers/chosen/${ID}.jpg`);
     expect(dropboxCoverPath(DROPBOX_COVER + path)).toBe(path);
+    // The phones' form, with the pick's time after the path: the same file.
+    expect(dropboxCoverPath(`${DROPBOX_COVER}${path}#1760000000000`)).toBe(path);
     expect(dropboxCoverPath("https://example.com/c.jpg")).toBeNull();
     expect(dropboxCoverPath(null)).toBeNull();
   });

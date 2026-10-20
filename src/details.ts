@@ -60,9 +60,12 @@ export function parseNumber(text: string): number | null {
 /** The prefix of a cover chosen from a file: the image is in Dropbox at the path after it. */
 export const DROPBOX_COVER = "dropbox:";
 
-/** The Dropbox path of a cover chosen from a file; null for a link or none. */
+/**
+ * The Dropbox path of a cover chosen from a file; null for a link or none. The address ends in
+ * `#<time>` (as the phones write it), so each new pick of the same book is a new address.
+ */
 export function dropboxCoverPath(coverUrl: string | null | undefined): string | null {
-  return coverUrl?.startsWith(DROPBOX_COVER) ? coverUrl.slice(DROPBOX_COVER.length) : null;
+  return coverUrl?.startsWith(DROPBOX_COVER) ? coverUrl.slice(DROPBOX_COVER.length).split("#")[0] : null;
 }
 
 /** A pasted link as a cover address: https (http upgraded); null when it isn't a web address. */

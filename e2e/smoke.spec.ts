@@ -280,7 +280,7 @@ test("Choosing a cover: a link and a file in Home, the word in Office", async ({
   await page.click(".hmenu .r:has-text('From a file…')");
   await (await chooser).setFiles({ name: "cover.png", mimeType: "image/png", buffer: Buffer.from(PNG, "base64") });
   await expect.poll(() => dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/covers/chosen/${EMMA}.jpg`)).toBe(true);
-  await expect.poll(() => dropbox.uploads.some(u => u.path === "/Apps/Read/Sync/details.json" && u.text.includes(`"coverUrl":"dropbox:/Apps/Read/Sync/covers/chosen/${EMMA}.jpg"`))).toBe(true);
+  await expect.poll(() => dropbox.uploads.some(u => u.path === "/Apps/Read/Sync/details.json" && u.text.includes(`"coverUrl":"dropbox:/Apps/Read/Sync/covers/chosen/${EMMA}.jpg#`))).toBe(true);
   await expect(page.locator(`.hpanel .cv[data-cover="${EMMA}"] img`)).toHaveAttribute("src", /^blob:/);
   // The book's own again.
   await page.click(".hpanel .cvpick");
