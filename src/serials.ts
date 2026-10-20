@@ -4,7 +4,7 @@
 // file. NEW, UNREAD and CAUGHT UP follow the phones' own rules (StoryRules.kt, LibraryState.kt).
 
 import type { BookDetails } from "./details";
-import { afterReset } from "./sync";
+import { afterReset, CHAPTER_END, furthestOf, serialOrder } from "./sync";
 
 // --- The files ---
 
@@ -165,8 +165,15 @@ export function chapterDateLabel(published: string | null | undefined, now: numb
 
 type SyncPlace = { href?: string; progression?: number; timestamp?: number; deviceName?: string; locator?: { href?: unknown } };
 
-/** The furthest place any device has reached in a serial (its sync file): its chapter index, when, and on which device. */
+/**
+ * How far a serial has been read (its sync file): the furthest read's chapter index, when, and on
+ * which device (2026-10-20: kept in the file, so a device going back doesn't lower it). A furthest
+ * read in a chapter no longer listed: the furthest device's place in a listed one.
+ */
 export function furthestPlace(syncFile: { positions?: Record<string, SyncPlace>; reset?: unknown } | null, ids: string[]): { index: number; at: number; device: string } | null {
+  const f = furthestOf(syncFile, serialOrder(ids));
+  const fIndex = f ? currentChapterIndex(ids, f.href) : null;
+  if (f && fIndex != null) return { index: fIndex, at: f.timestamp, device: f.deviceName };
   let best: { index: number; progression: number; at: number; device: string } | null = null;
   for (const [key, p] of Object.entries(afterReset(syncFile)?.positions ?? {})) {
     const href = p.href ?? (typeof p.locator?.href === "string" ? p.locator.href : null);
@@ -444,12 +451,13 @@ export function nextAfterCaughtUp(order: string[], placeId: string | null, endId
  * The subscriptions file with [bookId] marked read to the end of [chapterId] at [now] (CAUGHT UP):
  * that serial's end mark only, everything else as it was; null when a newer end is there already.
  */
-export function withEndMark(text: string, bookId: string, chapterId: string, now: number): string | null {
+/** [chapterId] null clears the end mark (Set as furthest read before it, 2026-10-20), with its time, so it wins on every device. */
+export function withEndMark(text: string, bookId: string, chapterId: string | null, now: number): string | null {
   const file = JSON.parse(text) as { stories?: (Subscription & Record<string, unknown>)[] };
   const stories = file.stories ?? [];
   const entry = stories.find(s => s.bookId === bookId);
   if (!entry || (entry.endAt ?? 0) >= now) return null;
-  if (entry.endChapterId === chapterId) return null;
+  if ((entry.endChapterId ?? null) === chapterId) return null;
   return JSON.stringify({ ...file, stories: stories.map(s => (s.bookId === bookId ? { ...s, endChapterId: chapterId, endAt: now } : s)) });
 }
 
@@ -483,4 +491,13 @@ export function chapterTextsListed<F extends { pathLower: string; name: string }
     }
   }
   return { top, texts };
+}
+
+/** Set as furthest read at [place] in a serial: does it come before the CAUGHT UP end mark [endChapterId]? Then the mark goes. */
+export function setBeforeEnd(ids: string[], href: string, progression: number, endChapterId: string | null): boolean {
+  if (!endChapterId) return false;
+  const end = ids.indexOf(endChapterId);
+  const at = currentChapterIndex(ids, href);
+  if (end < 0 || at == null) return false;
+  return at < end || (at === end && progression < CHAPTER_END);
 }

@@ -4,7 +4,7 @@ import { chapterListPath, isSerialId, isWritablePath, serialSyncPath } from "../
 import {
   chapterDateLabel, chapterHref, chapterTextsListed, currentChapterIndex, estimatedLengths, freshIndexes, furthestPlace, homeSerials, keepsNotes, lastCheck, lastReadSerial,
   backLabel, missingChapterPage, NEW_FOR_MS, newChaptersText, nextAfterCaughtUp, panelChapters, parseChapterList, shortChapter, parseSubscriptions, phonesKeepNotes,
-  progressLabel, readingOrderOf, searchSerials, sortSerials, storyProgress, withEndMark,
+  progressLabel, readingOrderOf, searchSerials, setBeforeEnd, sortSerials, storyProgress, withEndMark,
   type ChapterList, type PanelRow, type SharedChapter, type Subscription,
 } from "../src/serials";
 
@@ -101,6 +101,32 @@ describe("Serials on Home", () => {
     expect(furthestPlace(file, ids)).toEqual({ index: 2, at: 5, device: "S23" });
     expect(furthestPlace({ ...file, reset: { at: 6 } }, ids)).toEqual({ index: 1, at: 10, device: "Boox" });
     expect(furthestPlace(null, ids)).toBeNull();
+  });
+
+  it("reads the furthest read when the file has one: a device going back doesn't lower it, Set does (2026-10-20)", () => {
+    const ids = ["a", "b", "c"];
+    // The S23 read to chapter c, then went back to a; the file keeps c.
+    const positions = { s23: place("ch/a.xhtml", 0.2, 30, "S23") };
+    const furthest = { ...place("ch/c.xhtml", 0.5, 20, "S23"), set: false };
+    expect(furthestPlace({ positions, furthest } as never, ids)).toEqual({ index: 2, at: 20, device: "S23" });
+    // Set back to b on Web: chapters after b are unread again.
+    const set = { ...place("ch/b.xhtml", 0.1, 40, "Web"), set: true };
+    expect(furthestPlace({ positions, furthest: set } as never, ids)).toEqual({ index: 1, at: 40, device: "Web" });
+    const cs = chapters(3);
+    const item = homeSerials([sub("rr-1", "Harbour")], { "rr-1": list("rr-1", cs) },
+      { "rr-1": { positions: { s23: place("ch/1001.xhtml", 0.2, 30, "S23") }, furthest: { ...place("ch/1002.xhtml", 0.1, 40, "Web"), set: true } } as never }, {}, NOW)[0];
+    expect(item.current?.id).toBe("1002");
+    expect(item.progress.unreadCount).toBe(1);
+  });
+
+  it("drops the CAUGHT UP mark when set as furthest read before it", () => {
+    const ids = ["a", "b", "c"];
+    expect(setBeforeEnd(ids, "ch/b.xhtml", 0.5, "c")).toBe(true);
+    expect(setBeforeEnd(ids, "ch/c.xhtml", 0.5, "c")).toBe(true);
+    expect(setBeforeEnd(ids, "ch/c.xhtml", 0.99, "c")).toBe(false);
+    expect(setBeforeEnd(ids, "ch/b.xhtml", 0.5, null)).toBe(false);
+    const subs = JSON.stringify({ stories: [{ bookId: "rr-1", endChapterId: "c", endAt: 5 }] });
+    expect(JSON.parse(withEndMark(subs, "rr-1", null, 10)!).stories[0]).toMatchObject({ endChapterId: null, endAt: 10 });
   });
 
   it("is CAUGHT UP only when the newest chapter was read to its end", () => {

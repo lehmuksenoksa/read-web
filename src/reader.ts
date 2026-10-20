@@ -18,7 +18,7 @@ import { pageTop, textEdges, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
 import { backLabel, chapterHref, chapterIdOf, nextAfterCaughtUp, shortChapter } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
-import { afterKeptOpening, BOOK_ORDER, openingPlan, positionFromLocator, serialOrder, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
+import { afterKeptOpening, BOOK_ORDER, furthestOf, openingPlan, positionFromLocator, SAME_POSITION_TOLERANCE, sameHref, serialOrder, withFurthestSet, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
 import { h, icon, ICONS } from "./ui";
 import { QUIET_BOOK_CSS, QUIET_BOOK_HIDE, QUIET_BOOK_SCRIPT } from "./quietBook";
 
@@ -27,6 +27,8 @@ import { QUIET_BOOK_CSS, QUIET_BOOK_HIDE, QUIET_BOOK_SCRIPT } from "./quietBook"
 const PAGE_GUTTER = 20;
 
 export const UPLOAD_DELAY_MS = 4000;
+/** Set as furthest read goes to Dropbox once its Undo has lapsed (the message shows this long). */
+export const SET_FURTHEST_AFTER_MS = 8000;
 /** How long opening waits for Readium to find the place before showing the chapter as it is. */
 const GO_TIMEOUT_MS = 8000;
 /** The pages laid out again are shown this long after the last change: a window being resized, or a change in Aa. */
@@ -63,8 +65,11 @@ export interface ReaderProps {
   startAt?: string;
 }
 
-/** The book open in the reader: called, it saves the place and closes; [goTo] turns to a chapter. */
-export type ReaderHandle = (() => Promise<void>) & { goTo(href: string): void };
+/**
+ * The book open in the reader: called, it saves the place and closes; [goTo] turns to a chapter;
+ * [goToFurthest] and [setFurthest] are the bar's furthest-read menu (2026-10-20).
+ */
+export type ReaderHandle = (() => Promise<void>) & { goTo(href: string): void; goToFurthest(): Promise<void>; setFurthest(): void };
 
 /** What the reader needs of a serial. */
 export interface SerialReading {
@@ -78,6 +83,8 @@ export interface SerialReading {
   onChapter(href: string): void;
   /** Contents' rows, newest first: dates and NEW, as on the phones. */
   contents(): SerialContentsRow[];
+  /** Set as furthest read went to Dropbox at this place: a CAUGHT UP mark after it no longer holds. */
+  onFurthestSet?(place: Position): void;
 }
 
 export interface SerialContentsRow {
@@ -152,7 +159,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     for (let attempt = 0; attempt < 3; attempt++) {
       const remote = await dropbox.readText(syncPath);
       try {
-        const text = withWebPlace(remote?.text ?? null, id, place);
+        const text = withWebPlace(remote?.text ?? null, id, place, placeOrder());
         await dropbox.writeText(syncPath, text, remote?.rev ?? null);
         props.onSaved?.(text);
         return;
@@ -188,7 +195,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     window.removeEventListener("keydown", onKey);
     document.removeEventListener("visibilitychange", onVisible);
     document.removeEventListener("click", onOutside);
-    await Promise.all([flush(), appearance.flush()]);
+    // A Set as furthest read whose Undo hasn't lapsed yet goes now: closing isn't an Undo.
+    await Promise.all([flush(), flushFurthest(), appearance.flush()]);
     await nav?.destroy();
     book?.close();
   };
@@ -371,6 +379,87 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
 
   /** A serial's places compare by chapter (report #81); a book's by its overall progress. */
   const placeOrder = (): PlaceOrder => (props.serial && book ? serialOrder(book.readingOrder.map(h => chapterIdOf(h) ?? "")) : BOOK_ORDER);
+
+  // --- Furthest read (2026-10-20): the bar's menu ---
+
+  /** Where the page is now, as a place for the sync file. */
+  const here = (): Position | null => (current ? positionFromLocator(withPageTop(current.serialize() as Record<string, unknown>, currentTop), Date.now()) : null);
+  /**
+   * Go to furthest read: Dropbox read again now, then the prompt as at an opening (forced: whatever
+   * was news, whatever Stay said), or "already there" when nothing is further on than this page.
+   */
+  const goToFurthest = async () => {
+    let file: SyncFile | null;
+    try {
+      file = await readSyncFile();
+    } catch {
+      return tell("Couldn't reach Dropbox. Try again in a moment.");
+    }
+    if (closed) return;
+    const order = placeOrder();
+    const far = furthestOf(file, order);
+    const now = here();
+    if (far && now && !order.same(now, far) && !onThisPage(far) && order.compare(far, now) > 0) ask(far);
+    else tell("You're already at the furthest read.");
+  };
+  /**
+   * The place is on the page showing: Readium opens a place at the start of the page holding it, so
+   * a place saved further down the same page is still "here" (the page's share of its chapter).
+   */
+  const onThisPage = (p: Position): boolean => {
+    if (!current || !sameHref(p.href, current.href)) return false;
+    const start = current.locations.progression ?? 0;
+    let share = SAME_POSITION_TOLERANCE;
+    try {
+      const wnd = frameWindow();
+      const el = wnd?.document.scrollingElement;
+      if (wnd && el) share = mountedScroll ? wnd.innerHeight / Math.max(1, el.scrollHeight) : wnd.innerWidth / Math.max(1, el.scrollWidth);
+    } catch {
+      // The page can't be measured: only the same place counts.
+    }
+    return p.progression >= start - SAME_POSITION_TOLERANCE && p.progression < start + share + SAME_POSITION_TOLERANCE;
+  };
+  /** Set as furthest read, waiting for its Undo to lapse. */
+  let pendingFurthest: { place: Position; timer: number } | null = null;
+  const sendFurthest = async (place: Position) => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const remote = await dropbox.readText(syncPath);
+      try {
+        const text = withFurthestSet(remote?.text ?? null, id, place);
+        await dropbox.writeText(syncPath, text, remote?.rev ?? null);
+        void keepValue(`place:${id}`, place);
+        props.onSaved?.(text);
+        props.serial?.onFurthestSet?.(place);
+        return;
+      } catch (e) {
+        if (!(e instanceof RevConflict)) throw e;
+      }
+    }
+  };
+  const flushFurthest = async () => {
+    const pending = pendingFurthest;
+    if (!pending) return;
+    pendingFurthest = null;
+    window.clearTimeout(pending.timer);
+    await sendFurthest(pending.place).catch(() => undefined);
+  };
+  /** Set as furthest read: this page, on every device, once the Undo has lapsed. */
+  const setFurthest = () => {
+    const place = here();
+    if (!place) return;
+    if (pendingFurthest) window.clearTimeout(pendingFurthest.timer);
+    const timer = window.setTimeout(() => {
+      if (pendingFurthest?.timer !== timer) return;
+      pendingFurthest = null;
+      sendFurthest(place).catch(() => tell("Couldn't reach Dropbox. Try again in a moment."));
+    }, SET_FURTHEST_AFTER_MS);
+    pendingFurthest = { place, timer };
+    tell("Set as furthest read", { label: "Undo", run: () => {
+      if (pendingFurthest?.timer !== timer) return;
+      window.clearTimeout(timer);
+      pendingFurthest = null;
+    } });
+  };
 
   // Back to this tab: another device may have read on meanwhile.
   const onVisible = async () => {
@@ -921,7 +1010,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     status.textContent = e instanceof Error ? e.message : String(e);
   }
 
-  return Object.assign(close, { goTo: jump });
+  return Object.assign(close, { goTo: jump, goToFurthest, setFurthest });
 }
 
 /** "1.0", "1.25", "0.5": at least one decimal, no trailing zeros (the app's labels). */

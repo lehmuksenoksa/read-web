@@ -363,6 +363,10 @@ button.r:hover { background: var(--sel); }
 .httl[hidden] { display: none; }
 .httl .bt { font: 600 var(--t-heading) var(--font-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .httl .pl2 { color: var(--ink2); font-size: var(--t-small); white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+/* The place with the furthest-read icon before it (2026-10-20). */
+.httl .plw { display: flex; align-items: center; gap: 8px; flex: none; min-width: 0; }
+.httl .fr { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--r-row); color: var(--ink2); }
+.httl .fr:hover, .httl .fr[aria-expanded="true"] { color: var(--ink); background: var(--sel); }
 /* Office's name: the words, the side shown in the ink. */
 .hmark .txt { font: 600 var(--t-heading) var(--font-sans); color: var(--ink3); padding: 4px 0; }
 /* A small upright ampersand between, close (2026-10-16). */

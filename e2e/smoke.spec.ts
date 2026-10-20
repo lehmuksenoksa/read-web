@@ -217,3 +217,40 @@ test("a jump counts once you read on, and ‹ Back returns to your place", async
   await expect.poll(() => { const all = synced(); return all.length > 0 && all[all.length - 1].text.includes("ch/00212.xhtml"); }, { timeout: 20_000 }).toBe(true);
   expect(dropbox.errors).toEqual([]);
 });
+
+test("Furthest read: the bar's menu goes there or says you're there, and sets it with Undo (2026-10-20)", async ({ page }) => {
+  test.setTimeout(90_000);
+  const dropbox = await standIn(page, true);
+  await page.goto("./");
+  await page.click(".cur-go");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
+  const prompt = page.locator(".msg:not(.toast)");
+  const menu = page.locator(".bookmenu");
+  // At the S23's place, which is the furthest read: already there.
+  await page.click(".httl .fr");
+  await expect(menu.locator("button")).toHaveText(["Go to furthest read", "Set as furthest read"]);
+  await menu.getByText("Go to furthest read").click();
+  await expect(prompt).toContainText("You're already at the furthest read.");
+  // Back to the first chapter from Contents (not saved: a jump), then Go to furthest read asks as at an opening.
+  await page.click('.htools button[aria-label="Contents"]');
+  const at = () => page.locator(".foot").getAttribute("data-href");
+  await page.locator(".rpanel .toc .item").first().click();
+  await expect.poll(at, { timeout: 15_000 }).not.toMatch(/chapter%202|chapter 2/);
+  await page.click(".httl .fr");
+  await menu.getByText("Go to furthest read").click();
+  await expect(prompt).toContainText("is further on");
+  await prompt.getByText("Go there").click();
+  await expect.poll(at, { timeout: 15_000 }).toMatch(/chapter%202|chapter 2/);
+  // Set as furthest read: the message with Undo; Undo sends nothing.
+  await page.click(".httl .fr");
+  await menu.getByText("Set as furthest read").click();
+  await expect(prompt).toContainText("Set as furthest read");
+  await prompt.getByText("Undo").click();
+  await page.waitForTimeout(9_000);
+  expect(dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/${EMMA}.json` && u.text.includes('"set":true'))).toBe(false);
+  // Again, left to lapse: the furthest read goes to Dropbox, set by hand.
+  await page.click(".httl .fr");
+  await menu.getByText("Set as furthest read").click();
+  await expect.poll(() => dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/${EMMA}.json` && u.text.includes('"set":true')), { timeout: 15_000 }).toBe(true);
+  expect(dropbox.errors).toEqual([]);
+});

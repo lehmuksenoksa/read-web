@@ -47,9 +47,15 @@ export const SAME_POSITION_TOLERANCE = 0.005;
 /** How much text a position carries for the prompt. */
 export const SNIPPET_LENGTH = 80;
 
+/** One chapter file, however its href was escaped ("chapter 2.xhtml" and "chapter%202.xhtml"). */
+export function sameHref(a: string, b: string): boolean {
+  const plain = (href: string) => { const base = href.split("#")[0]; try { return decodeURIComponent(base); } catch { return base; } };
+  return plain(a) === plain(b);
+}
+
 /** Pagination differs per device, so compare the chapter and the progress within it. */
 export function samePosition(a: Position, b: Position): boolean {
-  return a.href === b.href && Math.abs(a.progression - b.progression) <= SAME_POSITION_TOLERANCE + 1e-9;
+  return sameHref(a.href, b.href) && Math.abs(a.progression - b.progression) <= SAME_POSITION_TOLERANCE + 1e-9;
 }
 
 /**
@@ -126,6 +132,69 @@ export function otherToCompare(others: Position[], mine: Position | null, dismis
   return [...others].sort((a, b) => b.timestamp - a.timestamp)[0] ?? null;
 }
 
+// --- Furthest read (2026-10-20, the same rules as the phones' sync/Furthest.kt) ---
+
+/**
+ * The furthest any device has read or listened to in a book or serial, kept in its sync file as
+ * `furthest`. [set]: set by hand (Set as furthest read), which may be behind what was read before.
+ */
+export interface Furthest extends Position {
+  set?: boolean;
+}
+
+/** A place from a sync file as the web compares it, whatever the file left out. */
+function asPlace(raw: unknown): Furthest | null {
+  const p = raw as Partial<Position> & { set?: unknown; locator?: Record<string, unknown> } | null;
+  if (!p || typeof p !== "object") return null;
+  // A place the app wrote whole is used as it is.
+  if (typeof p.href === "string" && typeof p.progression === "number" && typeof p.totalProgression === "number" && typeof p.timestamp === "number") return p as Furthest;
+  const href = typeof p.href === "string" ? p.href : typeof p.locator?.href === "string" ? p.locator.href as string : null;
+  if (!href) return null;
+  const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : 0);
+  return {
+    locator: (p.locator ?? { href }) as Record<string, unknown>,
+    href,
+    progression: num(p.progression),
+    totalProgression: num(p.totalProgression),
+    timestamp: num(p.timestamp),
+    deviceName: typeof p.deviceName === "string" ? p.deviceName : "",
+    snippet: typeof p.snippet === "string" ? p.snippet : "",
+    set: p.set === true,
+  };
+}
+
+/**
+ * Two furthest places merged: the newer one when it was set by hand; otherwise the further of the
+ * two, the older kept when they're the same place (no churn). The phones merge the same way.
+ */
+export function mergeFurthest(a: Furthest | null, b: Furthest | null, order: PlaceOrder = BOOK_ORDER): Furthest | null {
+  if (!a) return b;
+  if (!b) return a;
+  const [older, newer] = a.timestamp <= b.timestamp ? [a, b] : [b, a];
+  if (newer.set) return newer;
+  if (order.same(newer, older) || order.compare(newer, older) <= 0) return older;
+  return newer;
+}
+
+/**
+ * A sync file's furthest read: its `furthest` (when not from before a reset) merged with every
+ * device's place since the reset, so a file from an older build without the field (or a place an
+ * older build saved since) still counts. Null when nothing was read.
+ */
+export function furthestOf(file: object | null, order: PlaceOrder = BOOK_ORDER): Furthest | null {
+  if (!file) return null;
+  const at = resetAt(file);
+  const field = asPlace((file as { furthest?: unknown }).furthest);
+  let best = field && field.timestamp > at ? field : null;
+  const positions = (file as { positions?: Record<string, unknown> }).positions ?? {};
+  for (const raw of Object.values(positions)) {
+    const p = asPlace(raw);
+    // A device's own place never counts as set by hand.
+    if (p && p.timestamp > at) best = mergeFurthest(best, p.set ? { ...p, set: false } : p, order);
+  }
+  return best;
+}
+
 /** What to do on opening a book: where to start, and the question to ask, if any. */
 export interface OpeningPlan {
   start: Position | null;
@@ -133,15 +202,13 @@ export interface OpeningPlan {
 }
 
 /**
- * Opening a book on the web: at Web's own place; a book never read here opens at the furthest
- * place another device reached; when another device is further on, it asks.
+ * Opening a book on the web: at Web's own place; a book never read here opens at the furthest read;
+ * when the furthest read is further on and news, it asks, naming the device that read it (2026-10-20).
  */
 export function openingPlan(whole: SyncFile | null, dismissedAt: number | null = null, order: PlaceOrder = BOOK_ORDER): OpeningPlan {
   const file = afterReset(whole);
-  const positions = file?.positions ?? {};
-  const mine = positions[WEB_DEVICE_ID] ?? null;
-  const others = Object.entries(positions).filter(([id]) => id !== WEB_DEVICE_ID).map(([, p]) => p);
-  const other = otherToCompare(others, mine, dismissedAt, order);
+  const mine = file?.positions?.[WEB_DEVICE_ID] ?? null;
+  const other = furthestOf(whole, order);
   if (!other) return { start: mine, ask: null };
   const decision = resolve(mine, other, dismissedAt, order);
   switch (decision.kind) {
@@ -211,11 +278,21 @@ export function positionFromLocator(locator: Record<string, unknown>, timestamp:
  * places, listening history, marks, fields the web doesn't know). [remote]: the file's text, or
  * null when there's none yet.
  */
-export function withWebPlace(remote: string | null, bookId: string, place: Position): string {
+export function withWebPlace(remote: string | null, bookId: string, place: Position, order: PlaceOrder = BOOK_ORDER): string {
   const file: Record<string, unknown> = remote ? JSON.parse(remote) : { bookId, positions: {}, history: [], version: 1 };
   const positions = { ...((file.positions as Record<string, Position> | undefined) ?? {}) };
   positions[WEB_DEVICE_ID] = place;
-  return JSON.stringify({ ...file, positions });
+  // Reading on raises the furthest read; it never lowers it.
+  const furthest = mergeFurthest(furthestOf(file, order), { ...place, set: false }, order);
+  return JSON.stringify({ ...file, positions, ...(furthest ? { furthest } : {}) });
+}
+
+/** Set as furthest read: Web's place and the furthest read are [place], on every device (2026-10-20). */
+export function withFurthestSet(remote: string | null, bookId: string, place: Position): string {
+  const file: Record<string, unknown> = remote ? JSON.parse(remote) : { bookId, positions: {}, history: [], version: 1 };
+  const positions = { ...((file.positions as Record<string, Position> | undefined) ?? {}) };
+  positions[WEB_DEVICE_ID] = place;
+  return JSON.stringify({ ...file, positions, furthest: { ...place, set: true } });
 }
 
 /** A book's marks as the phones keep them (SyncFile.kt): the newer of each wins between devices. */

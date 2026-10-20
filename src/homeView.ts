@@ -31,6 +31,10 @@ export interface HomeContext {
   /** What the book's sync file told, while it's still its latest; null: not read yet. */
   progress(id: string): number | null;
   places(id: string): Place[] | null;
+  /** The book's furthest read, when known (2026-10-20): how far the Library says it's read. */
+  furthestRead(id: string): Place | null;
+  /** The reader's furthest-read menu, under [anchor] (the bar's icon). */
+  furthestMenu(anchor: HTMLElement): void;
   /** Reads the book's sync file (once; kept) for its progress and places. */
   load(book: LibraryBook): Promise<void>;
   open(book: LibraryBook): void;
@@ -195,7 +199,11 @@ export function createHome(ctx: HomeContext): {
   const gear = h("button", { class: "hicon", title: "Settings", "aria-label": "Settings" }, svgEl(GEAR));
   const titleBt = h("span", { class: "bt" });
   const titlePlace = h("span", { class: "pl2" });
-  const titleEl = h("div", { class: "httl", hidden: true }, titleBt, titlePlace);
+  // The furthest-read menu (2026-10-20): Go to furthest read · Set as furthest read.
+  const furthestButton = h("button", { class: "fr", title: "Furthest read", "aria-label": "Furthest read", "aria-haspopup": "menu" }, icon(ICONS.sync));
+  furthestButton.addEventListener("click", e => { e.stopPropagation(); ctx.furthestMenu(furthestButton); });
+  const placeWrap = h("span", { class: "plw" }, furthestButton, titlePlace);
+  const titleEl = h("div", { class: "httl", hidden: true }, titleBt, placeWrap);
   const header = h("header", { class: "hhead" }, markEl, h("span", { class: "grow" }), searchBox, gear, titleEl);
   const count = h("button", { class: "hcount", "aria-haspopup": "menu" });
   const zoomLess = h("button", { class: "zb", title: "Smaller", "aria-label": "Smaller" });
@@ -548,7 +556,8 @@ export function createHome(ctx: HomeContext): {
     // Home's wordmark is drawn: its baseline is a known share down its canvas. Office's is text.
     const svg = markEl.querySelector("svg");
     const base = svg ? svg.getBoundingClientRect().top + WORDMARK_BASELINE * 40 : baselineOf(markEl.querySelector<HTMLElement>(".lib") ?? markEl);
-    if (!titleEl.hidden) { restOn(titleBt, base); restOn(titlePlace, base); }
+    // The place with its icon, the icon centred on the place's line (2026-10-20).
+    if (!titleEl.hidden) { restOn(titleBt, base); restOn(placeWrap, base, titlePlace); }
     if (cont.parentElement === header && !cont.hidden && getComputedStyle(cont).position === "absolute") restOn(cont, base, cont.querySelector<HTMLElement>(".ct") ?? cont);
     // The icons' middle on the capitals of the smaller text (the place, or Continue): about 0.7 of its size.
     const small = parseFloat(getComputedStyle(titleEl.hidden ? cont : titlePlace).fontSize) || 13;
@@ -693,7 +702,7 @@ export function createHome(ctx: HomeContext): {
     if (c.now) {
       const f = c.now;
       const p = progressNow(f) ?? 0;
-      const far = furthestPlace(ctx.places(f.id) ?? []);
+      const far = ctx.furthestRead(f.id) ?? furthestPlace(ctx.places(f.id) ?? []);
       const series = seriesLine(f);
       hideContinue = true;
       const top: HTMLElement = h("section", { class: "cur cur-top" },
@@ -944,12 +953,12 @@ export function createHome(ctx: HomeContext): {
       else fromSeries = null;
       top.append(h("span", { class: "grow" }), closeButton);
       const places = ctx.places(b.id);
-      const state = bookState(b.read, places, b.hasSyncFile);
+      const state = bookState(b.read, places, b.hasSyncFile, ctx.furthestRead(b.id));
       const file = [b.path, megabytes(b.size)].filter(Boolean).join(" · ");
       const save = (change: Partial<DetailsEdit>) => ctx.saveDetails(b, { title: b.title, author: b.author, series: b.series, number: b.seriesIndex, ...change });
       // The line: how far (the furthest device), or Read, or Not started; a click opens the devices.
       const left = state.kind === "read" ? "Read" : state.kind === "started" ? pct(state.p) : state.kind === "loading" ? "…" : "Not started";
-      const far = places ? furthestPlace(places) : null;
+      const far = places ? ctx.furthestRead(b.id) ?? furthestPlace(places) : null;
       const right = state.kind === "started" ? state.chapter ?? "" : "";
       const hasDevices = (places?.length ?? 0) > 0;
       const row = hasDevices

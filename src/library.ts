@@ -3,7 +3,7 @@
 import type { FileEntry } from "./dropbox";
 import { SYNC_FOLDER } from "./paths";
 import type { BookDetails } from "./details";
-import { afterReset, type Marks } from "./sync";
+import { afterReset, furthestOf, type Marks } from "./sync";
 
 /** One entry of `/Apps/Read/Sync/library.json`, as the S23 and the Boox write it. */
 export interface IndexEntry {
@@ -152,10 +152,21 @@ export function markedBook(book: LibraryBook, marks: Marks | undefined, progress
   return read === book.read && hidden === book.hidden ? book : { ...book, read, hidden };
 }
 
-/** The furthest point any device has reached in a book, from its sync file. */
-export function furthest(syncFile: { positions?: Record<string, { totalProgression?: number; timestamp?: number }>; reset?: unknown } | null): number {
-  // Places from before the book was started over (Mark as unread) don't count.
-  return Math.max(0, ...Object.values(afterReset(syncFile)?.positions ?? {}).map(p => p.totalProgression ?? 0));
+/**
+ * How far a book has been read, from its sync file: its furthest read (2026-10-20: kept in the file,
+ * so a device going back doesn't lower it; Set as furthest read can). Places from before the book
+ * was started over (Mark as unread) don't count.
+ */
+export function furthest(syncFile: object | null): number {
+  return Math.max(0, furthestOf(syncFile)?.totalProgression ?? 0);
+}
+
+/** The furthest read as a place for the panels: how far, its chapter, on which device and when. */
+export function furthestRead(syncFile: object | null): Place | null {
+  const f = furthestOf(syncFile);
+  if (!f) return null;
+  const title = (f.locator as { title?: unknown } | undefined)?.title;
+  return { device: f.deviceName, p: f.totalProgression, chapter: typeof title === "string" && title.trim() ? title.trim() : null, at: f.timestamp };
 }
 
 /** One device's place in a book, for Home's panel and Details' On column. */
@@ -256,6 +267,8 @@ export function readAt(book: LibraryBook, known: KnownProgress | undefined): str
 export interface KnownProgress {
   at: string | null;
   p: number;
+  /** The furthest read as a place (2026-10-20; missing in older kept ones: then the furthest device). */
+  far?: Place | null;
   /** Each device's place, newest first (kept since Home; missing in older kept ones). */
   places?: Place[];
 }

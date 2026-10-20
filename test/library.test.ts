@@ -33,7 +33,9 @@ describe("the Library", () => {
   });
 
   it("shows the furthest point any device reached", () => {
-    expect(furthest({ positions: { a: { totalProgression: 0.2 }, b: { totalProgression: 0.7 } } })).toBe(0.7);
+    expect(furthest({ positions: { a: { href: "c2.xhtml", progression: 0.1, totalProgression: 0.2, timestamp: 1 }, b: { href: "c7.xhtml", progression: 0.5, totalProgression: 0.7, timestamp: 2 } } })).toBe(0.7);
+    // The furthest read kept in the file (2026-10-20): a device going back doesn't lower it.
+    expect(furthest({ positions: { a: { href: "c2.xhtml", progression: 0.1, totalProgression: 0.2, timestamp: 5 } }, furthest: { href: "c8.xhtml", progression: 0.3, totalProgression: 0.8, timestamp: 4 } })).toBe(0.8);
     expect(furthest(null)).toBe(0);
     expect(titleFromFileName("Mage_Tank_5.EPUB")).toBe("Mage Tank 5");
   });
@@ -129,7 +131,7 @@ describe("the Library after another device read", () => {
 
 describe("progress after a book was started over", () => {
   it("counts only places from after the reset", () => {
-    const positions = { boox: { totalProgression: 0.6, timestamp: 100 }, s23: { totalProgression: 0.05, timestamp: 300 } };
+    const positions = { boox: { href: "c6.xhtml", progression: 0.5, totalProgression: 0.6, timestamp: 100 }, s23: { href: "c1.xhtml", progression: 0.2, totalProgression: 0.05, timestamp: 300 } };
     expect(furthest({ positions })).toBe(0.6);
     expect(furthest({ positions, reset: { at: 200 } })).toBe(0.05);
     expect(furthest({ positions, reset: { at: 400 } })).toBe(0);

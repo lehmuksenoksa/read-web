@@ -7,12 +7,12 @@ import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, t
 import { coverPath, largeCover, loadSharpCovers } from "./covers";
 import { createHome, showSharpCover } from "./homeView";
 import { contentsRemembered, CONTENTS_KEY, LAST_PLACE_KEY, lastPlaceText, parseLastPlace, type LastPlace } from "./lastPlace";
-import { booksToFetch, furthest, libraryBooks, markedBook, placesOf, readAt, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook } from "./library";
+import { booksToFetch, furthest, furthestRead, libraryBooks, markedBook, placesOf, readAt, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook } from "./library";
 import { shown, type Setup } from "./looks";
 import { backupPath, BOOKS_FOLDER, chapterFolderPath, chapterListPath, CHAPTERS_FOLDER, chapterTextPath, DETAILS_PATH, DEVICES_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { openSerial } from "./serialBook";
 import {
-  chapterDateLabel, chapterHref, chapterIdOf, homeSerials, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, readingOrderOf, withEndMark,
+  chapterDateLabel, chapterHref, chapterIdOf, homeSerials, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, readingOrderOf, setBeforeEnd, withEndMark,
   type ChapterList, type Serial, type Subscription,
 } from "./serials";
 import { keptFile } from "./store";
@@ -184,22 +184,24 @@ async function showApp() {
     let p = progress.get(book.id);
     if (!p) {
       let places: KnownProgress["places"];
+      let far: KnownProgress["far"] = null;
       p = api.readText(syncFilePath(book.id)).then(r => {
         const file = r ? JSON.parse(r.text) : null;
         syncMarks.set(book.id, marksOf(file));
         places = placesOf(file);
+        far = furthestRead(file);
         return furthest(file);
       }).catch(() => 0);
       progress.set(book.id, p);
-      void p.then(value => { known.set(book.id, { at: book.lastRead, p: value, places }); saveLibrary(); });
+      void p.then(value => { known.set(book.id, { at: book.lastRead, p: value, places, far }); saveLibrary(); });
     }
     return p;
   };
   /** A book's progress now known (Web just saved its place): its row shows it at once. */
-  const showProgress = (id: string, p: number, places?: KnownProgress["places"]) => {
+  const showProgress = (id: string, p: number, places?: KnownProgress["places"], far?: KnownProgress["far"]) => {
     const book = bookById(id);
     if (!book) return;
-    known.set(id, { at: book.lastRead, p, places: places ?? known.get(id)?.places });
+    known.set(id, { at: book.lastRead, p, places: places ?? known.get(id)?.places, far: far !== undefined ? far : known.get(id)?.far });
     progress.set(id, Promise.resolve(p));
     saveLibrary();
   };
@@ -273,6 +275,25 @@ async function showApp() {
       }).catch(() => undefined);
     }
   };
+  /** The reader's furthest-read menu, under the bar's icon (2026-10-20): the book menu's panel, two lines. */
+  const openFurthestMenu = (anchor: HTMLElement) => {
+    closeMenu?.();
+    if (!closeReader) return;
+    menuReturn = anchor;
+    const reader = closeReader;
+    const item = (name: string, action: () => void) =>
+      h("button", { class: "r", role: "menuitem", onclick: () => { closeBookMenu(); action(); } }, name);
+    bookMenu.replaceChildren(
+      item("Go to furthest read", () => void reader.goToFurthest()),
+      item("Set as furthest read", () => reader.setFurthest()),
+    );
+    bookMenu.hidden = false;
+    focusFirstItem(bookMenu);
+    const a = anchor.getBoundingClientRect();
+    const r = bookMenu.getBoundingClientRect();
+    bookMenu.style.left = `${Math.max(8, Math.min(a.left, window.innerWidth - r.width - 8))}px`;
+    bookMenu.style.top = `${Math.round(a.bottom + 6)}px`;
+  };
   /** Changes a book's marks in its sync file (read first, then written with its revision; tried again if it moved meanwhile). */
   const writeMarks = async (id: string, change: Marks) => {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -314,7 +335,7 @@ async function showApp() {
     for (const book of list) {
       setMarks(book.id, { read: { read: null, updatedAt: now }, reset: { at: now } });
       // Every device's place from before goes too: the panel and Reading now show places, not only the number (2026-10-19).
-      showProgress(book.id, 0, []);
+      showProgress(book.id, 0, [], null);
       window.clearTimeout(unreadTimers.get(book.id));
     }
     render();
@@ -520,7 +541,7 @@ async function showApp() {
       if (currentId !== book.id) return;
       closeReader = await showReader(pane, {
         ...props, dropbox: api, appearance: look, id: book.id, path: book.path, title: book.title,
-        onSaved: text => showProgress(book.id, furthest(JSON.parse(text)), placesOf(JSON.parse(text))),
+        onSaved: text => { const file = JSON.parse(text); showProgress(book.id, furthest(file), placesOf(file), furthestRead(file)); },
       });
     }).catch(() => undefined); // One book that fails to open doesn't stop the next.
     return opening;
@@ -568,6 +589,12 @@ async function showApp() {
             const chapterId = chapterIdOf(href);
             if (chapterId && inDropbox.has(chapterId)) void markCaughtUp(x.id, chapterId);
           },
+          // Set as furthest read before the CAUGHT UP mark: the mark goes, on every device (2026-10-20).
+          onFurthestSet: place => {
+            const end = serialData?.subs.find(s => s.bookId === x.id)?.endChapterId ?? null;
+            if (setBeforeEnd(x.chapters.map(c => c.id), place.href, place.progression, end)) void markCaughtUp(x.id, null);
+            render();
+          },
           // Contents: newest first, with their dates and NEW, as on the phones.
           contents: () => {
             const s = now();
@@ -603,7 +630,7 @@ async function showApp() {
     return phonesKeepNotes(backups.filter(Boolean));
   })();
   /** Read to the end of the newest chapter: CAUGHT UP, in the subscriptions file (that serial's end mark only). */
-  const markCaughtUp = async (id: string, chapterId: string) => {
+  const markCaughtUp = async (id: string, chapterId: string | null) => {
     try {
       for (let attempt = 0; ; attempt++) {
         const remote = await api.readText(SUBSCRIPTIONS_PATH);
@@ -617,7 +644,7 @@ async function showApp() {
           if (!(err instanceof RevConflict) || attempt >= 2) throw err;
         }
       }
-      tell("Caught up");
+      if (chapterId) tell("Caught up");
       render();
     } catch {
       failed();
@@ -744,6 +771,8 @@ async function showApp() {
     update: next => look.update(next),
     progress: id => knownNow(id)?.p ?? (books.find(b => b.id === id)?.hasSyncFile === false ? 0 : null),
     places: id => knownNow(id)?.places ?? (books.find(b => b.id === id)?.hasSyncFile === false ? [] : null),
+    furthestRead: id => knownNow(id)?.far ?? null,
+    furthestMenu: anchor => openFurthestMenu(anchor),
     load: async book => {
       // A kept entry from before Home has no places: read the file again.
       if (knownNow(book.id) && !knownNow(book.id)!.places) { known.delete(book.id); progress.delete(book.id); }

@@ -13,11 +13,11 @@ export function furthestPlace(places: Place[]): Place | null {
   return places.reduce<Place | null>((best, x) => (!best || x.p > best.p ? x : best), null);
 }
 
-/** Read (its mark, or read to the end); not known yet; not started; or how far, at the furthest device. */
-export function bookState(read: boolean, places: Place[] | null, hasSyncFile: boolean): BookState {
+/** Read (its mark, or read to the end); not known yet; not started; or how far: the furthest read ([far]), else the furthest device. */
+export function bookState(read: boolean, places: Place[] | null, hasSyncFile: boolean, furthestRead: Place | null = null): BookState {
   if (read) return { kind: "read" };
   if (places == null) return hasSyncFile ? { kind: "loading" } : { kind: "new" };
-  const far = furthestPlace(places);
+  const far = furthestRead ?? furthestPlace(places);
   return far && far.p > 0 ? { kind: "started", p: far.p, chapter: far.chapter } : { kind: "new" };
 }
 
