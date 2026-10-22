@@ -128,6 +128,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
    */
   let jumpedFrom: Locator | null = null;
   let turnsSinceJump = 0;
+  /** Scrolling after a jump: where the chapter was scrolled to when you first scrolled in it; a screen on counts as a page turned (2026-10-22). */
+  let scrollFromJump: number | null = null;
   let uploadTimer: number | undefined;
   let dismissedAt: number | null = null;
   let closed = false;
@@ -209,6 +211,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (!forward && mountedQuiet && current && (current.locations.progression ?? 0) === 0 && onlyBlankBefore(current.href.split("#")[0])) return;
     moved = true;
     anchor = null;
+    scrollFromJump = null;
     if (jumpedFrom && ++turnsSinceJump >= 2) clearBack();
     if (forward) nav.goForward(false, ok => {
       // A serial read past the end of its newest chapter: CAUGHT UP.
@@ -221,6 +224,18 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     if (!mountedScroll) return;
     moved = true;
     anchor = null;
+    if (jumpedFrom && scrollFromJump == null) scrollFromJump = frameWindow()?.document.scrollingElement?.scrollTop ?? null;
+  };
+  /** Scrolling on after a jump counts as reading on: a screen as one page turned, two and "‹ Back to …" goes (2026-10-22). */
+  const onFrameScroll = () => {
+    const wnd = frameWindow();
+    const el = wnd?.document.scrollingElement;
+    if (!jumpedFrom || !mountedScroll || !wnd || !el) return;
+    // The scrollbar dragged, or the jump's own scroll: counted from where it first stood.
+    if (scrollFromJump == null) { scrollFromJump = el.scrollTop; return; }
+    const screens = Math.floor((el.scrollTop - scrollFromJump) / (0.9 * wnd.innerHeight));
+    if (screens >= 2) clearBack();
+    else if (screens >= 1) turnsSinceJump = Math.max(turnsSinceJump, 1);
   };
   /** Scrolling: which ends of the chapter are in view; null when the page can't be read. */
   const chapterEnds = (): Ends | null => {
@@ -349,13 +364,15 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       nav.go(to, false, () => undefined);
     };
     window.clearTimeout(undoTimer);
-    prompt.replaceChildren(backRow);
+    // × lets it go without going back: the jump stays where you are (2026-10-22).
+    prompt.replaceChildren(h("span", {}, backRow), h("button", { class: "link strong", "aria-label": "Close", onclick: () => clearBack() }, "×"));
     prompt.hidden = false;
   };
   const clearBack = () => {
     jumpedFrom = null;
     turnsSinceJump = 0;
-    if (prompt.firstElementChild === backRow) prompt.hidden = true;
+    scrollFromJump = null;
+    if (prompt.firstElementChild?.firstElementChild === backRow) prompt.hidden = true;
   };
   /** To [other]'s place; [ownPlace]: Web's own, from another browser, so nothing new to save. */
   const goThere = (other: Position, ownPlace = false) => {
@@ -556,6 +573,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     moved = false;
     jumpedFrom = from;
     turnsSinceJump = 0;
+    scrollFromJump = null;
     showBack();
   };
   const goTo = (href: string) => {
@@ -699,6 +717,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       wnd.addEventListener("keydown", onKey);
       wnd.addEventListener("wheel", onWheel, { passive: true });
       wnd.addEventListener("touchmove", userScrolled, { passive: true });
+      wnd.addEventListener("scroll", onFrameScroll, { passive: true });
       wnd.addEventListener("touchstart", onTouchStart, { passive: true });
       wnd.addEventListener("touchend", onTouchEnd, { passive: true });
       swipes(wnd.document.documentElement, swiped);

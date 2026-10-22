@@ -218,6 +218,41 @@ test("a jump counts once you read on, and ‹ Back returns to your place", async
   expect(dropbox.errors).toEqual([]);
 });
 
+test("‹ Back to … closes with ×, and goes once you've scrolled on (2026-10-22)", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 900, height: 420 });
+  const dropbox = await standIn(page, true);
+  await page.goto("./");
+  await page.click(".hmark .ser");
+  await page.click(`.scard[data-sid="${SERIAL}"]`);
+  await page.click(".hpanel .chap .chl:has-text('Chapter 214')");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter 214: Contour Lines");
+  const back = page.locator(".msg .back");
+  await expect(back).toHaveText("‹ Back to Chapter 212");
+  // × lets it go, and you stay in the chapter you jumped to.
+  await page.click('.msg button[aria-label="Close"]');
+  await expect(back).toBeHidden();
+  expect(await pageText(page)).toContain("Chapter 214: Contour Lines");
+  // Scrolling: a jump from Contents, then two screens on.
+  await page.click('.htools button[aria-label="Aa"]');
+  await page.click('.tabs button[data-label="Layout"]');
+  await page.click('button[aria-label="Scroll"]');
+  await page.keyboard.press("Escape");
+  await page.click('.htools button[aria-label="Contents"]');
+  await page.locator(".rpanel .toc .item", { hasText: "Chapter 213" }).click();
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter 213: Ink and Stone");
+  await expect(back).toBeVisible();
+  await page.mouse.move(450, 220);
+  await page.mouse.wheel(0, 150);
+  await page.waitForTimeout(300);
+  await expect(back).toBeVisible();
+  for (let i = 0; i < 4; i++) { await page.mouse.wheel(0, 200); await page.waitForTimeout(200); }
+  await expect(back).toBeHidden();
+  // Still in the chapter: it went by scrolling, not by going on to the next one.
+  expect(await pageText(page)).toContain("Chapter 213: Ink and Stone");
+  expect(dropbox.errors).toEqual([]);
+});
+
 test("Furthest read: the bar's menu goes there or says you're there, and sets it with Undo (2026-10-20)", async ({ page }) => {
   test.setTimeout(90_000);
   const dropbox = await standIn(page, true);
