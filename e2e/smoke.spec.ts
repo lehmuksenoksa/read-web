@@ -290,6 +290,44 @@ test("Furthest read: the bar's menu goes there or says you're there, and sets it
   expect(dropbox.errors).toEqual([]);
 });
 
+test("Back to the tab: asks when the S23 has read on since, not when it's behind (2026-10-23)", async ({ page }) => {
+  test.setTimeout(90_000);
+  const dropbox = await standIn(page, true);
+  await page.goto("./");
+  await page.click(".cur-go");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
+  // A page turned here, and saved.
+  const path = `/Apps/Read/Sync/${EMMA}.json`;
+  const uploads = () => dropbox.uploads.filter(u => u.path === path).length;
+  const before = uploads();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(uploads, { timeout: 20_000 }).toBeGreaterThan(before);
+  const s23Reads = (chapter: number, total: number) => {
+    const file = JSON.parse(dropbox.files[path]);
+    const href = `OEBPS/Text/chapter ${chapter}.xhtml`;
+    file.positions.s23 = { href, progression: 0.5, totalProgression: total, timestamp: Date.now(), deviceName: "S23", locator: { href, type: "application/xhtml+xml", title: `Chapter ${chapter}`, locations: { progression: 0.5, totalProgression: total } } };
+    dropbox.files[path] = JSON.stringify(file);
+  };
+  const awayAndBack = () => page.evaluate(async () => {
+    for (const state of ["hidden", "visible"]) {
+      Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      await new Promise(r => setTimeout(r, 100));
+    }
+  });
+  const prompt = page.locator(".msg:not(.toast)");
+  // The S23 went back to chapter 1: nothing to ask.
+  s23Reads(1, 0.1);
+  await awayAndBack();
+  await page.waitForTimeout(1500);
+  await expect(prompt).toBeHidden();
+  // The S23 read on to chapter 3: asked on coming back.
+  s23Reads(3, 0.9);
+  await awayAndBack();
+  await expect(prompt).toContainText("S23 is further on", { timeout: 10_000 });
+  expect(dropbox.errors).toEqual([]);
+});
+
 test("Choosing a cover: a link and a file in Home, the word in Office", async ({ page }) => {
   const dropbox = await standIn(page, true);
   // The linked image, from its own site (images from https addresses are allowed, 2026-10-20).

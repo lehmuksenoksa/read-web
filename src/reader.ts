@@ -485,9 +485,13 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     const plan = openingPlan(withCurrent(file), dismissedAt, placeOrder());
     if (plan.ask) ask(plan.ask);
   };
-  /** The sync file with Web's place as it is on screen now (not yet uploaded). */
+  /**
+   * The sync file with Web's place as it is on screen, while a page turned is still waiting to be
+   * uploaded; once it's gone, Dropbox has it with its own time (2026-10-23: "now" stood for every
+   * place after the first page turn, so coming back to the tab never found anything newer).
+   */
   const withCurrent = (file: SyncFile | null): SyncFile | null => {
-    if (!file || !current || !moved) return file;
+    if (!file || !current || !moved || uploadTimer === undefined) return file;
     const place = positionFromLocator(current.serialize() as Record<string, unknown>, Date.now());
     return place ? { ...file, positions: { ...file.positions, [WEB_DEVICE_ID]: place } } : file;
   };

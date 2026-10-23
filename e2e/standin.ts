@@ -24,6 +24,8 @@ export interface StandIn {
   errors: string[];
   /** Every file read, in order. */
   downloads: string[];
+  /** The stand-in's files, for a test to change what another device wrote. */
+  files: Record<string, string>;
 }
 
 export async function standIn(page: Page, home: boolean): Promise<StandIn> {
@@ -63,7 +65,7 @@ export async function standIn(page: Page, home: boolean): Promise<StandIn> {
   };
   for (const c of chapters) files[`/Apps/Read/Sync/chapters/${SERIAL}/${c.id}.xhtml`] = chapterPage(c.title);
 
-  const result: StandIn = { uploads: [], errors: [], downloads: [] };
+  const result: StandIn = { uploads: [], errors: [], downloads: [], files };
   page.on("console", m => { if (m.type() === "error" && !m.text().includes("409")) result.errors.push(m.text()); });
   page.on("pageerror", e => result.errors.push(`pageerror: ${e.message}`));
   const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "POST, OPTIONS", "access-control-expose-headers": "Dropbox-API-Result" };
