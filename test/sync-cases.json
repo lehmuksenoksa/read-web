@@ -1,0 +1,1546 @@
+{
+ "about": "Sync cases shared by the phones (app/src/test/resources/sync-cases.json) and Read.web (test/sync-cases.json); the two copies are identical (scripts/check-sync-cases.sh). Each case: a sync file, the furthest read both must find, and what opening the book on Web does (the device 'web').",
+ "version": 1,
+ "cases": [
+  {
+   "name": "further on wins whatever its time",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch10.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch10.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch8.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.4,
+        "totalProgression": 0.4
+       }
+      },
+      "href": "ch8.xhtml",
+      "progression": 0.4,
+      "totalProgression": 0.4,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch10.xhtml",
+    "progression": 0.5,
+    "set": false
+   }
+  },
+  {
+   "name": "a Set wins over places saved before it",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch10.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch10.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch6.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.3,
+        "totalProgression": 0.3
+       }
+      },
+      "href": "ch6.xhtml",
+      "progression": 0.3,
+      "totalProgression": 0.3,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "furthest": {
+     "locator": {
+      "href": "ch6.xhtml",
+      "type": "application/xhtml+xml",
+      "locations": {
+       "progression": 0.3,
+       "totalProgression": 0.3
+      }
+     },
+     "href": "ch6.xhtml",
+     "progression": 0.3,
+     "totalProgression": 0.3,
+     "timestamp": 200,
+     "deviceName": "S23",
+     "snippet": "",
+     "set": true
+    }
+   },
+   "furthest": {
+    "href": "ch6.xhtml",
+    "progression": 0.3,
+    "set": true
+   }
+  },
+  {
+   "name": "a Set read on from stays set; the place from before it doesn't come back (S23 first)",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "s23": {
+      "locator": {
+       "href": "ch4.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.45
+       }
+      },
+      "href": "ch4.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.45,
+      "timestamp": 300,
+      "deviceName": "S23",
+      "snippet": ""
+     },
+     "boox": {
+      "locator": {
+       "href": "ch8.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.8
+       }
+      },
+      "href": "ch8.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.8,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "furthest": {
+     "locator": {
+      "href": "ch4.xhtml",
+      "type": "application/xhtml+xml",
+      "locations": {
+       "progression": 0.0,
+       "totalProgression": 0.4
+      }
+     },
+     "href": "ch4.xhtml",
+     "progression": 0.0,
+     "totalProgression": 0.4,
+     "timestamp": 200,
+     "deviceName": "S23",
+     "snippet": "",
+     "set": true
+    }
+   },
+   "furthest": {
+    "href": "ch4.xhtml",
+    "progression": 0.5,
+    "set": true
+   }
+  },
+  {
+   "name": "a Set read on from stays set; the place from before it doesn't come back (Boox first)",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch8.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.8
+       }
+      },
+      "href": "ch8.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.8,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch4.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.45
+       }
+      },
+      "href": "ch4.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.45,
+      "timestamp": 300,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "furthest": {
+     "locator": {
+      "href": "ch4.xhtml",
+      "type": "application/xhtml+xml",
+      "locations": {
+       "progression": 0.0,
+       "totalProgression": 0.4
+      }
+     },
+     "href": "ch4.xhtml",
+     "progression": 0.0,
+     "totalProgression": 0.4,
+     "timestamp": 200,
+     "deviceName": "S23",
+     "snippet": "",
+     "set": true
+    }
+   },
+   "furthest": {
+    "href": "ch4.xhtml",
+    "progression": 0.5,
+    "set": true
+   }
+  },
+  {
+   "name": "a place after the Set and further on raises it",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch9.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.85
+       }
+      },
+      "href": "ch9.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.85,
+      "timestamp": 400,
+      "deviceName": "Boox",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "furthest": {
+     "locator": {
+      "href": "ch4.xhtml",
+      "type": "application/xhtml+xml",
+      "locations": {
+       "progression": 0.0,
+       "totalProgression": 0.4
+      }
+     },
+     "href": "ch4.xhtml",
+     "progression": 0.0,
+     "totalProgression": 0.4,
+     "timestamp": 200,
+     "deviceName": "S23",
+     "snippet": "",
+     "set": true
+    }
+   },
+   "furthest": {
+    "href": "ch9.xhtml",
+    "progression": 0.1,
+    "set": true
+   }
+  },
+  {
+   "name": "a place after the Set and behind it doesn't lower it",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "s23": {
+      "locator": {
+       "href": "ch2.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.1
+       }
+      },
+      "href": "ch2.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.1,
+      "timestamp": 300,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "furthest": {
+     "locator": {
+      "href": "ch6.xhtml",
+      "type": "application/xhtml+xml",
+      "locations": {
+       "progression": 0.3,
+       "totalProgression": 0.3
+      }
+     },
+     "href": "ch6.xhtml",
+     "progression": 0.3,
+     "totalProgression": 0.3,
+     "timestamp": 200,
+     "deviceName": "S23",
+     "snippet": "",
+     "set": true
+    }
+   },
+   "furthest": {
+    "href": "ch6.xhtml",
+    "progression": 0.3,
+    "set": true
+   }
+  },
+  {
+   "name": "the same place keeps the older",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch10.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch10.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch10.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.503,
+        "totalProgression": 0.5001
+       }
+      },
+      "href": "ch10.xhtml",
+      "progression": 0.503,
+      "totalProgression": 0.5001,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch10.xhtml",
+    "progression": 0.5,
+    "set": false
+   }
+  },
+  {
+   "name": "places from before Mark as unread don't count",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch10.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch10.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch1.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.2,
+        "totalProgression": 0.02
+       }
+      },
+      "href": "ch1.xhtml",
+      "progression": 0.2,
+      "totalProgression": 0.02,
+      "timestamp": 300,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "reset": {
+     "at": 200
+    }
+   },
+   "furthest": {
+    "href": "ch1.xhtml",
+    "progression": 0.2,
+    "set": false
+   }
+  },
+  {
+   "name": "a furthest read from before Mark as unread doesn't count",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "s23": {
+      "locator": {
+       "href": "ch2.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.1
+       }
+      },
+      "href": "ch2.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.1,
+      "timestamp": 300,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "furthest": {
+     "locator": {
+      "href": "ch10.xhtml",
+      "type": "application/xhtml+xml",
+      "locations": {
+       "progression": 0.5,
+       "totalProgression": 0.5
+      }
+     },
+     "href": "ch10.xhtml",
+     "progression": 0.5,
+     "totalProgression": 0.5,
+     "timestamp": 100,
+     "deviceName": "Boox",
+     "snippet": ""
+    },
+    "reset": {
+     "at": 200
+    }
+   },
+   "furthest": {
+    "href": "ch2.xhtml",
+    "progression": 0.1,
+    "set": false
+   }
+  },
+  {
+   "name": "nothing read",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {},
+    "version": 1
+   },
+   "furthest": null
+  },
+  {
+   "name": "a file from before the field: the furthest device's place",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch3.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.3
+       }
+      },
+      "href": "ch3.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.3,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     },
+     "web": {
+      "locator": {
+       "href": "ch8.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.2,
+        "totalProgression": 0.6
+       }
+      },
+      "href": "ch8.xhtml",
+      "progression": 0.2,
+      "totalProgression": 0.6,
+      "timestamp": 200,
+      "deviceName": "Web",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch8.xhtml",
+    "progression": 0.2,
+    "set": false
+   }
+  },
+  {
+   "name": "a serial: the chapter decides, not the overall estimate",
+   "chapters": [
+    "101",
+    "102",
+    "103"
+   ],
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch/101.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.9
+       }
+      },
+      "href": "ch/101.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.9,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch/102.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.1
+       }
+      },
+      "href": "ch/102.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.1,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch/102.xhtml",
+    "progression": 0.1,
+    "set": false
+   }
+  },
+  {
+   "name": "a serial: the end of a chapter and the start of the next are the same place",
+   "chapters": [
+    "101",
+    "102",
+    "103"
+   ],
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch/101.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.99,
+        "totalProgression": 0.33
+       }
+      },
+      "href": "ch/101.xhtml",
+      "progression": 0.99,
+      "totalProgression": 0.33,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch/102.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.0,
+        "totalProgression": 0.34
+       }
+      },
+      "href": "ch/102.xhtml",
+      "progression": 0.0,
+      "totalProgression": 0.34,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch/101.xhtml",
+    "progression": 0.99,
+    "set": false
+   }
+  },
+  {
+   "name": "a serial subscribed again: places from before it don't count",
+   "chapters": [
+    "101",
+    "102",
+    "103"
+   ],
+   "subscribedAt": 150,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch/103.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.8
+       }
+      },
+      "href": "ch/103.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.8,
+      "timestamp": 100,
+      "deviceName": "Boox",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch/101.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.2,
+        "totalProgression": 0.1
+       }
+      },
+      "href": "ch/101.xhtml",
+      "progression": 0.2,
+      "totalProgression": 0.1,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch/101.xhtml",
+    "progression": 0.2,
+    "set": false
+   }
+  },
+  {
+   "name": "a serial subscribed again: a place at that very time counts",
+   "chapters": [
+    "101",
+    "102",
+    "103"
+   ],
+   "subscribedAt": 200,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "s23": {
+      "locator": {
+       "href": "ch/102.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.3,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch/102.xhtml",
+      "progression": 0.3,
+      "totalProgression": 0.5,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch/102.xhtml",
+    "progression": 0.3,
+    "set": false
+   }
+  },
+  {
+   "name": "a serial subscribed again: a furthest read from before it doesn't count",
+   "chapters": [
+    "101",
+    "102",
+    "103"
+   ],
+   "subscribedAt": 150,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "s23": {
+      "locator": {
+       "href": "ch/101.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.05
+       }
+      },
+      "href": "ch/101.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.05,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "furthest": {
+     "locator": {
+      "href": "ch/103.xhtml",
+      "type": "application/xhtml+xml",
+      "locations": {
+       "progression": 0.5,
+       "totalProgression": 0.8
+      }
+     },
+     "href": "ch/103.xhtml",
+     "progression": 0.5,
+     "totalProgression": 0.8,
+     "timestamp": 100,
+     "deviceName": "Boox",
+     "snippet": ""
+    }
+   },
+   "furthest": {
+    "href": "ch/101.xhtml",
+    "progression": 0.1,
+    "set": false
+   }
+  },
+  {
+   "name": "never read here: straight to the furthest read",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "s23": {
+      "locator": {
+       "href": "ch2.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.3,
+        "totalProgression": 0.3
+       }
+      },
+      "href": "ch2.xhtml",
+      "progression": 0.3,
+      "totalProgression": 0.3,
+      "timestamp": 100,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch2.xhtml",
+    "progression": 0.3,
+    "set": false
+   },
+   "opening": {
+    "expect": "jump",
+    "dismissedAt": null,
+    "readHereBefore": false,
+    "device": "S23",
+    "href": "ch2.xhtml"
+   }
+  },
+  {
+   "name": "further on and news: asked",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch1.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.1
+       }
+      },
+      "href": "ch1.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.1,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch5.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch5.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch5.xhtml",
+    "progression": 0.5,
+    "set": false
+   },
+   "opening": {
+    "expect": "ask",
+    "dismissedAt": null,
+    "readHereBefore": false,
+    "device": "S23",
+    "href": "ch5.xhtml"
+   }
+  },
+  {
+   "name": "further on but older than the last move here: not asked",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch1.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.1
+       }
+      },
+      "href": "ch1.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.1,
+      "timestamp": 300,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch5.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch5.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch5.xhtml",
+    "progression": 0.5,
+    "set": false
+   },
+   "opening": {
+    "expect": "stay",
+    "dismissedAt": null,
+    "readHereBefore": false
+   }
+  },
+  {
+   "name": "behind: never asked",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch5.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch5.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch2.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.2,
+        "totalProgression": 0.2
+       }
+      },
+      "href": "ch2.xhtml",
+      "progression": 0.2,
+      "totalProgression": 0.2,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch5.xhtml",
+    "progression": 0.5,
+    "set": false
+   },
+   "opening": {
+    "expect": "stay",
+    "dismissedAt": null,
+    "readHereBefore": false
+   }
+  },
+  {
+   "name": "answered Stay: not asked again",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch1.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.1
+       }
+      },
+      "href": "ch1.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.1,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch5.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch5.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch5.xhtml",
+    "progression": 0.5,
+    "set": false
+   },
+   "opening": {
+    "expect": "stay",
+    "dismissedAt": 200,
+    "readHereBefore": false
+   }
+  },
+  {
+   "name": "read on since the Stay: asked",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch1.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.1
+       }
+      },
+      "href": "ch1.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.1,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch5.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch5.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch5.xhtml",
+    "progression": 0.5,
+    "set": false
+   },
+   "opening": {
+    "expect": "ask",
+    "dismissedAt": 150,
+    "readHereBefore": false,
+    "device": "S23",
+    "href": "ch5.xhtml"
+   }
+  },
+  {
+   "name": "the same place: not asked",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch5.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.5
+       }
+      },
+      "href": "ch5.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.5,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch5.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.502,
+        "totalProgression": 0.501
+       }
+      },
+      "href": "ch5.xhtml",
+      "progression": 0.502,
+      "totalProgression": 0.501,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch5.xhtml",
+    "progression": 0.5,
+    "set": false
+   },
+   "opening": {
+    "expect": "stay",
+    "dismissedAt": null,
+    "readHereBefore": false
+   }
+  },
+  {
+   "name": "started over after reading here, another device read on since: asked",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch6.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.3,
+        "totalProgression": 0.3
+       }
+      },
+      "href": "ch6.xhtml",
+      "progression": 0.3,
+      "totalProgression": 0.3,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "boox": {
+      "locator": {
+       "href": "ch3.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.2,
+        "totalProgression": 0.2
+       }
+      },
+      "href": "ch3.xhtml",
+      "progression": 0.2,
+      "totalProgression": 0.2,
+      "timestamp": 300,
+      "deviceName": "Boox",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "reset": {
+     "at": 200
+    }
+   },
+   "furthest": {
+    "href": "ch3.xhtml",
+    "progression": 0.2,
+    "set": false
+   },
+   "opening": {
+    "expect": "ask",
+    "dismissedAt": null,
+    "readHereBefore": true,
+    "device": "Boox",
+    "href": "ch3.xhtml"
+   }
+  },
+  {
+   "name": "started over, never read here: straight there",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "boox": {
+      "locator": {
+       "href": "ch3.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.2,
+        "totalProgression": 0.2
+       }
+      },
+      "href": "ch3.xhtml",
+      "progression": 0.2,
+      "totalProgression": 0.2,
+      "timestamp": 300,
+      "deviceName": "Boox",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "reset": {
+     "at": 200
+    }
+   },
+   "furthest": {
+    "href": "ch3.xhtml",
+    "progression": 0.2,
+    "set": false
+   },
+   "opening": {
+    "expect": "jump",
+    "dismissedAt": null,
+    "readHereBefore": false,
+    "device": "Boox",
+    "href": "ch3.xhtml"
+   }
+  },
+  {
+   "name": "started over after reading here, the other device only at the start: not asked",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch6.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.3,
+        "totalProgression": 0.3
+       }
+      },
+      "href": "ch6.xhtml",
+      "progression": 0.3,
+      "totalProgression": 0.3,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "boox": {
+      "locator": {
+       "href": "ch1.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.0,
+        "totalProgression": 0.0
+       }
+      },
+      "href": "ch1.xhtml",
+      "progression": 0.0,
+      "totalProgression": 0.0,
+      "timestamp": 300,
+      "deviceName": "Boox",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "reset": {
+     "at": 200
+    }
+   },
+   "furthest": {
+    "href": "ch1.xhtml",
+    "progression": 0.0,
+    "set": false
+   },
+   "opening": {
+    "expect": "stay",
+    "dismissedAt": null,
+    "readHereBefore": true
+   }
+  },
+  {
+   "name": "a Set behind the place here: never asked",
+   "chapters": null,
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch6.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.3,
+        "totalProgression": 0.3
+       }
+      },
+      "href": "ch6.xhtml",
+      "progression": 0.3,
+      "totalProgression": 0.3,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     }
+    },
+    "version": 1,
+    "furthest": {
+     "locator": {
+      "href": "ch2.xhtml",
+      "type": "application/xhtml+xml",
+      "locations": {
+       "progression": 0.1,
+       "totalProgression": 0.1
+      }
+     },
+     "href": "ch2.xhtml",
+     "progression": 0.1,
+     "totalProgression": 0.1,
+     "timestamp": 300,
+     "deviceName": "Boox",
+     "snippet": "",
+     "set": true
+    }
+   },
+   "furthest": {
+    "href": "ch2.xhtml",
+    "progression": 0.1,
+    "set": true
+   },
+   "opening": {
+    "expect": "stay",
+    "dismissedAt": null,
+    "readHereBefore": false
+   }
+  },
+  {
+   "name": "a serial further on by chapter: asked",
+   "chapters": [
+    "101",
+    "102",
+    "103"
+   ],
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch/101.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.9
+       }
+      },
+      "href": "ch/101.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.9,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch/102.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.1,
+        "totalProgression": 0.2
+       }
+      },
+      "href": "ch/102.xhtml",
+      "progression": 0.1,
+      "totalProgression": 0.2,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch/102.xhtml",
+    "progression": 0.1,
+    "set": false
+   },
+   "opening": {
+    "expect": "ask",
+    "dismissedAt": null,
+    "readHereBefore": false,
+    "device": "S23",
+    "href": "ch/102.xhtml"
+   }
+  },
+  {
+   "name": "a serial at the end of a chapter and the start of the next: not asked",
+   "chapters": [
+    "101",
+    "102",
+    "103"
+   ],
+   "subscribedAt": null,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch/101.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.99,
+        "totalProgression": 0.3
+       }
+      },
+      "href": "ch/101.xhtml",
+      "progression": 0.99,
+      "totalProgression": 0.3,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch/102.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.0,
+        "totalProgression": 0.31
+       }
+      },
+      "href": "ch/102.xhtml",
+      "progression": 0.0,
+      "totalProgression": 0.31,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch/101.xhtml",
+    "progression": 0.99,
+    "set": false
+   },
+   "opening": {
+    "expect": "stay",
+    "dismissedAt": null,
+    "readHereBefore": false
+   }
+  },
+  {
+   "name": "a serial subscribed again: Web's old place doesn't count, straight to the new one",
+   "chapters": [
+    "101",
+    "102",
+    "103"
+   ],
+   "subscribedAt": 150,
+   "file": {
+    "bookId": "b",
+    "positions": {
+     "web": {
+      "locator": {
+       "href": "ch/103.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.5,
+        "totalProgression": 0.8
+       }
+      },
+      "href": "ch/103.xhtml",
+      "progression": 0.5,
+      "totalProgression": 0.8,
+      "timestamp": 100,
+      "deviceName": "Web",
+      "snippet": ""
+     },
+     "s23": {
+      "locator": {
+       "href": "ch/101.xhtml",
+       "type": "application/xhtml+xml",
+       "locations": {
+        "progression": 0.2,
+        "totalProgression": 0.1
+       }
+      },
+      "href": "ch/101.xhtml",
+      "progression": 0.2,
+      "totalProgression": 0.1,
+      "timestamp": 200,
+      "deviceName": "S23",
+      "snippet": ""
+     }
+    },
+    "version": 1
+   },
+   "furthest": {
+    "href": "ch/101.xhtml",
+    "progression": 0.2,
+    "set": false
+   },
+   "opening": {
+    "expect": "jump",
+    "dismissedAt": null,
+    "readHereBefore": false,
+    "device": "S23",
+    "href": "ch/101.xhtml"
+   }
+  }
+ ]
+}
