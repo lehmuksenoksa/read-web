@@ -423,6 +423,11 @@ test("Stay holds when the book is opened again, until that device reads on (2026
   await awayAndBack(page);
   await expect(prompt).toContainText("S23 is further on", { timeout: 10_000 });
   await prompt.getByText("Stay").click();
+  // Kept in this browser (written as Stay is tapped) before the reload.
+  await expect.poll(() => page.evaluate(id => new Promise<unknown>(done => {
+    const db = indexedDB.open("read-web", 1);
+    db.onsuccess = () => { const got = db.result.transaction("values").objectStore("values").get(`dismissed:${id}`); got.onsuccess = () => done(got.result ?? null); };
+  }), EMMA)).not.toBeNull();
   // Opened again (a reload): not asked again about the same place.
   await page.reload();
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter");
