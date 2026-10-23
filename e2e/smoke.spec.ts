@@ -440,6 +440,58 @@ test("Stay holds when the book is opened again, until that device reads on (2026
   expect(dropbox.errors).toEqual([]);
 });
 
+test("A serial subscribed again: nothing from the subscription before shows, asks or comes back (2026-10-23)", async ({ page }) => {
+  test.setTimeout(90_000);
+  const dropbox = await standIn(page, true);
+  const SYNC = `/Apps/Read/Sync/${SERIAL}.json`;
+  const SUBS = "/Apps/Read/Sync/subscriptions.json";
+  // From the subscription before: Web in Chapter 100, the S23 further on in Chapter 212, its furthest read.
+  const file = JSON.parse(dropbox.files[SYNC]);
+  const href = "ch/00100.xhtml";
+  file.positions.web = { href, progression: 0.5, totalProgression: 0.45, timestamp: Date.now() - 6 * 3_600_000, deviceName: "Web", snippet: "", locator: { href, type: "application/xhtml+xml", title: "x", locations: { progression: 0.5, totalProgression: 0.45 } } };
+  file.furthest = { ...file.positions.s23, set: false };
+  dropbox.files[SYNC] = JSON.stringify(file);
+  await page.goto("./");
+  await page.click(".hmark .ser");
+  // Before: Web's own place opens, kept in this browser, and the S23 is asked about.
+  await expect(page.locator(".hhead > .hcont")).toContainText("Dungeon Cartographer");
+  await page.click(`.scard[data-sid="${SERIAL}"]`);
+  await page.click(".hpanel .bp-go");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter 100: North by Lantern");
+  const prompt = page.locator(".msg:not(.toast)");
+  await expect(prompt).toContainText("S23 is further on", { timeout: 10_000 });
+  await expect.poll(() => page.evaluate(id => new Promise<unknown>(done => {
+    const db = indexedDB.open("read-web", 1);
+    db.onsuccess = () => { const got = db.result.transaction("values").objectStore("values").get(`place:${id}`); got.onsuccess = () => done(got.result ?? null); };
+  }), SERIAL)).not.toBeNull();
+  await page.click(".hmark .ser");
+  // Unsubscribed and subscribed again on a phone, after all of it.
+  const subs = JSON.parse(dropbox.files[SUBS]);
+  subs.stories.find((s: { bookId: string }) => s.bookId === SERIAL).subscribedAt = Date.now();
+  dropbox.files[SUBS] = JSON.stringify(subs);
+  await page.reload();
+  await page.click(".hmark .ser");
+  // Not started: no old chapter on Home, and Continue is the other serial.
+  await expect(page.locator(".hhead > .hcont")).toContainText("The Lantern Road");
+  await expect(page.locator(`.scard[data-sid="${SERIAL}"]`)).not.toContainText("Chapter 212");
+  await page.click(`.scard[data-sid="${SERIAL}"]`);
+  await expect(page.locator(".hpanel .bp-go")).toHaveText("Start");
+  // Opens at the start, not at the place this browser kept, with nothing asked.
+  await page.click(".hpanel .bp-go");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter 1: Ink and Stone");
+  await page.waitForTimeout(2000);
+  await expect(prompt).toBeHidden();
+  // The first upload: Web's place now, and the furthest read isn't the S23's old place.
+  const uploads = () => dropbox.uploads.filter(u => u.path === SYNC);
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => uploads().length, { timeout: 20_000 }).toBeGreaterThan(0);
+  const first = JSON.parse(uploads()[0].text);
+  expect(first.positions.web.href).toBe("ch/00001.xhtml");
+  expect(first.furthest.href).toBe("ch/00001.xhtml");
+  expect(first.positions.s23.href).toBe("ch/00212.xhtml");
+  expect(dropbox.errors).toEqual([]);
+});
+
 test("Choosing a cover: a link and a file in Home, the word in Office", async ({ page }) => {
   const dropbox = await standIn(page, true);
   // The linked image, from its own site (images from https addresses are allowed, 2026-10-20).

@@ -4,7 +4,7 @@
 // file. NEW, UNREAD and CAUGHT UP follow the phones' own rules (StoryRules.kt, LibraryState.kt).
 
 import type { BookDetails } from "./details";
-import { afterReset, CHAPTER_END, furthestOf, serialOrder } from "./sync";
+import { afterReset, CHAPTER_END, furthestOf, serialOrder, sinceSubscribed } from "./sync";
 
 // --- The files ---
 
@@ -47,6 +47,8 @@ export interface Subscription {
   endAt?: number | null;
   /** "Default", "Keep" or "Remove". */
   authorNotes?: string;
+  /** When this subscription began (epoch ms; subscribing again moves it): nothing read before it counts (2026-10-23). */
+  subscribedAt?: number | null;
 }
 
 export function parseSubscriptions(text: string | null): Subscription[] {
@@ -247,7 +249,8 @@ export function homeSerials(subs: Subscription[], lists: Record<string, ChapterL
     const list = lists[sub.bookId] ?? null;
     const chapters = heldChapters(list?.chapters ?? [], inDropbox[sub.bookId]);
     const ids = chapters.map(c => c.id);
-    const syncFile = places[sub.bookId] ?? null;
+    // Subscribed again: places from the subscription before don't count (2026-10-23).
+    const syncFile = sinceSubscribed(places[sub.bookId] ?? null, sub.subscribedAt);
     const place = furthestPlace(syncFile, ids);
     const unreadable = new Set(chapters.flatMap((c, i) => (readable(c) ? [] : [i])));
     const progress = storyProgress(chapters.length, place?.index ?? null, unreadable, freshIndexes(chapters, now, sub.seen));

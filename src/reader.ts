@@ -18,7 +18,7 @@ import { pageTop, textEdges, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
 import { backLabel, chapterHref, chapterIdOf, nextAfterCaughtUp, shortChapter } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
-import { afterKeptOpening, BOOK_ORDER, furthestOf, openingPlan, positionFromLocator, resetAt, SAME_POSITION_TOLERANCE, sameHref, serialOrder, withFurthestSet, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
+import { afterKeptOpening, BOOK_ORDER, furthestOf, keptSince, openingPlan, positionFromLocator, resetAt, SAME_POSITION_TOLERANCE, sameHref, serialOrder, sinceSubscribed, withFurthestSet, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
 import { h, icon, ICONS } from "./ui";
 import { QUIET_BOOK_CSS, QUIET_BOOK_HIDE, QUIET_BOOK_SCRIPT } from "./quietBook";
 
@@ -77,6 +77,8 @@ export interface SerialReading {
   syncPath: string;
   /** The chapter read to its end (CAUGHT UP): a place still in it opens at the next chapter. */
   endChapterId: string | null;
+  /** When the subscription began (subscribed again): nothing read before it counts (2026-10-23). */
+  subscribedAt?: number | null;
   /** A page turned past the end of the newest chapter (the href of the chapter that ended). */
   onPastEnd(href: string): void;
   /** The reader is in this chapter now (the next ones are fetched ahead). */
@@ -98,6 +100,8 @@ export interface SerialContentsRow {
 export async function showReader(root: HTMLElement, props: ReaderProps): Promise<ReaderHandle> {
   const { dropbox, id, appearance } = props;
   const syncPath = props.serial?.syncPath ?? syncFilePath(id);
+  /** A serial subscribed again: the places from before it left out of what's read (2026-10-23). */
+  const since = props.serial?.subscribedAt ?? null;
   const status = h("div", { class: "foot" }, "Opening…");
   const prompt = h("div", { class: "msg", hidden: true });
   const page = h("div", { class: "page", id: "page" });
@@ -164,9 +168,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     for (let attempt = 0; attempt < 3; attempt++) {
       const remote = await dropbox.readText(syncPath);
       // Started over on a phone meanwhile: the page from before isn't saved.
-      if (startedOver(parsed(remote?.text))) return;
+      if (startedOver(sinceSubscribed(parsed(remote?.text), since))) return;
       try {
-        const text = withWebPlace(remote?.text ?? null, id, place, placeOrder());
+        const text = withWebPlace(remote?.text ?? null, id, place, placeOrder(), since);
         await dropbox.writeText(syncPath, text, remote?.rev ?? null);
         savedAt = Math.max(savedAt, place.timestamp);
         props.onSaved?.(text);
@@ -391,7 +395,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     nav.go(new Locator({ href: entry.href, type: locator.type, title: locator.title, locations: locator.locations, text: locator.text }), false, () => undefined);
   };
 
-  const readSyncFile = async (): Promise<SyncFile | null> => parsed((await dropbox.readText(syncPath))?.text);
+  const readSyncFile = async (): Promise<SyncFile | null> => sinceSubscribed(parsed((await dropbox.readText(syncPath))?.text), since);
 
   /** A serial's places compare by chapter (report #81); a book's by its overall progress. */
   const placeOrder = (): PlaceOrder => (props.serial && book ? serialOrder(book.readingOrder.map(h => chapterIdOf(h) ?? "")) : BOOK_ORDER);
@@ -440,9 +444,9 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const sendFurthest = async (place: Position) => {
     for (let attempt = 0; attempt < 3; attempt++) {
       const remote = await dropbox.readText(syncPath);
-      if (startedOver(parsed(remote?.text))) return;
+      if (startedOver(sinceSubscribed(parsed(remote?.text), since))) return;
       try {
-        const text = withFurthestSet(remote?.text ?? null, id, place, placeOrder());
+        const text = withFurthestSet(remote?.text ?? null, id, place, placeOrder(), since);
         await dropbox.writeText(syncPath, text, remote?.rev ?? null);
         // Web's place, unless a page turned since was saved meanwhile (2026-10-23).
         if ((JSON.parse(text) as SyncFile).positions[WEB_DEVICE_ID]?.timestamp === place.timestamp) void keepValue(`place:${id}`, place);
@@ -1022,12 +1026,14 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     // kept it, at once, with Dropbox's read alongside (WEB.md → Kept in this browser); else Dropbox's.
     const syncRead = readSyncFile();
     syncRead.catch(() => undefined);
-    const [opened, kept, stayed] = await Promise.all([
+    const [opened, keptHere, stayed] = await Promise.all([
       props.serial ? props.serial.open() : bookFile(dropbox, id, props.path).then(openBook),
       keptValue<Position>(`place:${id}`),
       keptValue<number>(`dismissed:${id}`),
     ]);
     book = opened;
+    // Kept from before the serial was subscribed again: as if never read here (2026-10-23).
+    const kept = keptSince(keptHere, since);
     dismissedAt = stayed ?? null;
     // Contents left open: open again before the page is laid out, so it lays out beside it.
     if (props.openContents) toggle(contents, contentsButton, fillContents);

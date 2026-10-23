@@ -122,6 +122,31 @@ describe("Serials on Home", () => {
     expect(item.progress.unreadCount).toBe(1);
   });
 
+  it("subscribed again: the places and furthest read from before it don't count (2026-10-23)", () => {
+    const cs = chapters(12);
+    const SINCE = NOW - 3_600_000;
+    const file = {
+      positions: { s23: place("ch/1010.xhtml", 0.5, SINCE - 86_400_000, "S23"), web: place("ch/1003.xhtml", 0.5, SINCE - 90_000_000, "Web") },
+      furthest: { ...place("ch/1010.xhtml", 0.5, SINCE - 86_400_000, "S23"), set: false },
+    } as never;
+    const home = (more: Partial<Subscription>, sync = file) => homeSerials([sub("rr-1", "Harbour", more)], { "rr-1": list("rr-1", cs) }, { "rr-1": sync }, {}, NOW)[0];
+    const again = home({ subscribedAt: SINCE });
+    expect(again.current).toBeNull();
+    expect(progressLabel(again.progress)).toBe("Not started · 12");
+    expect(again.progress.unreadCount).toBe(12);
+    expect(again.lastRead).toBeNull();
+    expect(again.upNext?.id).toBe("1001");
+    expect(lastReadSerial([again])).toBeNull();
+    // A place at that very time counts.
+    const atStart = home({ subscribedAt: SINCE }, { ...(file as object), positions: { s23: place("ch/1002.xhtml", 0.5, SINCE, "S23") } } as never);
+    expect(progressLabel(atStart.progress)).toBe("Ch. 2 of 12");
+    expect(atStart.lastRead).toBe(SINCE);
+    // Without it, as before.
+    const before = home({});
+    expect(progressLabel(before.progress)).toBe("Ch. 10 of 12");
+    expect(before.lastRead).toBe(SINCE - 86_400_000);
+  });
+
   it("drops the CAUGHT UP mark when set as furthest read before it", () => {
     const ids = ["a", "b", "c"];
     expect(setBeforeEnd(ids, "ch/b.xhtml", 0.5, "c")).toBe(true);

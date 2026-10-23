@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterKeptOpening, afterReset, decide, furthestOf, type Furthest, mergeFurthest, openingPlan, otherToCompare, type Position, positionFromLocator, resolve, samePosition, serialOrder, snippet, type SyncFile, WEB_DEVICE_ID, withFurthestSet, withWebPlace } from "../src/sync";
+import { afterKeptOpening, afterReset, decide, furthestOf, type Furthest, keptSince, mergeFurthest, openingPlan, otherToCompare, type Position, positionFromLocator, resolve, samePosition, serialOrder, sinceSubscribed, snippet, type SyncFile, WEB_DEVICE_ID, withFurthestSet, withWebPlace } from "../src/sync";
 
 function position(p: Partial<Position> = {}): Position {
   const href = p.href ?? "chapter12.xhtml";
@@ -358,5 +358,71 @@ describe("the furthest read set by hand, then read on from", () => {
     const back = JSON.parse(withFurthestSet(JSON.stringify(file({ [WEB_DEVICE_ID]: pageBack, boox })), "b", setHere));
     expect(back.positions[WEB_DEVICE_ID]).toEqual(pageBack);
     expect(back.furthest).toEqual({ ...setHere, set: true });
+  });
+});
+
+// 2026-10-23: a serial subscribed again; its sync file still has the places from the subscription before.
+describe("a serial subscribed again (subscribedAt)", () => {
+  const order = serialOrder(["1", "2", "3", "10", "11"]);
+  const at = (chapter: string, timestamp: number, deviceName: string, progression = 0.5): Position =>
+    position({ href: `ch/${chapter}.xhtml`, progression, totalProgression: 0, timestamp, deviceName });
+  const SINCE = 10_000;
+  const oldS23 = at("10", 3000, "Galaxy S23");
+  const oldWeb = at("3", 2000, "Web");
+  const oldFurthest = { ...oldS23, set: false };
+  const old = (): SyncFile => ({ bookId: "rr-1", positions: { s23: oldS23, [WEB_DEVICE_ID]: oldWeb }, furthest: oldFurthest, reset: { at: 1000 } });
+
+  it("leaves out the places, the furthest read and the reset from before it; a place at that very time counts", () => {
+    const now = at("2", SINCE, "Galaxy S23");
+    const view = sinceSubscribed({ ...old(), positions: { ...old().positions, boox: now } }, SINCE)!;
+    expect(view.positions).toEqual({ boox: now });
+    expect(view.furthest).toBeUndefined();
+    expect(view.reset).toBeUndefined();
+    expect(view.bookId).toBe("rr-1");
+    expect(furthestOf(view, order)).toEqual(now);
+    // A reset since then still counts.
+    expect(sinceSubscribed({ ...old(), reset: { at: SINCE + 1 } }, SINCE)!.reset).toEqual({ at: SINCE + 1 });
+  });
+
+  it("without it, the file as it is", () => {
+    const file = old();
+    expect(sinceSubscribed(file, undefined)).toBe(file);
+    expect(sinceSubscribed(file, null)).toBe(file);
+    expect(furthestOf(sinceSubscribed(file, null), order)).toEqual(oldFurthest);
+  });
+
+  it("opens as never read here: no question about the old places", () => {
+    expect(openingPlan(sinceSubscribed(old(), SINCE), null, order)).toEqual({ start: null, ask: null });
+    // Read since on the S23: opens there, without asking (Web's old place doesn't count as read here).
+    const s23 = at("1", SINCE + 500, "Galaxy S23");
+    const file = { ...old(), positions: { s23, [WEB_DEVICE_ID]: oldWeb } };
+    expect(openingPlan(sinceSubscribed(file, SINCE), null, order)).toEqual({ start: s23, ask: null });
+    // As today without it: Web's old place, and the S23 in chapter 1 is behind it.
+    expect(openingPlan(file, null, order).start).toEqual(oldWeb);
+  });
+
+  it("asks, coming back to the tab, only about a place read since", () => {
+    const web = at("1", SINCE + 100, "Web");
+    expect(openingPlan(sinceSubscribed({ ...old(), positions: { s23: oldS23, [WEB_DEVICE_ID]: web } }, SINCE), null, order).ask).toBeNull();
+    const s23 = at("2", SINCE + 200, "Galaxy S23");
+    expect(openingPlan(sinceSubscribed({ ...old(), positions: { s23, [WEB_DEVICE_ID]: web } }, SINCE), null, order).ask).toEqual(s23);
+  });
+
+  it("doesn't write the old furthest read back with Web's place, or with a Set", () => {
+    const web = at("1", SINCE + 100, "Web");
+    expect(JSON.parse(withWebPlace(JSON.stringify(old()), "rr-1", web, order, SINCE)).furthest).toEqual({ ...web, set: false });
+    expect(JSON.parse(withFurthestSet(JSON.stringify(old()), "rr-1", web, order, SINCE)).furthest).toEqual({ ...web, set: true });
+    // The file keeps the S23's own old place: only that device writes it.
+    expect(JSON.parse(withWebPlace(JSON.stringify(old()), "rr-1", web, order, SINCE)).positions.s23).toEqual(oldS23);
+    // As today without it.
+    expect(JSON.parse(withWebPlace(JSON.stringify(old()), "rr-1", web, order)).furthest).toEqual(oldFurthest);
+  });
+
+  it("ignores a place this browser kept from before it; one at that very time counts", () => {
+    expect(keptSince(oldWeb, SINCE)).toBeNull();
+    const kept = at("1", SINCE, "Web");
+    expect(keptSince(kept, SINCE)).toBe(kept);
+    expect(keptSince(oldWeb, null)).toBe(oldWeb);
+    expect(keptSince(undefined, SINCE)).toBeNull();
   });
 });

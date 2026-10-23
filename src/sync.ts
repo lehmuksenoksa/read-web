@@ -37,6 +37,28 @@ export function afterReset<T extends { positions?: Record<string, { timestamp?: 
   return { ...file, positions: Object.fromEntries(Object.entries(file.positions).filter(([, p]) => (p.timestamp ?? 0) > at)) };
 }
 
+/**
+ * A serial subscribed again (its subscription's `subscribedAt`, 2026-10-23): without the places, the
+ * furthest read and the reset from before it, as on the phones (a place at that very time counts).
+ * Only what's read; the file as written keeps them. No [since]: the file as it is.
+ */
+export function sinceSubscribed<T extends object>(file: T | null, since: number | null | undefined): T | null {
+  if (!file || !since) return file;
+  const { positions, furthest, reset, ...rest } = file as { positions?: Record<string, { timestamp?: number }>; furthest?: { timestamp?: unknown } | null; reset?: unknown };
+  const counts = (at: unknown) => typeof at === "number" && at >= since;
+  return {
+    ...rest,
+    ...(positions ? { positions: Object.fromEntries(Object.entries(positions).filter(([, p]) => counts(p?.timestamp))) } : {}),
+    ...(furthest && counts(furthest.timestamp) ? { furthest } : {}),
+    ...(reset !== undefined && counts(resetAt(file)) ? { reset } : {}),
+  } as T;
+}
+
+/** A place this browser kept, unless from before the serial was subscribed again (2026-10-23): then none, as if never read here. */
+export function keptSince(kept: Position | null | undefined, since: number | null | undefined): Position | null {
+  return !kept || (since && kept.timestamp < since) ? null : kept;
+}
+
 /** The web's entry in the sync files: one device, "Web", whichever browser it is. */
 export const WEB_DEVICE_ID = "web";
 export const WEB_DEVICE_NAME = "Web";
@@ -288,12 +310,12 @@ export function positionFromLocator(locator: Record<string, unknown>, timestamp:
  * places, listening history, marks, fields the web doesn't know). [remote]: the file's text, or
  * null when there's none yet.
  */
-export function withWebPlace(remote: string | null, bookId: string, place: Position, order: PlaceOrder = BOOK_ORDER): string {
+export function withWebPlace(remote: string | null, bookId: string, place: Position, order: PlaceOrder = BOOK_ORDER, since: number | null = null): string {
   const file: Record<string, unknown> = remote ? JSON.parse(remote) : { bookId, positions: {}, history: [], version: 1 };
   const positions = { ...((file.positions as Record<string, Position> | undefined) ?? {}) };
   positions[WEB_DEVICE_ID] = place;
-  // Reading on raises the furthest read; it never lowers it.
-  const furthest = mergeFurthest(furthestOf(file, order), { ...place, set: false }, order);
+  // Reading on raises the furthest read; it never lowers it. Nothing from before [since] comes back (2026-10-23).
+  const furthest = mergeFurthest(furthestOf(sinceSubscribed(file, since), order), { ...place, set: false }, order);
   return JSON.stringify({ ...file, positions, ...(furthest ? { furthest } : {}) });
 }
 
@@ -302,13 +324,13 @@ export function withWebPlace(remote: string | null, bookId: string, place: Posit
  * A page turned here since, saved meanwhile, stays Web's place, and raises the furthest read only if
  * it's further on (2026-10-23: the Set, sent once its Undo lapsed, took Web back to it).
  */
-export function withFurthestSet(remote: string | null, bookId: string, place: Position, order: PlaceOrder = BOOK_ORDER): string {
+export function withFurthestSet(remote: string | null, bookId: string, place: Position, order: PlaceOrder = BOOK_ORDER, since: number | null = null): string {
   const file: Record<string, unknown> = remote ? JSON.parse(remote) : { bookId, positions: {}, history: [], version: 1 };
   const positions = { ...((file.positions as Record<string, Position> | undefined) ?? {}) };
   const saved = positions[WEB_DEVICE_ID];
   if (!saved || saved.timestamp <= place.timestamp) positions[WEB_DEVICE_ID] = place;
   const set = { ...file, positions, furthest: { ...place, set: true } };
-  return JSON.stringify({ ...set, furthest: furthestOf(set, order) ?? set.furthest });
+  return JSON.stringify({ ...set, furthest: furthestOf(sinceSubscribed(set, since), order) ?? set.furthest });
 }
 
 /** A book's marks as the phones keep them (SyncFile.kt): the newer of each wins between devices. */

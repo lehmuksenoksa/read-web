@@ -629,6 +629,7 @@ async function showApp() {
           open: () => openSerial({ id: x.id, title: x.title, author: x.author, site: x.site, chapters: x.chapters, inDropbox, keepNotes: keepsNotes(sub, keep), text }),
           syncPath: serialSyncPath(x.id),
           endChapterId: sub?.endChapterId ?? null,
+          subscribedAt: sub?.subscribedAt ?? null,
           onChapter: href => {
             // The next two chapters, fetched ahead and kept in this browser.
             const at = order.indexOf(chapterIdOf(href) ?? "");
