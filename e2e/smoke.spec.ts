@@ -1,10 +1,31 @@
 // The smoke test (2026-10-16): the built page in Chromium with a stand-in Dropbox. It catches what
 // the unit tests can't: the Library drawn, a book and a serial opened and read, the place saved.
 import { expect, test } from "@playwright/test";
-import { DONE, EMMA, pageText, SERIAL, standIn } from "./standin";
+import type { Page } from "@playwright/test";
+import { DONE, EMMA, pageText, SERIAL, standIn, type StandIn } from "./standin";
 
 /** Longer than the reader waits before it saves a place (UPLOAD_DELAY_MS). */
 const UPLOAD_WAIT_MS = 4500;
+
+/** Emma's sync file. */
+const EMMA_SYNC = `/Apps/Read/Sync/${EMMA}.json`;
+
+/** The S23 at [chapter] of Emma, saved now, as it writes its place to the sync file. */
+function s23Reads(dropbox: StandIn, chapter: number, total: number) {
+  const file = JSON.parse(dropbox.files[EMMA_SYNC]);
+  const href = `OEBPS/Text/chapter ${chapter}.xhtml`;
+  file.positions.s23 = { href, progression: 0.5, totalProgression: total, timestamp: Date.now(), deviceName: "S23", locator: { href, type: "application/xhtml+xml", title: `Chapter ${chapter}`, locations: { progression: 0.5, totalProgression: total } } };
+  dropbox.files[EMMA_SYNC] = JSON.stringify(file);
+}
+
+/** Another tab, then this one again. */
+const awayAndBack = (page: Page) => page.evaluate(async () => {
+  for (const state of ["hidden", "visible"]) {
+    Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await new Promise(r => setTimeout(r, 100));
+  }
+});
 
 test("Office: the Library, a book, Contents, the place saved", async ({ page }) => {
   const dropbox = await standIn(page, false);
@@ -302,28 +323,114 @@ test("Back to the tab: asks when the S23 has read on since, not when it's behind
   const before = uploads();
   await page.keyboard.press("ArrowRight");
   await expect.poll(uploads, { timeout: 20_000 }).toBeGreaterThan(before);
-  const s23Reads = (chapter: number, total: number) => {
-    const file = JSON.parse(dropbox.files[path]);
-    const href = `OEBPS/Text/chapter ${chapter}.xhtml`;
-    file.positions.s23 = { href, progression: 0.5, totalProgression: total, timestamp: Date.now(), deviceName: "S23", locator: { href, type: "application/xhtml+xml", title: `Chapter ${chapter}`, locations: { progression: 0.5, totalProgression: total } } };
-    dropbox.files[path] = JSON.stringify(file);
-  };
-  const awayAndBack = () => page.evaluate(async () => {
-    for (const state of ["hidden", "visible"]) {
-      Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
-      document.dispatchEvent(new Event("visibilitychange"));
-      await new Promise(r => setTimeout(r, 100));
-    }
-  });
   const prompt = page.locator(".msg:not(.toast)");
   // The S23 went back to chapter 1: nothing to ask.
-  s23Reads(1, 0.1);
-  await awayAndBack();
+  s23Reads(dropbox, 1, 0.1);
+  await awayAndBack(page);
   await page.waitForTimeout(1500);
   await expect(prompt).toBeHidden();
   // The S23 read on to chapter 3: asked on coming back.
-  s23Reads(3, 0.9);
-  await awayAndBack();
+  s23Reads(dropbox, 3, 0.9);
+  await awayAndBack(page);
+  await expect(prompt).toContainText("S23 is further on", { timeout: 10_000 });
+  expect(dropbox.errors).toEqual([]);
+});
+
+test("Set as furthest read: a page turned before its Undo lapsed stays Web's place (2026-10-23)", async ({ page }) => {
+  test.setTimeout(90_000);
+  const dropbox = await standIn(page, true);
+  await page.goto("./");
+  await page.click(".cur-go");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
+  const progression = async () => Number(await page.locator(".foot").getAttribute("data-progression"));
+  const setAt = await progression();
+  await page.click(".httl .fr");
+  await page.locator(".bookmenu").getByText("Set as furthest read").click();
+  // A page on before the Undo lapses, saved first; then the Set goes.
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(progression, { timeout: 15_000 }).toBeGreaterThan(setAt);
+  const pageAt = await progression();
+  await expect.poll(() => dropbox.uploads.some(u => u.path === EMMA_SYNC && u.text.includes('"set":true')), { timeout: 20_000 }).toBe(true);
+  const file = JSON.parse(dropbox.files[EMMA_SYNC]);
+  expect(file.positions.web.progression).toBeCloseTo(pageAt, 4);
+  // The furthest read stays the Set: the page is no further on by the book's progress (20% both).
+  expect(file.furthest).toMatchObject({ set: true, totalProgression: file.positions.web.totalProgression });
+  expect(file.furthest.progression).toBeCloseTo(setAt, 4);
+  // This browser keeps the page, not the Set, to open at next time.
+  const kept = await page.evaluate(id => new Promise<{ progression: number }>(done => {
+    const db = indexedDB.open("read-web", 1);
+    db.onsuccess = () => { const got = db.result.transaction("values").objectStore("values").get(`place:${id}`); got.onsuccess = () => done(got.result); };
+  }), EMMA);
+  expect(kept.progression).toBeCloseTo(pageAt, 4);
+  expect(dropbox.errors).toEqual([]);
+});
+
+test("Mark as unread on a phone while the book is open here: to the start, nothing from before saved (2026-10-23)", async ({ page }) => {
+  test.setTimeout(90_000);
+  const dropbox = await standIn(page, true);
+  await page.goto("./");
+  await page.click(".cur-go");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
+  const uploads = () => dropbox.uploads.filter(u => u.path === EMMA_SYNC).length;
+  const before = uploads();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(uploads, { timeout: 20_000 }).toBeGreaterThan(before);
+  const resetOnPhone = () => {
+    const file = JSON.parse(dropbox.files[EMMA_SYNC]);
+    file.reset = { at: Date.now() };
+    dropbox.files[EMMA_SYNC] = JSON.stringify(file);
+    return file.reset.at as number;
+  };
+  const at = () => page.locator(".foot").getAttribute("data-href");
+  const prompt = page.locator(".msg:not(.toast)");
+  // Started over on the S23; a page turned here, not saved yet, then another tab and back.
+  const resetAt = resetOnPhone();
+  await page.keyboard.press("ArrowRight");
+  await awayAndBack(page);
+  await expect.poll(at, { timeout: 15_000 }).toMatch(/chapter%201|chapter 1/);
+  await page.waitForTimeout(UPLOAD_WAIT_MS + 500);
+  await expect(prompt).toBeHidden();
+  // Nothing from before went up: Web's place since is the start, and so is the furthest read.
+  const file = JSON.parse(dropbox.files[EMMA_SYNC]);
+  for (const p of [file.positions.web, file.furthest]) if (p && p.timestamp > resetAt) expect(p.href).toMatch(/chapter%201|chapter 1/);
+  // Started over again, and the S23 has read on since: asked about it, at the start here.
+  resetOnPhone();
+  await page.waitForTimeout(20);
+  s23Reads(dropbox, 3, 0.9);
+  await awayAndBack(page);
+  await expect(prompt).toContainText("S23 is further on", { timeout: 10_000 });
+  expect(await at()).toMatch(/chapter%201|chapter 1/);
+  expect(dropbox.errors).toEqual([]);
+});
+
+test("Stay holds when the book is opened again, until that device reads on (2026-10-23)", async ({ page }) => {
+  test.setTimeout(90_000);
+  const dropbox = await standIn(page, true);
+  await page.goto("./");
+  await page.click(".cur-go");
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
+  // Read here, in chapter 1.
+  await page.click('.htools button[aria-label="Contents"]');
+  await page.locator(".rpanel .toc .item").first().click();
+  await page.click('.htools button[aria-label="Contents"]');
+  const uploads = () => dropbox.uploads.filter(u => u.path === EMMA_SYNC && u.text.includes('"web"')).length;
+  const before = uploads();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(uploads, { timeout: 20_000 }).toBeGreaterThan(before);
+  const prompt = page.locator(".msg:not(.toast)");
+  // The S23 read on: asked, and Stay.
+  s23Reads(dropbox, 3, 0.9);
+  await awayAndBack(page);
+  await expect(prompt).toContainText("S23 is further on", { timeout: 10_000 });
+  await prompt.getByText("Stay").click();
+  // Opened again (a reload): not asked again about the same place.
+  await page.reload();
+  await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter");
+  await page.waitForTimeout(2000);
+  await expect(prompt).toBeHidden();
+  // The S23 read on again: asked.
+  s23Reads(dropbox, 4, 0.95);
+  await awayAndBack(page);
   await expect(prompt).toContainText("S23 is further on", { timeout: 10_000 });
   expect(dropbox.errors).toEqual([]);
 });

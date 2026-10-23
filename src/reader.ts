@@ -18,7 +18,7 @@ import { pageTop, textEdges, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
 import { backLabel, chapterHref, chapterIdOf, nextAfterCaughtUp, shortChapter } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
-import { afterKeptOpening, BOOK_ORDER, furthestOf, openingPlan, positionFromLocator, SAME_POSITION_TOLERANCE, sameHref, serialOrder, withFurthestSet, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
+import { afterKeptOpening, BOOK_ORDER, furthestOf, openingPlan, positionFromLocator, resetAt, SAME_POSITION_TOLERANCE, sameHref, serialOrder, withFurthestSet, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
 import { h, icon, ICONS } from "./ui";
 import { QUIET_BOOK_CSS, QUIET_BOOK_HIDE, QUIET_BOOK_SCRIPT } from "./quietBook";
 
@@ -131,7 +131,10 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   /** Scrolling after a jump: where the chapter was scrolled to when you first scrolled in it; a screen on counts as a page turned (2026-10-22). */
   let scrollFromJump: number | null = null;
   let uploadTimer: number | undefined;
+  /** Stay: the time of the place it answered, kept in this browser per book, so it holds until that device reads on (2026-10-23). */
   let dismissedAt: number | null = null;
+  /** The time of Web's place as last saved (kept, uploaded, or Dropbox's at opening): a reset newer than it is a Mark as unread since (2026-10-23). */
+  let savedAt = 0;
   let closed = false;
   let setup: Setup = await appearance.setup();
   let mountedFont: string | null = null;
@@ -160,9 +163,12 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     void keepValue(`place:${id}`, place);
     for (let attempt = 0; attempt < 3; attempt++) {
       const remote = await dropbox.readText(syncPath);
+      // Started over on a phone meanwhile: the page from before isn't saved.
+      if (startedOver(parsed(remote?.text))) return;
       try {
         const text = withWebPlace(remote?.text ?? null, id, place, placeOrder());
         await dropbox.writeText(syncPath, text, remote?.rev ?? null);
+        savedAt = Math.max(savedAt, place.timestamp);
         props.onSaved?.(text);
         return;
       } catch (e) {
@@ -198,7 +204,8 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     document.removeEventListener("visibilitychange", onVisible);
     document.removeEventListener("click", onOutside);
     // A Set as furthest read whose Undo hasn't lapsed yet goes now: closing isn't an Undo.
-    await Promise.all([flush(), flushFurthest(), appearance.flush()]);
+    // The Set first, then a page turned since: one after the other, so neither writes over the other (2026-10-23).
+    await Promise.all([flushFurthest().then(flush), appearance.flush()]);
     await nav?.destroy();
     book?.close();
   };
@@ -332,7 +339,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     prompt.replaceChildren(
       h("span", {}, `${other.deviceName} is further on: ${Math.round(other.totalProgression * 100)}%`),
       h("button", { class: "link strong", onclick: () => { prompt.hidden = true; goThere(other); } }, "Go there"),
-      h("button", { class: "link strong", onclick: () => { prompt.hidden = true; dismissedAt = other.timestamp; } }, "Stay"),
+      h("button", { class: "link strong", onclick: () => { prompt.hidden = true; dismissedAt = other.timestamp; void keepValue(`dismissed:${id}`, other.timestamp); } }, "Stay"),
     );
     prompt.hidden = false;
   };
@@ -384,15 +391,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     nav.go(new Locator({ href: entry.href, type: locator.type, title: locator.title, locations: locator.locations, text: locator.text }), false, () => undefined);
   };
 
-  const readSyncFile = async (): Promise<SyncFile | null> => {
-    const remote = await dropbox.readText(syncPath);
-    if (!remote) return null;
-    try {
-      return JSON.parse(remote.text) as SyncFile;
-    } catch {
-      return null;
-    }
-  };
+  const readSyncFile = async (): Promise<SyncFile | null> => parsed((await dropbox.readText(syncPath))?.text);
 
   /** A serial's places compare by chapter (report #81); a book's by its overall progress. */
   const placeOrder = (): PlaceOrder => (props.serial && book ? serialOrder(book.readingOrder.map(h => chapterIdOf(h) ?? "")) : BOOK_ORDER);
@@ -412,7 +411,7 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     } catch {
       return tell("Couldn't reach Dropbox. Try again in a moment.");
     }
-    if (closed) return;
+    if (closed || startedOver(file)) return;
     const order = placeOrder();
     const far = furthestOf(file, order);
     const now = here();
@@ -441,10 +440,13 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const sendFurthest = async (place: Position) => {
     for (let attempt = 0; attempt < 3; attempt++) {
       const remote = await dropbox.readText(syncPath);
+      if (startedOver(parsed(remote?.text))) return;
       try {
-        const text = withFurthestSet(remote?.text ?? null, id, place);
+        const text = withFurthestSet(remote?.text ?? null, id, place, placeOrder());
         await dropbox.writeText(syncPath, text, remote?.rev ?? null);
-        void keepValue(`place:${id}`, place);
+        // Web's place, unless a page turned since was saved meanwhile (2026-10-23).
+        if ((JSON.parse(text) as SyncFile).positions[WEB_DEVICE_ID]?.timestamp === place.timestamp) void keepValue(`place:${id}`, place);
+        savedAt = Math.max(savedAt, place.timestamp);
         props.onSaved?.(text);
         props.serial?.onFurthestSet?.(place);
         return;
@@ -482,8 +484,35 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
   const onVisible = async () => {
     if (document.visibilityState !== "visible" || !nav || closed) return;
     const file = await readSyncFile().catch(() => null);
+    if (startedOver(file)) return;
     const plan = openingPlan(withCurrent(file), dismissedAt, placeOrder());
     if (plan.ask) ask(plan.ask);
+  };
+  /**
+   * Started over on a phone (Mark as unread): back to the start, and this browser forgets its place;
+   * nothing from before goes to Dropbox, so it doesn't come back as the furthest read (2026-10-23).
+   */
+  const startOver = (file: SyncFile | null) => {
+    window.clearTimeout(uploadTimer);
+    uploadTimer = undefined;
+    if (pendingFurthest) window.clearTimeout(pendingFurthest.timer);
+    pendingFurthest = null;
+    savedAt = Math.max(savedAt, resetAt(file));
+    void keepValue(`place:${id}`, null);
+    if (closed || !book) return;
+    clearBack();
+    goTo(book.publication.readingOrder.items[0]?.href ?? "");
+  };
+  /**
+   * A sync file read while the book is open, started over on a phone since Web's place was saved:
+   * started over here too, then asked about another device that read on since, as at an opening.
+   */
+  const startedOver = (file: SyncFile | null): boolean => {
+    if (resetAt(file) <= savedAt) return false;
+    startOver(file);
+    const plan = openingPlan(file, dismissedAt, placeOrder(), true);
+    if (plan.ask && !closed) ask(plan.ask);
+    return true;
   };
   /**
    * The sync file with Web's place as it is on screen, while a page turned is still waiting to be
@@ -993,11 +1022,13 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     // kept it, at once, with Dropbox's read alongside (WEB.md → Kept in this browser); else Dropbox's.
     const syncRead = readSyncFile();
     syncRead.catch(() => undefined);
-    const [opened, kept] = await Promise.all([
+    const [opened, kept, stayed] = await Promise.all([
       props.serial ? props.serial.open() : bookFile(dropbox, id, props.path).then(openBook),
       keptValue<Position>(`place:${id}`),
+      keptValue<number>(`dismissed:${id}`),
     ]);
     book = opened;
+    dismissedAt = stayed ?? null;
     // Contents left open: open again before the page is laid out, so it lays out beside it.
     if (props.openContents) toggle(contents, contentsButton, fillContents);
     /** A CAUGHT UP serial whose newer chapters have come opens at the first of them, which becomes the place. */
@@ -1008,21 +1039,21 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
       return new Locator({ href: chapterHref(next), type: at.type, locations: new LocatorLocations({ progression: 0 }) });
     };
     if (kept) {
+      savedAt = kept.timestamp;
       if (!(await mount(pastCaughtUp(Locator.deserialize(kept.locator) ?? null)))) tell("Couldn't find your place in this book.");
       void syncRead.then(file => {
         if (closed) return;
         const next = afterKeptOpening(withCurrent(file), id, kept, moved, dismissedAt, placeOrder());
         if (next.moveTo) goThere(next.moveTo, true);
         // Started over on a phone (Mark as unread): back to the start, and this browser forgets its place.
-        if (next.restart && book) {
-          void keepValue(`place:${id}`, null);
-          goTo(book.publication.readingOrder.items[0]?.href ?? "");
-        }
+        if (next.restart) startOver(file);
         // A chapter picked to open at: no question about another device's place.
         if (next.ask && !props.startAt) ask(next.ask);
       }).catch(() => undefined);
     } else {
-      const plan = openingPlan(await syncRead, null, placeOrder());
+      const file = await syncRead;
+      savedAt = Math.max(resetAt(file), file?.positions?.[WEB_DEVICE_ID]?.timestamp ?? 0);
+      const plan = openingPlan(file, dismissedAt, placeOrder());
       if (plan.start) void keepValue(`place:${id}`, plan.start);
       const saved = pastCaughtUp(plan.start ? Locator.deserialize(plan.start.locator) ?? null : null);
       if (!(await mount(saved))) tell("Couldn't find your place in this book.");
@@ -1053,6 +1084,16 @@ function swipes(el: HTMLElement, turn: (forward: boolean) => void) {
     const dy = t.clientY - y;
     if (Math.abs(dx) >= 40 && Math.abs(dx) > 1.5 * Math.abs(dy)) turn(dx < 0);
   });
+}
+
+/** A sync file from its text; null when there's none or it can't be read. */
+function parsed(text: string | undefined): SyncFile | null {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as SyncFile;
+  } catch {
+    return null;
+  }
 }
 
 /** A book's file: kept in this browser by its id (Dropbox's content hash), else downloaded and kept. */

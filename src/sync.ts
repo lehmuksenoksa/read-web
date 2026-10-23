@@ -165,33 +165,37 @@ function asPlace(raw: unknown): Furthest | null {
 
 /**
  * Two furthest places merged: the newer one when it was set by hand; otherwise the further of the
- * two, the older kept when they're the same place (no churn). The phones merge the same way.
+ * two, the older kept when they're the same place (no churn). On a tie in time, the one set by hand
+ * counts as the newer. A furthest read set by hand and raised by reading on stays set by hand, so the
+ * places saved before it still don't count (2026-10-23). The phones merge the same way.
  */
 export function mergeFurthest(a: Furthest | null, b: Furthest | null, order: PlaceOrder = BOOK_ORDER): Furthest | null {
   if (!a) return b;
   if (!b) return a;
-  const [older, newer] = a.timestamp <= b.timestamp ? [a, b] : [b, a];
+  const aNewer = a.timestamp > b.timestamp || (a.timestamp === b.timestamp && a.set === true && b.set !== true);
+  const [older, newer] = aNewer ? [b, a] : [a, b];
   if (newer.set) return newer;
   if (order.same(newer, older) || order.compare(newer, older) <= 0) return older;
-  return newer;
+  return older.set ? { ...newer, set: true } : newer;
 }
 
 /**
  * A sync file's furthest read: its `furthest` (when not from before a reset) merged with every
  * device's place since the reset, so a file from an older build without the field (or a place an
- * older build saved since) still counts. Null when nothing was read.
+ * older build saved since) still counts. Set by hand, only the places saved after it count; they're
+ * merged oldest first, so the order the file lists them in doesn't matter (2026-10-23: folded in the
+ * file's order, a place from before a Set came back). Null when nothing was read.
  */
 export function furthestOf(file: object | null, order: PlaceOrder = BOOK_ORDER): Furthest | null {
   if (!file) return null;
   const at = resetAt(file);
   const field = asPlace((file as { furthest?: unknown }).furthest);
   let best = field && field.timestamp > at ? field : null;
+  const since = Math.max(at, best?.set ? best.timestamp : -Infinity);
   const positions = (file as { positions?: Record<string, unknown> }).positions ?? {};
-  for (const raw of Object.values(positions)) {
-    const p = asPlace(raw);
-    // A device's own place never counts as set by hand.
-    if (p && p.timestamp > at) best = mergeFurthest(best, p.set ? { ...p, set: false } : p, order);
-  }
+  const places = Object.values(positions).map(asPlace).filter((p): p is Furthest => p != null && p.timestamp > since);
+  // A device's own place never counts as set by hand.
+  for (const p of places.sort((a, b) => a.timestamp - b.timestamp)) best = mergeFurthest(best, p.set ? { ...p, set: false } : p, order);
   return best;
 }
 
@@ -204,13 +208,19 @@ export interface OpeningPlan {
 /**
  * Opening a book on the web: at Web's own place; a book never read here opens at the furthest read;
  * when the furthest read is further on and news, it asks, naming the device that read it (2026-10-20).
+ * Started over on a phone (Mark as unread) after it was read here ([keptHere]: this browser kept a
+ * place, else Web's place in the file from before): read here, at the start as of then, so another
+ * device that read on since is asked about, not jumped to (2026-10-23).
  */
-export function openingPlan(whole: SyncFile | null, dismissedAt: number | null = null, order: PlaceOrder = BOOK_ORDER): OpeningPlan {
+export function openingPlan(whole: SyncFile | null, dismissedAt: number | null = null, order: PlaceOrder = BOOK_ORDER, keptHere = false): OpeningPlan {
   const file = afterReset(whole);
   const mine = file?.positions?.[WEB_DEVICE_ID] ?? null;
   const other = furthestOf(whole, order);
   if (!other) return { start: mine, ask: null };
-  const decision = resolve(mine, other, dismissedAt, order);
+  const at = resetAt(whole);
+  const readBefore = !mine && at > 0 && (keptHere || whole?.positions?.[WEB_DEVICE_ID] != null);
+  const startOver: Position = { locator: {}, href: "", progression: 0, totalProgression: 0, timestamp: at, deviceName: WEB_DEVICE_NAME, snippet: "" };
+  const decision = resolve(mine ?? (readBefore ? startOver : null), other, dismissedAt, order);
   switch (decision.kind) {
     case "jump": return { start: decision.position, ask: null };
     case "ask": return { start: mine, ask: decision.position };
@@ -237,7 +247,7 @@ export function afterKeptOpening(
   const file = afterReset(whole);
   // Started over on a phone since this browser kept its place: as if it had none.
   if (kept.timestamp <= resetAt(whole)) {
-    const plan = openingPlan(file, dismissedAt, order);
+    const plan = openingPlan(whole, dismissedAt, order, true);
     return { moveTo: moved ? null : plan.start, ask: plan.ask, restart: !moved && !plan.start };
   }
   const theirs = file?.positions[WEB_DEVICE_ID] ?? null;
@@ -287,12 +297,18 @@ export function withWebPlace(remote: string | null, bookId: string, place: Posit
   return JSON.stringify({ ...file, positions, ...(furthest ? { furthest } : {}) });
 }
 
-/** Set as furthest read: Web's place and the furthest read are [place], on every device (2026-10-20). */
-export function withFurthestSet(remote: string | null, bookId: string, place: Position): string {
+/**
+ * Set as furthest read: Web's place and the furthest read are [place], on every device (2026-10-20).
+ * A page turned here since, saved meanwhile, stays Web's place, and raises the furthest read only if
+ * it's further on (2026-10-23: the Set, sent once its Undo lapsed, took Web back to it).
+ */
+export function withFurthestSet(remote: string | null, bookId: string, place: Position, order: PlaceOrder = BOOK_ORDER): string {
   const file: Record<string, unknown> = remote ? JSON.parse(remote) : { bookId, positions: {}, history: [], version: 1 };
   const positions = { ...((file.positions as Record<string, Position> | undefined) ?? {}) };
-  positions[WEB_DEVICE_ID] = place;
-  return JSON.stringify({ ...file, positions, furthest: { ...place, set: true } });
+  const saved = positions[WEB_DEVICE_ID];
+  if (!saved || saved.timestamp <= place.timestamp) positions[WEB_DEVICE_ID] = place;
+  const set = { ...file, positions, furthest: { ...place, set: true } };
+  return JSON.stringify({ ...set, furthest: furthestOf(set, order) ?? set.furthest });
 }
 
 /** A book's marks as the phones keep them (SyncFile.kt): the newer of each wins between devices. */

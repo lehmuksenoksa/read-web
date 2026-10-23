@@ -170,9 +170,23 @@ describe("a book started over on a phone (Mark as unread, 2026-10-13)", () => {
     expect(afterKeptOpening(reset({ "boox-id": boox }, 6000), "b", kept, true).restart).toBe(false);
   });
 
-  it("goes to where another device read after it", () => {
+  it("read here before it: at the start, asked about another device that read on since (2026-10-23)", () => {
     const later = position({ deviceName: "Boox", href: "chapter2.xhtml", totalProgression: 0.05, timestamp: 7000 });
-    expect(afterKeptOpening(reset({ "boox-id": later }, 6000), "b", kept, false)).toEqual({ moveTo: later, ask: null, restart: false });
+    expect(afterKeptOpening(reset({ "boox-id": later }, 6000), "b", kept, false)).toEqual({ moveTo: null, ask: later, restart: true });
+    // Web's place in the file from before it, kept in this browser or not.
+    expect(openingPlan(reset({ [WEB_DEVICE_ID]: kept, "boox-id": later }, 6000))).toEqual({ start: null, ask: later });
+    expect(openingPlan(reset({ "boox-id": later }, 6000), null, undefined, true)).toEqual({ start: null, ask: later });
+    // Stay said to that place: not asked again.
+    expect(openingPlan(reset({ [WEB_DEVICE_ID]: kept, "boox-id": later }, 6000), 7000)).toEqual({ start: null, ask: null });
+    // Nobody read on since: nothing to ask; another device at the start isn't further on.
+    expect(openingPlan(reset({ [WEB_DEVICE_ID]: kept }, 6000))).toEqual({ start: null, ask: null });
+    const atStart = position({ deviceName: "Boox", href: "chapter1.xhtml", progression: 0, totalProgression: 0, timestamp: 7000 });
+    expect(openingPlan(reset({ [WEB_DEVICE_ID]: kept, "boox-id": atStart }, 6000))).toEqual({ start: null, ask: null });
+  });
+
+  it("never read here: opens where another device read after it, without asking", () => {
+    const later = position({ deviceName: "Boox", href: "chapter2.xhtml", totalProgression: 0.05, timestamp: 7000 });
+    expect(openingPlan(reset({ "boox-id": later }, 6000))).toEqual({ start: later, ask: null });
   });
 });
 
@@ -217,7 +231,7 @@ describe("the furthest read", () => {
     const set: Furthest = { ...ch5, timestamp: 7000, set: true };
     expect(mergeFurthest(ch8, set)).toBe(set);
     // An older place set by hand gives way to a newer one further on, not to one behind it.
-    expect(mergeFurthest(set, at("ch9.xhtml", 0.9, 8000))).toMatchObject({ href: "ch9.xhtml" });
+    expect(mergeFurthest(set, at("ch9.xhtml", 0.9, 8000))).toMatchObject({ href: "ch9.xhtml", set: true });
     expect(mergeFurthest(set, at("ch4.xhtml", 0.4, 8000))).toBe(set);
     expect(mergeFurthest(null, ch5)).toBe(ch5);
     expect(mergeFurthest(ch5, null)).toBe(ch5);
@@ -246,7 +260,7 @@ describe("the furthest read", () => {
     const set = { ...at("ch5.xhtml", 0.5, 5000, "Web"), set: true };
     expect(furthestOf({ ...file({ s23 }), furthest: set })).toEqual(set);
     const readOn = at("ch6.xhtml", 0.6, 7000, "Galaxy S23");
-    expect(furthestOf({ ...file({ s23: readOn }), furthest: set })).toBe(readOn);
+    expect(furthestOf({ ...file({ s23: readOn }), furthest: set })).toEqual({ ...readOn, set: true });
   });
 
   it("is cleared by Mark as unread (a reset after it)", () => {
@@ -273,9 +287,76 @@ describe("the furthest read", () => {
     const behind = at("ch4.xhtml", 0.4, 6000, "Web");
     expect(JSON.parse(withWebPlace(remote, "b", behind)).furthest).toEqual(set);
     const ahead = at("ch8.xhtml", 0.8, 7000, "Web");
-    expect(JSON.parse(withWebPlace(remote, "b", ahead)).furthest).toEqual({ ...ahead, set: false });
+    expect(JSON.parse(withWebPlace(remote, "b", ahead)).furthest).toEqual({ ...ahead, set: true });
     const out = JSON.parse(withFurthestSet(remote, "b", behind));
     expect(out.furthest).toEqual({ ...behind, set: true });
     expect(out.positions[WEB_DEVICE_ID]).toEqual(behind);
+  });
+});
+
+// 2026-10-23: a Set as furthest read isn't undone by places saved before it, whatever their order.
+describe("the furthest read set by hand, then read on from", () => {
+  const at = (href: string, totalProgression: number, timestamp: number, deviceName = "Boox", progression = 0.5) =>
+    position({ href, totalProgression, timestamp, deviceName, progression });
+  // The Boox at 80% long ago; the S23 back to 40%, Set as furthest read, then on to 45%.
+  const boox = at("ch8.xhtml", 0.8, 1000);
+  const set: Furthest = { ...at("ch4.xhtml", 0.4, 2000, "Galaxy S23"), set: true };
+  const s23 = at("ch4.xhtml", 0.45, 3000, "Galaxy S23", 0.9);
+
+  it("stays where it was set, raised by reading on, the places from before it left out", () => {
+    expect(furthestOf({ ...file({ s23, boox }), furthest: set })).toEqual({ ...s23, set: true });
+    expect(furthestOf({ ...file({ boox, s23 }), furthest: set })).toEqual({ ...s23, set: true });
+    // A place behind it after that doesn't lower it; one further on raises it again, still set by hand.
+    const behind = at("ch4.xhtml", 0.42, 4000, "Boox", 0.7);
+    expect(furthestOf({ ...file({ s23, boox: behind }), furthest: set })).toEqual({ ...s23, set: true });
+    const ahead = at("ch9.xhtml", 0.9, 4000);
+    expect(furthestOf({ ...file({ s23, boox: ahead }), furthest: set })).toEqual({ ...ahead, set: true });
+  });
+
+  it("is the same whatever order the file lists the places in", () => {
+    const places = { boox: at("ch3.xhtml", 0.3, 5000), s23: at("ch7.xhtml", 0.7, 4000, "Galaxy S23"), web: at("ch5.xhtml", 0.5, 6000, "Web") };
+    const orders = [["boox", "s23", "web"], ["web", "s23", "boox"], ["s23", "web", "boox"]] as const;
+    for (const field of [undefined, set, { ...at("ch6.xhtml", 0.6, 4500), set: true }]) {
+      const results = orders.map(o => furthestOf({ ...file(Object.fromEntries(o.map(k => [k, places[k]]))), ...(field ? { furthest: field } : {}) }));
+      expect(results[1]).toEqual(results[0]);
+      expect(results[2]).toEqual(results[0]);
+    }
+    // The Boox from before the Set listed first or last.
+    expect(furthestOf({ ...file({ boox, s23 }), furthest: set })).toEqual(furthestOf({ ...file({ s23, boox }), furthest: set }));
+  });
+
+  it("on a tie in time, the one set by hand counts as the newer", () => {
+    const plain = at("ch9.xhtml", 0.9, 2000, "Galaxy S23");
+    expect(mergeFurthest(set, plain)).toBe(set);
+    expect(mergeFurthest(plain, set)).toBe(set);
+    // Neither set by hand: the further.
+    const other = at("ch2.xhtml", 0.2, 2000);
+    expect(mergeFurthest(other, plain)).toBe(plain);
+    expect(mergeFurthest(plain, other)).toBe(plain);
+  });
+
+  it("is cleared by a reset after it; the places since count, those before don't", () => {
+    const since = at("ch2.xhtml", 0.2, 6000, "Galaxy S23");
+    expect(furthestOf({ ...file({ s23: since, boox }), furthest: set, reset: { at: 5000 } })).toBe(since);
+    expect(furthestOf({ ...file({ s23, boox }), furthest: set, reset: { at: 5000 } })).toBeNull();
+  });
+
+  it("Web's place doesn't bring back a place from before it", () => {
+    const remote = JSON.stringify({ ...file({ boox, s23 }), furthest: set });
+    const web = at("ch3.xhtml", 0.3, 7000, "Web");
+    expect(JSON.parse(withWebPlace(remote, "b", web)).furthest).toEqual({ ...s23, set: true });
+  });
+
+  it("sent once its Undo lapsed, keeps a page turned here since as Web's place", () => {
+    const setHere = at("ch5.xhtml", 0.5, 8000, "Web");
+    const pageOn = at("ch5.xhtml", 0.52, 9000, "Web", 0.6);
+    const out = JSON.parse(withFurthestSet(JSON.stringify(file({ [WEB_DEVICE_ID]: pageOn, boox })), "b", setHere));
+    expect(out.positions[WEB_DEVICE_ID]).toEqual(pageOn);
+    expect(out.furthest).toEqual({ ...pageOn, set: true });
+    // A page back since: Web's place, the Set stays the furthest read.
+    const pageBack = at("ch5.xhtml", 0.48, 9000, "Web", 0.4);
+    const back = JSON.parse(withFurthestSet(JSON.stringify(file({ [WEB_DEVICE_ID]: pageBack, boox })), "b", setHere));
+    expect(back.positions[WEB_DEVICE_ID]).toEqual(pageBack);
+    expect(back.furthest).toEqual({ ...setHere, set: true });
   });
 });

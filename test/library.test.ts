@@ -37,6 +37,10 @@ describe("the Library", () => {
     // The furthest read kept in the file (2026-10-20): a device going back doesn't lower it.
     expect(furthest({ positions: { a: { href: "c2.xhtml", progression: 0.1, totalProgression: 0.2, timestamp: 5 } }, furthest: { href: "c8.xhtml", progression: 0.3, totalProgression: 0.8, timestamp: 4 } })).toBe(0.8);
     expect(furthest(null)).toBe(0);
+    // Set as furthest read at 40%, read on to 45%: the Boox's 80% from before it doesn't come back (2026-10-23).
+    const boox = { href: "c8.xhtml", progression: 0.5, totalProgression: 0.8, timestamp: 1 };
+    const s23 = { href: "c4.xhtml", progression: 0.9, totalProgression: 0.45, timestamp: 3 };
+    expect(furthest({ positions: { s23, boox }, furthest: { href: "c4.xhtml", progression: 0.5, totalProgression: 0.4, timestamp: 2, set: true } })).toBe(0.45);
     expect(titleFromFileName("Mage_Tank_5.EPUB")).toBe("Mage Tank 5");
   });
 });

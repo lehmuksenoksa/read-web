@@ -112,6 +112,9 @@ describe("Serials on Home", () => {
     // Set back to b on Web: chapters after b are unread again.
     const set = { ...place("ch/b.xhtml", 0.1, 40, "Web"), set: true };
     expect(furthestPlace({ positions, furthest: set } as never, ids)).toEqual({ index: 1, at: 40, device: "Web" });
+    // Read on in b since, on the S23: the Boox in c from before the Set doesn't come back (2026-10-23).
+    const since = { s23: place("ch/b.xhtml", 0.6, 50, "S23"), boox: place("ch/c.xhtml", 0.5, 10, "Boox") };
+    expect(furthestPlace({ positions: since, furthest: set } as never, ids)).toEqual({ index: 1, at: 50, device: "S23" });
     const cs = chapters(3);
     const item = homeSerials([sub("rr-1", "Harbour")], { "rr-1": list("rr-1", cs) },
       { "rr-1": { positions: { s23: place("ch/1001.xhtml", 0.2, 30, "S23") }, furthest: { ...place("ch/1002.xhtml", 0.1, 40, "Web"), set: true } } as never }, {}, NOW)[0];
