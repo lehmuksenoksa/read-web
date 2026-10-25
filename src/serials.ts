@@ -337,6 +337,21 @@ export function shortChapter(title: string): string {
   return title.match(/^((?:chapter|ch\.?|book|part|episode|ep\.?)\s*[\d.]+[a-z]?)\b/i)?.[1] ?? title;
 }
 
+/** The bar's place in a serial: "Chapter 212 · 3 unread", or "Chapter 212" once caught up (2026-10-25). */
+export function serialBarPlace(chapter: string | null, unread: number): string {
+  return [chapter ? shortChapter(chapter) : "", unread ? `${unread} unread` : ""].filter(Boolean).join(" · ");
+}
+
+/** A serial's place with its percentage: "Chapter 214 · 38%", the progression within that chapter (2026-10-25). */
+export function chapterPlace(chapter: string, progression: number): string {
+  return `${shortChapter(chapter)} · ${Math.round(progression * 100)}%`;
+}
+
+/** What Continue adds after a serial's title: its current chapter's short name (2026-10-25). */
+export function continueSerialParts(serial: Pick<Serial, "current">): string[] {
+  return serial.current?.title ? [shortChapter(serial.current.title)] : [];
+}
+
 // --- Details' columns for serials ---
 
 export type SerialColumnKey = "title" | "author" | "site" | "chapters" | "unread" | "updated" | "lastread";

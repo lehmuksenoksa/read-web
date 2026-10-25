@@ -5,6 +5,7 @@ import { coverLink, DROPBOX_COVER, parseDetails, parseNumber, withCover, withDet
 import { Dropbox, RevConflict } from "./dropbox";
 import { beforeUpload, bookInfo, bookPath, contentHash, isEpubName, thumbnail, type AddOutcome, type BookInfo } from "./addBooks";
 import { choose, chosenCoverBytes, coverPath, hasChosen, largeCover, loadChosenCovers, loadSharpCovers } from "./covers";
+import { bookByline } from "./home";
 import { createHome, showSharpCover } from "./homeView";
 import { contentsRemembered, CONTENTS_KEY, LAST_PLACE_KEY, lastPlaceText, parseLastPlace, type LastPlace } from "./lastPlace";
 import { booksToFetch, furthest, furthestRead, libraryBooks, markedBook, placesOf, readAt, stillKnown, titleFromFileName, withSyncTimes, type IndexEntry, type KnownProgress, type LibraryBook } from "./library";
@@ -12,7 +13,7 @@ import { shown, type Setup } from "./looks";
 import { backupPath, BOOKS_FOLDER, chosenCoverPath, chapterFolderPath, chapterListPath, CHAPTERS_FOLDER, chapterTextPath, DETAILS_PATH, DEVICES_PATH, isSerialId, LIBRARY_INDEX_PATH, serialSyncPath, SUBSCRIPTIONS_PATH, SYNC_FOLDER, syncFilePath } from "./paths";
 import { openSerial } from "./serialBook";
 import {
-  chapterDateLabel, chapterHref, chapterIdOf, homeSerials, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, readingOrderOf, setBeforeEnd, withEndMark,
+  chapterDateLabel, chapterHref, chapterIdOf, homeSerials, serialBarPlace, keepsNotes, parseChapterList, parseSubscriptions, phonesKeepNotes, readingOrderOf, setBeforeEnd, withEndMark,
   type ChapterList, type Serial, type Subscription,
 } from "./serials";
 import { keptFile } from "./store";
@@ -499,7 +500,7 @@ async function showApp() {
 
   /** The page's box on screen, and what's open: the bar shows its title over the page. */
   let pageBox = { left: 0, width: 0 };
-  let reading: { title: string; side: "books" | "serials"; place: string } | null = null;
+  let reading: { title: string; by: string; side: "books" | "serials"; place: string } | null = null;
   const showTitle = () => { if (screen === "reader") home?.setReading(reading && { ...reading, ...pageBox }); };
   /**
    * The browser's Back and Forward (2026-10-18): opening a book or serial is a step in this tab's history, so
@@ -547,8 +548,8 @@ async function showApp() {
     else render();
   };
   /** What every book and serial gives the reader: the rail, the panel beside the page, the bar's title. */
-  const chrome = (title: string, side: "books" | "serials", place: (p: { href: string; chapter: string | null; totalProgression: number }) => string) => {
-    reading = { title, side, place: "" };
+  const chrome = (title: string, by: string, side: "books" | "serials", place: (p: { href: string; chapter: string | null; totalProgression: number }) => string) => {
+    reading = { title, by, side, place: "" };
     panelOpen = false;
     layout();
     showTitle();
@@ -583,7 +584,8 @@ async function showApp() {
     currentId = book.id;
     // Front matter is often named after the book: then just the percentage.
     const sameAsBook = (chapter: string | null) => !chapter || chapter.trim().toLocaleLowerCase() === book.title.trim().toLocaleLowerCase();
-    const props = chrome(book.title, "books", p => [sameAsBook(p.chapter) ? null : p.chapter, `${Math.round(p.totalProgression * 100)}%`].filter(Boolean).join(" · "));
+    // The author and series after the title, quieter (2026-10-25).
+    const props = chrome(book.title, bookByline(book), "books", p => [sameAsBook(p.chapter) ? null : p.chapter, `${Math.round(p.totalProgression * 100)}%`].filter(Boolean).join(" · "));
     opening = opening.then(async () => {
       await closeReader?.();
       closeReader = null;
@@ -605,11 +607,11 @@ async function showApp() {
     const order = readingOrderOf(x.chapters).map(c => c.id);
     /** The serial as last read (its NEW marks and chapters change while it's open). */
     const now = () => serialsNow()?.find(s => s.id === x.id) ?? x;
-    const props = chrome(x.title, "serials", p => {
-      // "Chapter 213 · 2 unread": the readable chapters after this one.
+    const props = chrome(x.title, "", "serials", p => {
+      // "Chapter 213 · 2 unread": the chapter's short name and the readable chapters after it; caught up, the chapter alone (2026-10-25).
       const at = x.chapters.findIndex(c => c.id === chapterIdOf(p.href));
       const unread = at < 0 ? 0 : readingOrderOf(x.chapters.slice(at + 1)).length;
-      return [p.chapter, unread ? `${unread} unread` : "Up to date"].filter(Boolean).join(" · ");
+      return serialBarPlace(p.chapter, unread);
     });
     opening = opening.then(async () => {
       await closeReader?.();

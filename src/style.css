@@ -732,3 +732,7 @@ section.cur { margin-bottom: 44px; }
 .bp-link .lab { margin: 0 0 6px; }
 .bp-link .cvlink { width: 100%; padding: 4px 8px; }
 .bp-link .bp-acts { margin-top: 12px; }
+/* The author and series after a book's title in the bar, in the place's quieter style (2026-10-25); a step
+   quieter where the title already is the place's grey (the sans face's). */
+.httl .bt .by { font: 400 var(--t-small) var(--font-sans); color: var(--ink2); margin-left: 12px; font-variant-numeric: tabular-nums; }
+.t-sans .httl .bt .by { color: var(--ink3); }

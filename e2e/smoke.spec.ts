@@ -38,7 +38,7 @@ test("Office: the Library, a book, Contents, the place saved", async ({ page }) 
   await expect(page.locator(".hpanel .bp-title")).toHaveText("Emma");
   await page.click(".hpanel .bp-go");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally acknowledged");
-  await expect(page.locator(".httl .bt")).toHaveText("Emma");
+  await expect(page.locator(".httl .bt")).toContainText("Emma");
   // Contents beside ⚙, its panel at the right.
   await page.click('.htools button[aria-label="Contents"]');
   await expect(page.locator(".rpanel .toc .item")).toHaveCount(5);
@@ -150,6 +150,33 @@ test("Home: Covers, Serials, a serial read, the place saved", async ({ page }) =
   await expect.poll(() => dropbox.uploads.some(u => u.path === `/Apps/Read/Sync/${SERIAL}.json`), { timeout: 20_000 }).toBe(true);
   expect(dropbox.errors).toEqual([]);
 });
+
+for (const home of [true, false]) {
+  test(`${home ? "Home" : "Office"}: the bar and Continue say who and where (2026-10-25)`, async ({ page }) => {
+    const dropbox = await standIn(page, home);
+    await page.goto("./");
+    const more = page.locator(".hhead > .hcont .kr");
+    // Continue: a book with its author (Office's Library; Home's has Reading now instead).
+    if (!home) await expect(more).toHaveText("· Jane Austen · Chapter 2 · 43%");
+    // A serial with its current chapter's short name.
+    await page.click(".hmark .ser");
+    await expect(more).toHaveText("· Chapter 212");
+    // The serial's bar: its chapter's short name and the unread count; no byline.
+    await page.locator(`.scard[data-sid="${SERIAL}"], .tr[data-sid="${SERIAL}"] > .td[tabindex]`).first().click();
+    await page.click(".hpanel .bp-go");
+    await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Paragraph 1.");
+    await expect(page.locator(".httl .pl2")).toHaveText("Chapter 212 · 3 unread");
+    await expect(page.locator(".httl .bt")).toHaveText("Dungeon Cartographer");
+    // The book's bar: the author and series after the title, the place at the right.
+    await page.click(".hmark .lib");
+    if (home) await page.click(".cur-go"); else await page.click(".hhead > .hcont");
+    await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("truth universally");
+    await expect(page.locator(".httl .bt .by")).toHaveText("Jane Austen · Test Series 2");
+    await expect(page.locator(".httl .bt")).toHaveText("EmmaJane Austen · Test Series 2");
+    await expect(page.locator(".httl .pl2")).toHaveText(/^Chapter 2 · \d+%$/);
+    expect(dropbox.errors).toEqual([]);
+  });
+}
 
 test("a narrow window: Details fits, Continue at the foot", async ({ page }) => {
   await page.setViewportSize({ width: 820, height: 900 });
@@ -459,7 +486,8 @@ test("A serial subscribed again: nothing from the subscription before shows, ask
   await page.click(".hpanel .bp-go");
   await expect.poll(() => pageText(page), { timeout: 30_000 }).toContain("Chapter 100: North by Lantern");
   const prompt = page.locator(".msg:not(.toast)");
-  await expect(prompt).toContainText("S23 is further on", { timeout: 10_000 });
+  // A serial's place in the prompt: the chapter and how far into it, not the serial's share (2026-10-25).
+  await expect(prompt).toContainText("S23 is further on: Chapter 212 · 40%", { timeout: 10_000 });
   await expect.poll(() => page.evaluate(id => new Promise<unknown>(done => {
     const db = indexedDB.open("read-web", 1);
     db.onsuccess = () => { const got = db.result.transaction("values").objectStore("values").get(`place:${id}`); got.onsuccess = () => done(got.result ?? null); };

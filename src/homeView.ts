@@ -4,12 +4,12 @@
 
 import { coverSrc } from "./covers";
 import {
-  ago, besideReadingNow, BOOK_VIEWS, clickSort, column, curatedHome, DETAIL_COLUMNS, detailsRows, homeItems, inOrder, megabytes,
+  ago, besideReadingNow, BOOK_VIEWS, clickSort, column, continueBookParts, continueRest, curatedHome, DETAIL_COLUMNS, detailsRows, homeItems, inOrder, megabytes,
   fitColumns, menuSort, nextInSeries, SERIAL_VIEWS, seriesLine, SIZES, sortMenuChoice, textScale, titleWord,
   viewFor, type BookView, type ColumnKey, type Facts, type HomeSetup, type SerialsSetup, type SerialView,
 } from "./home";
 import {
-  chapterDateLabel, lastCheck, lastReadSerial, newChaptersText, panelChapters, readingOrderOf, searchSerials, SERIAL_DETAIL_COLUMNS, serialColumn, shortChapter, sortSerials,
+  chapterDateLabel, continueSerialParts, lastCheck, lastReadSerial, newChaptersText, panelChapters, readingOrderOf, searchSerials, SERIAL_DETAIL_COLUMNS, serialColumn, shortChapter, sortSerials,
   type Serial, type SerialColumnKey,
 } from "./serials";
 import { addSummary, outcomeText, type AddOutcome } from "./addBooks";
@@ -152,6 +152,8 @@ function pct(p: number | null): string {
 /** What the bar shows while a book or serial is open: its title over the page, and where you are. */
 export interface ReadingTitle {
   title: string;
+  /** After a book's title, quieter: "Jane Austen · Test Series 2" (2026-10-25); empty for a serial. */
+  by: string;
   place: string;
   /** The page's box on screen: the title starts at its left edge, the place ends at its right. */
   left: number;
@@ -529,8 +531,8 @@ export function createHome(ctx: HomeContext): {
     cont.hidden = !last;
     if (last) {
       cont.classList.add("sv");
-      // The chapter only (2026-10-17): the unread count left every serial row.
-      cont.replaceChildren(...quietLine(last.title, [last.current?.title ?? ""]));
+      // The chapter's short name only (2026-10-17; short 2026-10-25): the unread count left every serial row.
+      cont.replaceChildren(...quietLine(last.title, continueSerialParts(last)));
       cont.onclick = () => ctx.openSerial(last);
     }
     renderPanel();
@@ -750,7 +752,7 @@ export function createHome(ctx: HomeContext): {
     // aligned by baseline straight in the pill, the texts sat at its top, above the button's middle).
     h("span", { class: "ct" },
       h("span", { class: "k kw" }, "Continue"), h("b", {}, panelTitle(title)),
-      h("span", { class: "k kr" }, rest.filter(Boolean).map(t => `· ${t}`).join(" ")),
+      h("span", { class: "k kr" }, continueRest(rest)),
       style().accent ? null : h("span", { class: "go", "aria-hidden": "true" }, "›")),
   );
   const renderContinue = () => {
@@ -759,7 +761,8 @@ export function createHome(ctx: HomeContext): {
     if (!last) return;
     const p = progressOf(last) ?? 0;
     cont.classList.remove("sv");
-    cont.replaceChildren(...quietLine(last.title, [ctx.places(last.id)?.[0]?.chapter ?? "", p > 0 ? `${Math.round(p * 100)}%` : ""]));
+    // The author after the title (2026-10-25), then the chapter and how far.
+    cont.replaceChildren(...quietLine(last.title, continueBookParts(last.author, ctx.places(last.id)?.[0]?.chapter ?? null, p)));
     cont.onclick = () => ctx.open(last);
     if (ctx.progress(last.id) == null && last.hasSyncFile) void ctx.load(last).then(renderSoon);
   };
@@ -1156,7 +1159,7 @@ export function createHome(ctx: HomeContext): {
     queueAlign();
     if (title) {
       // Over the page, the page is the only colour (2026-10-18, as on the phones): the title in plain ink.
-      titleBt.textContent = title.title;
+      titleBt.replaceChildren(title.title, ...(title.by ? [h("span", { class: "by" }, title.by)] : []));
       titlePlace.textContent = title.place;
       // Over the page, but clear of the name and ⚙ when the page is wider than the gap between them.
       const bar = header.getBoundingClientRect();

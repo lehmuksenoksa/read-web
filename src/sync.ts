@@ -359,6 +359,14 @@ export function marksOf(file: object | null): Marks {
   };
 }
 
+/**
+ * The prompt when another device is further on: "S23 is further on: 99%" for a book; for a serial, its chapter
+ * and the progression within it, "S23 is further on: Chapter 214 · 38%" ([serialPlace], 2026-10-25).
+ */
+export function furtherOnText(other: Pick<Position, "deviceName" | "totalProgression">, serialPlace: string | null = null): string {
+  return `${other.deviceName} is further on: ${serialPlace ?? `${Math.round(other.totalProgression * 100)}%`}`;
+}
+
 /** "Chapter 3, 9%" style place for the prompt: the chapter's title when known, and the book's percentage. */
 export function placeLabel(position: Position, chapterTitle: string | null): string {
   const percent = `${Math.round(position.totalProgression * 100)}%`;

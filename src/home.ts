@@ -335,6 +335,22 @@ export function curatedHome(books: LibraryBook[], progress: (book: LibraryBook) 
   return { now: reading[0] ?? null, also: reading.slice(1, 4), added };
 }
 
+/** The bar's quieter line after a book's title: "Jane Austen · Test Series 2", either alone, or nothing (2026-10-25). */
+export function bookByline(book: Pick<LibraryBook, "author" | "series" | "seriesIndex">): string {
+  const series = book.series ? [book.series, book.seriesIndex != null ? String(book.seriesIndex) : ""].filter(Boolean).join(" ") : "";
+  return [book.author ?? "", series].filter(Boolean).join(" · ");
+}
+
+/** What Continue adds after a book's title: its author, the chapter and how far (2026-10-25). */
+export function continueBookParts(author: string | null, chapter: string | null, progress: number): string[] {
+  return [author ?? "", chapter ?? "", progress > 0 ? `${Math.round(progress * 100)}%` : ""].filter(Boolean);
+}
+
+/** Continue's quieter text after the title: "· Jane Austen · Chapter 2 · 43%". */
+export function continueRest(parts: string[]): string {
+  return parts.filter(Boolean).map(t => `· ${t}`).join(" ");
+}
+
 /** The series under a featured title, unless the title already says it ("Mage Tank 5" in Mage Tank). */
 export function seriesLine(book: LibraryBook): string {
   if (!book.series || book.title.toLowerCase().includes(book.series.toLowerCase())) return "";

@@ -16,9 +16,9 @@ import {
 } from "./looks";
 import { pageTop, textEdges, withPageTop, type PageTop } from "./pagetop";
 import { syncFilePath } from "./paths";
-import { backLabel, chapterHref, chapterIdOf, nextAfterCaughtUp, shortChapter } from "./serials";
+import { backLabel, chapterHref, chapterIdOf, chapterPlace, nextAfterCaughtUp, shortChapter } from "./serials";
 import { keepBook, keptBook, keepValue, keptValue } from "./store";
-import { afterKeptOpening, BOOK_ORDER, furthestOf, keptSince, openingPlan, positionFromLocator, resetAt, SAME_POSITION_TOLERANCE, sameHref, serialOrder, sinceSubscribed, withFurthestSet, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
+import { afterKeptOpening, BOOK_ORDER, furthestOf, furtherOnText, keptSince, openingPlan, positionFromLocator, resetAt, SAME_POSITION_TOLERANCE, sameHref, serialOrder, sinceSubscribed, withFurthestSet, withWebPlace, WEB_DEVICE_ID, type PlaceOrder, type Position, type SyncFile } from "./sync";
 import { h, icon, ICONS } from "./ui";
 import { QUIET_BOOK_CSS, QUIET_BOOK_HIDE, QUIET_BOOK_SCRIPT } from "./quietBook";
 
@@ -339,9 +339,16 @@ export async function showReader(root: HTMLElement, props: ReaderProps): Promise
     status.dataset.progression = String(current.locations.progression ?? 0);
   };
 
+  /** A serial's place in the prompt: its chapter and how far into it (2026-10-25); a book's stays its percentage. */
+  const serialPlaceOf = (other: Position): string | null => {
+    if (!props.serial) return null;
+    const located = other.locator?.title;
+    const chapter = book?.titles.get(other.href.split("#")[0]) ?? (typeof located === "string" ? located : null);
+    return chapter ? chapterPlace(chapter, other.progression) : null;
+  };
   const ask = (other: Position) => {
     prompt.replaceChildren(
-      h("span", {}, `${other.deviceName} is further on: ${Math.round(other.totalProgression * 100)}%`),
+      h("span", {}, furtherOnText(other, serialPlaceOf(other))),
       h("button", { class: "link strong", onclick: () => { prompt.hidden = true; goThere(other); } }, "Go there"),
       h("button", { class: "link strong", onclick: () => { prompt.hidden = true; dismissedAt = other.timestamp; void keepValue(`dismissed:${id}`, other.timestamp); } }, "Stay"),
     );
