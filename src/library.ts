@@ -108,12 +108,22 @@ function bySeries(a: LibraryBook, b: LibraryBook): number {
   return 0;
 }
 
+/**
+ * Recent: the later of last read and added, so a book just added to Dropbox comes to the top, then
+ * moves down as others are read (2026-10-29, as the phones; report #135).
+ */
+export function recency(book: Pick<LibraryBook, "lastRead" | "added">): string {
+  const read = book.lastRead ?? "";
+  const added = book.added ?? "";
+  return read > added ? read : added;
+}
+
 export function sortBooks(books: LibraryBook[], by: SortBy): LibraryBook[] {
   const title = (a: LibraryBook, b: LibraryBook) => sortKey(a.title).localeCompare(sortKey(b.title));
   const sorted = [...books];
   switch (by) {
     case "recent":
-      sorted.sort((a, b) => (b.lastRead ?? "").localeCompare(a.lastRead ?? "") || title(a, b));
+      sorted.sort((a, b) => recency(b).localeCompare(recency(a)) || title(a, b));
       break;
     case "title":
       sorted.sort(title);
@@ -231,12 +241,12 @@ export function libraryItems(books: LibraryBook[], by: SortBy, query: string, gr
       author: members.find(m => m.author)?.author ?? null,
       books: ordered,
       read: members.filter(m => m.read).length,
-      lastRead: members.map(m => m.lastRead ?? "").sort().pop() || null,
+      lastRead: members.map(recency).sort().pop() || null,
     });
   }
   const title = (i: LibraryItem) => sortKey(i.kind === "book" ? i.book.title : i.name);
   const author = (i: LibraryItem) => sortKey((i.kind === "book" ? i.book.author : i.author) ?? "￿");
-  const recent = (i: LibraryItem) => (i.kind === "book" ? i.book.lastRead : i.lastRead) ?? "";
+  const recent = (i: LibraryItem) => (i.kind === "book" ? recency(i.book) : i.lastRead) ?? "";
   return items.sort((a, b) => {
     switch (by) {
       case "recent": return recent(b).localeCompare(recent(a)) || title(a).localeCompare(title(b));

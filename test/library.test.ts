@@ -27,6 +27,14 @@ describe("the Library", () => {
     expect(sortBooks(books, "author").map(b => b.title)).toEqual(["Emma", "Twig 1"]);
   });
 
+  it("puts a book just added to Dropbox first under Recent until another is read (report #135)", () => {
+    const added = libraryBooks([...files, { ...file("Ward.epub", hash("e")), modified: "2026-10-12T08:00:00Z" }], index,
+      [sync(hash("b"), "2026-10-11T08:00:00Z"), sync(hash("a"), "2026-10-09T08:00:00Z")]).filter(b => !b.hidden);
+    expect(sortBooks(added, "recent").map(b => b.title)).toEqual(["Ward", "Twig 1", "Emma"]);
+    const reread = withSyncTimes(added, [sync(hash("b"), "2026-10-11T08:00:00Z"), sync(hash("a"), "2026-10-13T08:00:00Z")])!;
+    expect(sortBooks(reread, "recent").map(b => b.title)).toEqual(["Emma", "Ward", "Twig 1"]);
+  });
+
   it("searches titles, authors and series", () => {
     expect(searchBooks(books, "austen").map(b => b.title)).toEqual(["Emma"]);
     expect(searchBooks(books, "  ")).toHaveLength(2);
